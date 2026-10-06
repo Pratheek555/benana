@@ -9,13 +9,14 @@ The MVP centers on issues, attempts by humans or agents, and checkpoints that ca
 ```text
 apps/
   web/                 Issue board, attempt history, and review interface.
-  worker/              Cloudflare API, integrations, and task coordination.
+  worker/              Cloudflare API, integrations, and storage coordination.
+  cli/                 Local Codex capture, Git workspaces, and session upload.
 packages/
   contracts/           Shared API and portable context definitions.
 docs/
-  mvp.md               Product scope and first end-to-end workflow.
+  mvp.md               Architecture, stack, workflow, and completion gates.
 ```
 
 Each application and package currently contains only a README describing its responsibilities. There is no application code, dependency manifest, or runnable environment yet.
 
-Read [the MVP scope](docs/mvp.md) before implementation. Frameworks, package tooling, agent runtime, authentication, and deployment configuration will be selected when implementation starts.
+Read [the MVP plan](docs/mvp.md) before implementation. It specifies local Codex execution, the chosen stack, Cloudflare Artifacts usage, architecture boundaries, and completion gates. Exact dependency versions and account configuration are selected during implementation.

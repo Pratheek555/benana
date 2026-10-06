@@ -9,6 +9,6 @@ The first workflow includes:
 - An attempt page showing code changes, decisions, checks, and evidence.
 - A checkpoint fork flow where a user reviews the inherited context and chooses the next task.
 
-Keep Cloudflare credentials and agent execution in the backend. Use shared contracts for API requests and responses once those contracts exist.
+Keep Cloudflare credentials in the backend. Codex execution belongs to the local companion. Use shared contracts for API requests and responses once those contracts exist.
 
-No framework or application code has been selected yet.
+The chosen stack is React, Vite, React Router, TanStack Query, Tailwind CSS, and shadcn/ui. The built assets are served by the API Worker. See [the MVP plan](../../docs/mvp.md) for architecture and build order. No application code exists yet.

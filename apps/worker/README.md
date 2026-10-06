@@ -9,8 +9,8 @@ Its intended responsibilities are:
 - Manage attempt lineage and saved checkpoints.
 - Coordinate Cloudflare Artifacts repositories and forks.
 - Capture events and build context handoffs with links to their sources.
-- Start and track work through one agent runtime initially.
+- Accept local Codex event uploads and track capture freshness.
 
-Keep the agent runtime integration replaceable. A fork starts a new attempt; it does not promise to restore another provider's internal session state.
+Codex runs on the user's machine through the local companion. The Worker coordinates metadata and storage. A fork starts a new attempt with saved code and context, rather than restoring a provider's internal session state.
 
-Storage, execution services, bindings, and deployment configuration are undecided. This directory contains no runtime code yet.
+The chosen stack is Hono, D1, R2, and Cloudflare Artifacts. One Worker also serves the web assets. Each attempt has a writable Artifacts repository; published code snapshots use separate read-only repositories. See [the MVP plan](../../docs/mvp.md) for the complete lifecycle. This directory contains no runtime code yet.
