@@ -1,0 +1,14 @@
+{
+  "name": "benana",
+  "private": true,
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @benana/worker --filter @benana/web dev",
+    "db:migrate:local": "pnpm --filter @benana/worker exec wrangler d1 migrations apply benana-local --local",
+    "build": "pnpm --filter @benana/worker build && pnpm --filter @benana/web build",
+    "typecheck": "pnpm --filter @benana/contracts exec tsc -p tsconfig.json && pnpm --filter @benana/worker typecheck && pnpm --filter @benana/web typecheck",
+    "lint": "pnpm --filter @benana/worker lint && pnpm --filter @benana/web lint",
+    "test": "pnpm --filter @benana/worker test && pnpm --filter @benana/web test",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
+  }
+}

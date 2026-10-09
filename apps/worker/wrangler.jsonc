@@ -1,0 +1,25 @@
+{
+    "$schema":  "./node_modules/wrangler/config-schema.json",
+    "name":  "benana-worker",
+    "main":  "src/index.tsx",
+    "compatibility_date":  "2026-10-07",
+    "vars":  {
+                 "PUBLIC_ORIGIN": "http://localhost:5173",
+                 "GITHUB_APP_SLUG": "benana-eyes"
+             },
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "benana-local",
+        "database_id": "00000000-0000-0000-0000-000000000000",
+        "migrations_dir": "migrations"
+      }
+    ],
+    "artifacts":  [
+                      {
+                          "binding":  "ARTIFACTS",
+                          "namespace":  "default",
+                          "remote": true
+                      }
+                  ]
+}
