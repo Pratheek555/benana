@@ -1,6 +1,7 @@
 // GitHub REST reads. Public repos work unauthenticated; set GITHUB_TOKEN for private repos and higher limits.
 const { execFileSync } = require('node:child_process');
 const { env } = require('./env.cjs');
+const { fetchRetry } = require('./util.cjs');
 
 // GITHUB_TOKEN wins; otherwise reuse the GitHub CLI login if present.
 let cached;
@@ -12,10 +13,11 @@ function token() {
   return cached;
 }
 
-async function gh(p) {
+async function gh(p, { method = 'GET', body } = {}) {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'benana' };
   if (token()) headers.Authorization = `Bearer ${token()}`;
-  const res = await fetch(`https://api.github.com${p}`, { headers });
+  if (body) headers['Content-Type'] = 'application/json';
+  const res = await fetchRetry(`https://api.github.com${p}`, { method, headers, body: body ? JSON.stringify(body) : undefined }, { retries: method === 'GET' ? 2 : 0 });
   if (!res.ok) throw new Error(`GitHub ${p}: ${res.status} ${(await res.text()).slice(0, 160)}`);
   return res.json();
 }
@@ -52,4 +54,13 @@ async function openIssues(repo) {
   return (await gh(`/repos/${repo}/issues?state=open&sort=created&per_page=30`)).filter((i) => !i.pull_request);
 }
 
-module.exports = { history, pullFiles, openIssues, authenticated: () => Boolean(token()) };
+async function defaultBranch(repo) {
+  return (await gh(`/repos/${repo}`)).default_branch;
+}
+
+async function createPullRequest(repo, { head, base, title, body, draft = true }) {
+  if (!token()) throw new Error('GITHUB_TOKEN (or gh auth login) is required to open pull requests');
+  return gh(`/repos/${repo}/pulls`, { method: 'POST', body: { head, base, title, body, draft } });
+}
+
+module.exports = { history, pullFiles, openIssues, defaultBranch, createPullRequest, token, authenticated: () => Boolean(token()) };

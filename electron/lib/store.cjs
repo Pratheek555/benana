@@ -33,6 +33,10 @@ class RepoStore {
     fs.writeFileSync(file, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
   }
 
+  remove(rel) {
+    fs.rmSync(path.join(this.dir, rel), { force: true });
+  }
+
   read(rel) {
     const file = path.join(this.dir, rel);
     return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;

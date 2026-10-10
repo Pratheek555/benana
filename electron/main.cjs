@@ -15,6 +15,8 @@ const improve = require('./lib/improve.cjs');
 const neatlogs = require('./lib/neatlogs.cjs');
 const entire = require('./lib/entire.cjs');
 const artifacts = require('./lib/artifacts.cjs');
+const budget = require('./lib/budget.cjs');
+const pr = require('./lib/pr.cjs');
 
 let win;
 let ctx = null; // { repo, repoPath, intent, harnessStore }
@@ -33,7 +35,7 @@ async function openProject({ repo, repoPath }) {
   const intent = await new RepoStore('intent', repo).init();
   const harnessStore = await new RepoStore('harness', repo).init();
   await harnessLib.ensure(harnessStore);
-  ctx = { repo, repoPath: repoPath || '', intent, harnessStore };
+  ctx = { repo, repoPath: repoPath || '', intent, harnessStore, onRunFinished };
   writeConfig({ ...readConfig(), last: { repo, repoPath } });
   if (artifacts.configured()) {
     Promise.all([artifacts.pull(intent), artifacts.pull(harnessStore)])
@@ -60,15 +62,33 @@ async function ingest({ deep = false, max = 200 } = {}) {
   graph.writeEvent(ctx.intent, { type: 'ingest', source: 'github', issues: hist.issues.length, pulls: hist.pulls.length, at: Date.now() });
   const sha = await ctx.intent.commit(`${deep ? 'deep ' : ''}extraction from GitHub: ${g.nodes.length} nodes, ${g.edges.length} edges`, 'extractor');
   log(sha ? `committed graph snapshot ${sha.slice(0, 7)}` : 'graph unchanged');
-  if (artifacts.configured()) {
-    artifacts.push(ctx.intent).then((r) => log(`pushed to Artifacts ${artifacts.namespace()}/${r.name}`)).catch((e) => log(`Artifacts push: ${e.message}`, 'warn'));
-    artifacts.push(ctx.harnessStore).catch(() => {});
-  }
+  artifacts.schedulePush(ctx.intent, (e) => log(`Artifacts push: ${e.message}`, 'warn'));
+  artifacts.schedulePush(ctx.harnessStore, (e) => log(`Artifacts push: ${e.message}`, 'warn'));
   emit('graph-changed', {});
   return summary();
 }
 
-// Loop 3: poll GitHub for new issues. Issues labelled benana:auto start a run automatically.
+// Loop 3: poll GitHub for new issues. Issues labelled benana:auto start a run automatically,
+// within the concurrency and daily token budget; the rest wait in the queue.
+const emitInbox = () => emit('inbox', [...inbox.values()].sort((a, b) => b.at - a.at));
+
+function startQueued() {
+  if (!ctx?.repoPath) return;
+  const limits = harnessLib.load(ctx.harnessStore).budget;
+  for (const item of [...inbox.values()].filter((i) => i.auto && ['new', 'queued'].includes(i.state)).sort((a, b) => a.at - b.at)) {
+    const gate = budget.canStart(limits, agents.allRuns());
+    if (!gate.ok) {
+      if (item.state !== 'queued') { item.state = 'queued'; item.waiting = gate.reason; }
+      continue;
+    }
+    item.state = 'started';
+    agents.start({ ctx, task: `Resolve issue #${item.number}: ${item.title}`, issue: item }, emit)
+      .then((r) => { item.run = r.id; emitInbox(); })
+      .catch((e) => { item.state = 'error'; item.waiting = e.message; log(e.message, 'warn'); emitInbox(); });
+  }
+  emitInbox();
+}
+
 function startPolling() {
   clearInterval(pollTimer);
   const tick = async () => {
@@ -79,16 +99,57 @@ function startPolling() {
         if (inbox.has(i.number)) continue;
         const auto = i.labels.some((l) => l.name === 'benana:auto');
         inbox.set(i.number, { number: i.number, title: i.title, body: (i.body || '').slice(0, 2000), url: i.html_url, labels: i.labels.map((l) => l.name), auto, state: 'new', at: Date.parse(i.created_at) });
-        if (auto && ctx.repoPath) {
-          inbox.get(i.number).state = 'started';
-          agents.start({ ctx, task: `Resolve issue #${i.number}: ${i.title}`, issue: inbox.get(i.number) }, emit).catch((e) => log(e.message, 'warn'));
-        }
       }
-      emit('inbox', [...inbox.values()].sort((a, b) => b.at - a.at));
+      startQueued();
     } catch (e) { log(`inbox poll: ${e.message}`, 'warn'); }
   };
   tick();
   pollTimer = setInterval(tick, 2 * 60 * 1000);
+}
+
+// After every run: link provenance, open a PR if allowed, score the running trial,
+// analyse every N runs, and start queued issues now that a slot is free.
+let finishedSinceAnalysis = 0;
+async function onRunFinished(r) {
+  if (!ctx) return;
+  const h = harnessLib.load(ctx.harnessStore);
+  try {
+    const cps = await entire.attach(r.worktree);
+    if (cps) { r.entire = cps; agents.saveRun(r); }
+  } catch { /* entire is optional */ }
+  if (r.status === 'passed' && h.auto.openPRs && r.origin === 'native') {
+    try { r.pr = await pr.openForRun(r, ctx.repo); agents.saveRun(r); emit('run', agents.get(r.id)); log(`opened draft PR ${r.pr.url}`); }
+    catch (e) { log(`PR for ${r.id}: ${e.message}`, 'warn'); }
+  }
+  try {
+    const t = await improve.tick(ctx.harnessStore, agents.allRuns());
+    if (t?.applied) log(`trial ${t.applied.id} ${t.applied.status.replace('_', ' ')} (${t.ev.verdict} on held-out runs)`, t.ev.verdict === 'fail' ? 'warn' : 'info');
+    finishedSinceAnalysis += 1;
+    if (h.auto.analyzeEvery > 0 && finishedSinceAnalysis >= h.auto.analyzeEvery) {
+      finishedSinceAnalysis = 0;
+      const a = await improve.analyze({ harnessStore: ctx.harnessStore, runs: agents.allRuns() });
+      if (a.created?.length) log(`analyst proposed ${a.created.length} idea(s)`);
+    }
+  } catch (e) { log(`improve: ${e.message}`, 'warn'); }
+  artifacts.schedulePush(ctx.harnessStore, (e) => log(`Artifacts push: ${e.message}`, 'warn'));
+  emitImprove();
+  startQueued();
+}
+
+function emitImprove() {
+  if (!ctx) return;
+  emit('proposals', improve.proposals(ctx.harnessStore));
+  emit('improve', improve.overview(ctx.harnessStore, agents.allRuns()));
+  emit('project', summary());
+}
+
+// Wraps an L4 action: run it, sync the harness repo, refresh the UI.
+async function l4(fn) {
+  need();
+  const out = await fn();
+  artifacts.schedulePush(ctx.harnessStore, (e) => log(`Artifacts push: ${e.message}`, 'warn'));
+  emitImprove();
+  return out;
 }
 
 function need() { if (!ctx) throw new Error('Open a project first'); }
@@ -114,7 +175,17 @@ const handlers = {
   },
   'run:list': () => agents.list(),
   'run:get': ({ id }) => agents.get(id),
-  'run:stop': ({ id }) => agents.stop(id),
+  'run:stop': ({ id }) => agents.stop(id, emit),
+  'run:pr': async ({ id }) => {
+    need();
+    const r = agents.allRuns().find((x) => x.id === id);
+    if (!r) throw new Error('unknown run');
+    r.pr = await pr.openForRun(r, ctx.repo);
+    agents.saveRun(r);
+    emit('run', agents.get(id));
+    return r.pr;
+  },
+  'budget:status': () => { need(); return budget.status(harnessLib.load(ctx.harnessStore).budget, agents.allRuns()); },
   'run:brief': ({ id, text }) => { need(); return agents.continueRun(id, text, ctx, emit); },
   'sessions:detect': ({ all } = {}) => sessions.detect(all || !ctx ? '' : ctx.repoPath),
   'sessions:transcript': ({ kind, id }) => sessions.transcript(kind, id),
@@ -122,28 +193,31 @@ const handlers = {
   'sessions:install': () => { need(); return sessions.install(ctx.intent.dir); },
   'sessions:uninstall': () => sessions.uninstall(),
   'sessions:resume': ({ kind, id, cwd, brief }) => { need(); return agents.resumeExternal({ ctx, kind, sessionId: id, cwd, brief }, emit); },
-  'improve:analyze': async ({ useLLM = true } = {}) => { need(); const r = await improve.analyze({ harnessStore: ctx.harnessStore, runs: agents.allRuns(), useLLM }); emit('proposals', improve.proposals(ctx.harnessStore)); return r; },
+  'improve:analyze': ({ useLLM = true } = {}) => l4(() => improve.analyze({ harnessStore: ctx.harnessStore, runs: agents.allRuns(), useLLM, force: true })),
   'improve:list': () => { need(); return improve.proposals(ctx.harnessStore); },
-  'improve:decide': async ({ id, approve }) => {
-    need();
-    const p = await improve.decide({ harnessStore: ctx.harnessStore, id, approve });
-    if (artifacts.configured()) artifacts.push(ctx.harnessStore).catch(() => {});
-    emit('proposals', improve.proposals(ctx.harnessStore));
-    emit('project', summary());
-    return p;
-  },
+  'improve:overview': () => { need(); return improve.overview(ctx.harnessStore, agents.allRuns()); },
+  'improve:decide': ({ id, approve, direct }) => l4(() => improve.decide({ harnessStore: ctx.harnessStore, id, approve, direct })),
+  'improve:promote': () => l4(() => improve.promote(ctx.harnessStore, 'human')),
+  'improve:rollback': () => l4(() => improve.rollback(ctx.harnessStore, 'human', 'rolled back by human')),
   'improve:stats': () => improve.stats(agents.allRuns()),
-  'harness:update': async (patch) => {
-    need();
+  // Settings edits (auto, budget, mechanisms, graders). Unknown keys are dropped.
+  'harness:update': (patch) => l4(async () => {
     const h = harnessLib.load(ctx.harnessStore);
-    const next = { ...h, ...patch, graders: { ...h.graders, ...(patch.graders || {}) }, version: h.version + 1 };
+    const pick = (k) => ({ ...h[k], ...(patch[k] || {}) });
+    const next = harnessLib.normalize({ ...h, agent: patch.agent || h.agent, graders: pick('graders'), auto: pick('auto'), budget: pick('budget'), mechanisms: pick('mechanisms') });
+    // Only changes that alter agent behaviour make a new version; budget/auto do not, so they
+    // never invalidate the baseline a running trial is compared against.
+    const behaviour = (x) => JSON.stringify([x.agent, x.graders, x.mechanisms]);
+    if (behaviour(next) !== behaviour(h)) {
+      if (improve.overview(ctx.harnessStore, []).state.trial) throw new Error('A trial is running; promote or roll it back before changing graders or mechanisms.');
+      next.version = h.version + 1;
+    }
     ctx.harnessStore.write('harness.json', next);
-    await ctx.harnessStore.commit(`harness v${next.version}: manual edit`, 'human');
-    emit('project', summary());
+    await ctx.harnessStore.commit(`harness v${next.version}: settings`, 'human');
     return next;
-  },
+  }),
   'status:integrations': async () => ({
-    artifacts: artifacts.configured() ? { configured: true, namespace: artifacts.namespace(), repo: ctx?.intent.name } : { configured: false },
+    artifacts: artifacts.configured() ? { configured: true, namespace: artifacts.namespace(), repo: ctx?.intent.name, lastPush: artifacts.lastPush?.() } : { configured: false },
     neatlogs: await neatlogs.status(),
     entire: await entire.status(ctx?.repoPath),
   }),

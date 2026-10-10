@@ -7,7 +7,7 @@ benana is a desktop harness for coding agents built around an **intent graph**. 
 | **L1 agent** | Runs `claude` or `codex` in its own git worktree, with the `benana-intent` MCP tools and the relevant intent loaded into the prompt |
 | **L2 verify** | Runs graders after each attempt: files changed, diff scope, optional test command, `intent.check`. Failures go back to the agent (2 attempts by default) |
 | **L3 events** | Polls GitHub issues every 2 minutes. An issue labelled `benana:auto` starts a run automatically |
-| **L4 improve** | An analyst reads past runs (plus Neatlogs traces when configured) and proposes a **harness PR**. You approve or reject it |
+| **L4 improve** | An analyst reads past **dev** runs (plus Neatlogs traces) and proposes harness changes. Approved ideas go on **trial** against held-out tasks and are promoted or rolled back by frozen gates (see §6a) |
 
 ---
 
@@ -77,6 +77,29 @@ npm start        # production build, then Electron
 - **Neatlogs ingestion** comes from Neatlogs' own integrations: install their Claude Code plugin or Codex hooks (docs.neatlogs.com → Integrations). Then set `NEATLOGS_API_KEY` and `NEATLOGS_PROJECT_ID` so the L4 analyst reads recent traces as evidence. The status bar dot turns green when the API responds.
 - **Entire:** run `entire enable` in your checkout. benana detects the CLI (status bar dot) and agent sessions get checkpoints linked to commits. Reading Entire checkpoints into the graph is next on the list (see below).
 
+## 6a. The self-improving loop and token budgets
+
+L4 follows the SoL-Pi auto-research loop (arXiv:2609.20519):
+
+1. **Split.** Every task is hashed once into *dev* (70%) or *held-out* (30%). The analyst only ever sees dev runs.
+2. **Map → reduce.** Each finished dev run is reduced to overhead signals (failed graders, retries, repeated tool calls, edit→run round trips, tokens). This step uses no tokens.
+3. **Idea pool.** Free heuristics propose first. The analyst LLM (default `haiku`) is called only when the heuristics have nothing new, and only after `auto.analyzeEvery` new dev runs. Ideas are deduplicated, so rejected or rolled-back ideas do not come back.
+4. **Trial.** Approving an idea (**trial**) writes `candidate.json`; half of new runs use it.
+5. **Held-out gates.** `acceptance.json` is written once and never edited by the loop. Once both arms have `minSamples` held-out runs, the candidate must (a) keep pass rate within `capabilityTolerance` of baseline and (b) improve at least one efficiency metric (tokens per pass, attempts per run, tokens per run) by `minEfficiencyGain`. A failure rolls back automatically. A pass is promoted automatically only when **auto: promote on pass** is on.
+6. **Unattended mode.** With **trial new rules**, **promote on pass** and **open draft PRs** all on, the app picks up `benana:auto` issues, runs them within budget, opens draft PRs for passing runs, and keeps improving its own harness. Grader changes, and anything that loosens a grader, always need a human.
+
+Token controls (harness `budget`, editable in `harness.json`):
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `maxRunTokens` | 1.5M | Run is stopped when input + output + cache tokens cross this |
+| `maxRunUsd` | 3 | Passed to `claude --max-budget-usd` |
+| `dailyTokens` | 12M | No new runs (manual or auto) once spent today |
+| `maxConcurrent` | 2 | Auto-started issues wait in the queue beyond this |
+| `analystModel` | haiku | Model for the L4 analyst |
+
+Mechanisms (harness `mechanisms`, toggle in the improve tab): **action fusion** (`bench_edit_run`: edit + check in one call), **observation pack** (outputs > 10 KiB become a handle + excerpt, read back with `bench_page`), **evidence reducer** (logs ≥ 4 KiB become a verified receipt of exact lines, falling back to the original if verification fails), **compact gate** (a grader retry starts a fresh session with a short handoff when resuming would re-read a large context).
+
 ## 6. Use the intent tools without the app
 
 ```sh
@@ -123,7 +146,7 @@ src/                         React UI (status bar, agent bar, loop console, grap
 - `intent.check` can still produce false alarms. An agent can clear one by citing the node id and recording a Decision.
 - Codex runs and resumes depend on `codex exec --json`; `codex exec resume` with these flags is less tested than Claude.
 - The L3 inbox polls instead of using webhooks (desktop apps can't receive webhooks; a Worker relay would fix that).
-- Entire checkpoints are not yet imported into the graph, and Neatlogs trace IDs are not yet written back onto graph nodes.
+- Entire checkpoints are attached to run records (not yet to graph nodes), and Neatlogs trace IDs are not yet written back onto graph nodes.
 - Resuming an attached session runs in that session's own directory, so graders see that checkout's uncommitted changes.
 
 ## Debug helpers

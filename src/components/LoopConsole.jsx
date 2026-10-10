@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { call, ago } from '../api.js';
+import { call, ago, fmtTokens } from '../api.js';
+import ImprovePanel from './ImprovePanel.jsx';
 
 const TABS = ['all', 'inbox', 'runs', 'verify', 'improve'];
 
-export default function LoopConsole({ inbox, runs, proposals, project, selected, onSelect, notify, setBusy, onFocusNodes, onRefresh }) {
+const tokensOf = (u = {}) => (u.inputTokens || 0) + (u.outputTokens || 0) + (u.cacheReadTokens || 0) + (u.cacheWriteTokens || 0);
+
+export default function LoopConsole({ inbox, runs, proposals, overview, budgetStatus, project, selected, onSelect, notify, setBusy, onFocusNodes, onRefresh }) {
   const [tab, setTab] = useState('all');
   const runList = Object.values(runs).sort((a, b) => b.startedAt - a.startedAt);
   const show = (t) => tab === 'all' || tab === t;
-  const counts = { inbox: inbox.filter((i) => i.state === 'new').length, runs: runList.length, verify: runList.filter((r) => r.verify?.length).length, improve: proposals.filter((p) => p.status === 'open').length };
+  const counts = { inbox: inbox.filter((i) => i.state === 'new').length, runs: runList.length, verify: runList.filter((r) => r.verify?.length).length, improve: proposals.filter((p) => p.status === 'open' || p.status === 'trial').length };
 
   const start = async (issue) => {
     try {
@@ -39,7 +42,7 @@ export default function LoopConsole({ inbox, runs, proposals, project, selected,
                 <div style={{ minWidth: 0 }}><div className="t">{i.title}</div><div className="s">{i.labels.join(' · ') || 'no labels'} · {ago(i.at)} ago</div></div>
                 {i.state === 'new'
                   ? <button className="btn sm" disabled={!project.repoPath} title={project.repoPath ? '' : 'set a local checkout to run agents'} onClick={() => start(i)}>start ▸</button>
-                  : <span className="pill bee">{i.state}</span>}
+                  : <span className={`pill ${i.state === 'error' ? 'bad' : 'bee'}`} title={i.waiting || ''}>{i.state}</span>}
               </div>
             ))}
             {!inbox.length && <div className="empty">No open issues fetched yet.</div>}
@@ -55,7 +58,10 @@ export default function LoopConsole({ inbox, runs, proposals, project, selected,
                 <div style={{ minWidth: 0 }}>
                   <div className="t"><span className="mono">{r.id}</span> · {r.kind} · {r.task}</div>
                   <div className="s">
-                    {r.origin} · attempt {r.attempt} · step {r.step} · harness v{r.harnessVersion}
+                    {r.origin} · attempt {r.attempt} · step {r.step} · harness v{r.harnessVersion}{r.arm === 'candidate' ? <span className="warn"> trial</span> : null}
+                    {tokensOf(r.usage) ? <> · {fmtTokens(tokensOf(r.usage))} tok</> : null}
+                    {r.compactions ? <> · {r.compactions} compaction{r.compactions > 1 ? 's' : ''}</> : null}
+                    {r.pr?.url ? <> · <a className="bee" onClick={(e) => { e.stopPropagation(); window.benana.openExternal(r.pr.url); }}>PR #{r.pr.number}</a></> : null}
                     {r.context?.length ? <> · intent.context → <a className="bee" onClick={(e) => { e.stopPropagation(); onFocusNodes(r.context.map((c) => c.id)); }}>{r.context.length} nodes</a></> : null}
                     {r.artifactsFork ? <> · fork <span className="mono">{r.artifactsFork}</span></> : null}
                   </div>
@@ -63,6 +69,7 @@ export default function LoopConsole({ inbox, runs, proposals, project, selected,
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   <span className={`pill ${r.status === 'passed' ? 'ok' : r.status === 'failed' ? 'bad' : 'bee'}`}>{r.status}</span>
                   {['running', 'preparing'].includes(r.status) && <button className="btn danger sm" onClick={(e) => { e.stopPropagation(); call('run:stop', { id: r.id }); }}>stop</button>}
+                  {r.status === 'passed' && r.origin === 'native' && !r.pr && <button className="btn ghost sm" onClick={(e) => { e.stopPropagation(); setBusy('Opening draft PR…'); call('run:pr', { id: r.id }).then((p) => notify(`draft PR #${p.number} opened`)).catch((err) => notify(err.message, 'error')).finally(() => setBusy('')); }}>PR ▸</button>}
                 </div>
               </div>
             ))}
@@ -96,37 +103,7 @@ export default function LoopConsole({ inbox, runs, proposals, project, selected,
           </div>
         )}
 
-        {show('improve') && (
-          <div className="section">
-            <h3><span className="tag">L4</span> improve <span className="right">analyst reads runs (+ Neatlogs) → proposes harness PRs</span></h3>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <button className="btn sm" onClick={async () => {
-                setBusy('Analyst reading runs…');
-                try { const r = await call('improve:analyze', {}); notify(r.proposal ? `proposal: ${r.proposal.title}` : `no change proposed (${r.stats.runs} runs analysed)`); }
-                catch (e) { notify(e.message, 'error'); }
-                setBusy('');
-              }}>run analyst</button>
-              <span className="s muted mono" style={{ alignSelf: 'center' }}>harness v{project.harness?.version} · {project.harness?.rules?.length || 0} learned rules</span>
-            </div>
-            {proposals.map((p) => (
-              <div className="row" key={p.id} style={{ gridTemplateColumns: '1fr auto' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div className="t">harness PR <span className="mono bee">{p.id}</span> “{p.title}”</div>
-                  <div className="s">{p.rationale}</div>
-                  <div className="s mono">evidence: {p.evidence?.runs} runs · {p.evidence?.retries} retries · {p.evidence?.neatlogsTraces} neatlogs traces{p.touchesGraders ? <span className="warn"> · changes graders</span> : null}</div>
-                  {p.patch?.addRules?.map((r) => <div className="s mono" key={r}><span className="ok">+ rule</span> {r}</div>)}
-                  {p.patch?.graders && Object.entries(p.patch.graders).map(([k, v]) => <div className="s mono" key={k}><span className="warn">~ grader</span> {k} = {JSON.stringify(v)}</div>)}
-                </div>
-                {p.status === 'open' ? (
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn sm" onClick={() => call('improve:decide', { id: p.id, approve: true }).then(() => notify(`harness updated`)).catch((e) => notify(e.message, 'error'))}>approve</button>
-                    <button className="btn ghost sm" onClick={() => call('improve:decide', { id: p.id, approve: false })}>reject</button>
-                  </div>
-                ) : <span className={`pill ${p.status === 'approved' ? 'ok' : ''}`}>{p.status}</span>}
-              </div>
-            ))}
-          </div>
-        )}
+        {show('improve') && <ImprovePanel project={project} proposals={proposals} overview={overview} budgetStatus={budgetStatus} notify={notify} setBusy={setBusy} />}
       </div>
     </div>
   );

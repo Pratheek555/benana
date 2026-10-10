@@ -17,18 +17,18 @@ export default function StatusBar({ project, agents, tokens, conflicts, integrat
       <span className="seg">intent@<b>{head || '—'}</b> <span className="faint">{project.nodes}n · {project.edges}e</span></span>
       <span className="sep" />
       <span className="seg"><span className={`dot ${active ? 'on' : ''}`} /> <b>{active}</b> active · {attached} attached</span>
-      <span className="seg"><b>{fmtTokens(tokens)}</b> tok</span>
+      <span className="seg" title="tokens spent today (runs + analyst)"><b>{fmtTokens(tokens)}</b> tok today</span>
       <span className={`seg ${conflicts ? 'bad' : ''}`}>⚠ <b className={conflicts ? 'bad' : ''}>{conflicts}</b> intent conflicts</span>
       {busy && <span className="seg bee"><span className="spin" /> {busy}</span>}
       <span className="spacer" />
-      <span className="seg" title={i.artifacts?.configured ? `${i.artifacts.namespace}/${i.artifacts.repo}` : 'CLOUDFLARE_API_TOKEN not set'}>
-        <span className={`dot ${i.artifacts?.configured ? 'ok' : 'bad'}`} /> artifacts
+      <span className="seg" title={i.artifacts?.configured ? `${i.artifacts.namespace}/${i.artifacts.repo}${i.artifacts.lastPush ? ` · last push ${i.artifacts.lastPush.ok ? 'ok' : `failed: ${i.artifacts.lastPush.error}`}` : ''}` : 'CLOUDFLARE_API_TOKEN not set'}>
+        <span className={`dot ${!i.artifacts?.configured ? '' : i.artifacts.lastPush && !i.artifacts.lastPush.ok ? 'bad' : 'ok'}`} /> artifacts
       </span>
       <span className="seg" title={i.neatlogs?.error || (i.neatlogs?.configured ? 'connected' : 'set NEATLOGS_API_KEY + NEATLOGS_PROJECT_ID')}>
         <span className={`dot ${i.neatlogs?.ok ? 'ok' : i.neatlogs?.configured ? 'bad' : ''}`} /> neatlogs
       </span>
-      <span className="seg" title={i.entire?.installed ? i.entire.version : 'entire CLI not installed'}>
-        <span className={`dot ${i.entire?.installed ? 'ok' : ''}`} /> entire
+      <span className="seg" title={i.entire?.installed ? `${i.entire.version}${i.entire.enabled === false ? ' · not enabled in this checkout (run entire enable)' : ''}` : 'entire CLI not installed'}>
+        <span className={`dot ${i.entire?.installed ? (i.entire.enabled === false ? 'bad' : 'ok') : ''}`} /> entire
       </span>
     </div>
   );

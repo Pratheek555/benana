@@ -8,7 +8,9 @@
     "dev": "concurrently -k -n vite,electron -c yellow,gray \"vite\" \"wait-on tcp:127.0.0.1:5199 && cross-env BENANA_DEV=1 electron .\"",
     "build": "vite build",
     "start": "vite build && electron .",
-    "mcp": "node electron/mcp-server.cjs"
+    "mcp": "node electron/mcp-server.cjs",
+    "test": "node --test test/*.test.cjs",
+    "check": "node --test test/*.test.cjs && vite build"
   },
   "dependencies": {
     "cytoscape": "^3.30.2",

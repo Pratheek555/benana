@@ -16,6 +16,8 @@ export default function App() {
   const [sessions, setSessions] = useState([]);
   const [inbox, setInbox] = useState([]);
   const [proposals, setProposals] = useState([]);
+  const [overview, setOverview] = useState(null);
+  const [budgetStatus, setBudgetStatus] = useState(null);
   const [selected, setSelected] = useState(null); // { origin: 'native'|'attached', id, kind }
   const [focusNodes, setFocusNodes] = useState([]);
   const [graphTick, setGraphTick] = useState(0);
@@ -38,9 +40,13 @@ export default function App() {
 
   useEffect(() => {
     const offs = [
-      on('run', (r) => setRuns((m) => ({ ...m, [r.id]: { ...m[r.id], ...r } }))),
+      on('run', (r) => {
+        setRuns((m) => ({ ...m, [r.id]: { ...m[r.id], ...r } }));
+        if (['passed', 'failed', 'stopped'].includes(r.status)) call('budget:status').then(setBudgetStatus).catch(() => {});
+      }),
       on('inbox', setInbox),
       on('proposals', setProposals),
+      on('improve', setOverview),
       on('project', setProject),
       on('graph-changed', () => { setGraphTick((t) => t + 1); call('project:summary').then(setProject).catch(() => {}); }),
       on('log', (l) => (l.level !== 'info' || /pushed|synced|committed/.test(l.text)) && notify(l.text, l.level)),
@@ -49,10 +55,13 @@ export default function App() {
   }, [notify]);
 
   const refresh = useCallback(async () => {
-    const [r, s, i, p, st] = await Promise.all([
+    const [r, s, i, p, st, ov, b] = await Promise.all([
       call('run:list'), call('sessions:detect'), call('inbox:list'),
       call('improve:list').catch(() => []), call('status:integrations').catch(() => null),
+      call('improve:overview').catch(() => null), call('budget:status').catch(() => null),
     ]);
+    setOverview(ov);
+    setBudgetStatus(b);
     setRuns(Object.fromEntries(r.map((x) => [x.id, x])));
     setSessions(s);
     setInbox(i);
@@ -64,7 +73,12 @@ export default function App() {
     if (!project) return undefined;
     refresh();
     const t = setInterval(() => call('sessions:detect').then(setSessions).catch(() => {}), 5000);
-    return () => clearInterval(t);
+    // Integrations and budget change slowly; a minute is plenty and keeps API traffic low.
+    const slow = setInterval(() => {
+      call('status:integrations').then(setIntegrations).catch(() => {});
+      call('budget:status').then(setBudgetStatus).catch(() => {});
+    }, 60000);
+    return () => { clearInterval(t); clearInterval(slow); };
   }, [project?.repo, refresh]);
 
   const open = async (args) => {
@@ -92,7 +106,7 @@ export default function App() {
     ...sessions.map((s) => ({ ...s, origin: 'attached' })),
   ], [runs, sessions]);
 
-  const tokens = Object.values(runs).reduce((n, r) => n + (r.usage?.inputTokens || 0) + (r.usage?.outputTokens || 0), 0);
+  const tokens = budgetStatus?.today ?? Object.values(runs).reduce((n, r) => n + (r.usage?.inputTokens || 0) + (r.usage?.outputTokens || 0), 0);
   const conflicts = Object.values(runs).reduce((n, r) => n + (r.conflicts?.length || 0), 0);
 
   if (!project) return <Setup config={config} onOpen={open} busy={busy} toast={toast} />;
@@ -106,7 +120,7 @@ export default function App() {
           onConnect={() => setConnectOpen(true)} />
         <div className="console">
           <LoopConsole
-            inbox={inbox} runs={runs} proposals={proposals} sessions={sessions} project={project}
+            inbox={inbox} runs={runs} proposals={proposals} overview={overview} budgetStatus={budgetStatus} sessions={sessions} project={project}
             selected={selected} onSelect={setSelected} notify={notify} setBusy={setBusy}
             onFocusNodes={setFocusNodes} onRefresh={refresh}
           />
