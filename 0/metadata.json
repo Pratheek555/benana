@@ -1,0 +1,82 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4KY8NPEXWCMWHB5EDMBZ3X2",
+  "session_id": "57e9f4f0-61f7-495f-9337-75ca28248f30",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-10T22:17:20.8806414Z",
+  "branch": "main",
+  "checkpoints_count": 4,
+  "save_step_count": 2,
+  "files_touched": [
+    "electron/lib/studio/index.cjs",
+    "electron/lib/studio/repo.cjs",
+    "electron/main.cjs",
+    "src/App.jsx",
+    "src/components/game/game.css",
+    "src/components/studio/ModStudio.jsx",
+    "src/components/studio/studio.css",
+    "src/demo/bridge.js"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "58704697439d",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 322,
+    "cache_creation_tokens": 529623,
+    "cache_read_tokens": 28081293,
+    "output_tokens": 178115,
+    "api_call_count": 162
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-10T22:17:20.590022Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 2798,
+    "human_modified": 1561,
+    "human_removed": 0,
+    "total_committed": 2798,
+    "total_lines_changed": 4359,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 3969,
+      "user_lines_removed": 1176,
+      "agent_lines_added": 124,
+      "agent_lines_removed": 124,
+      "user_added_per_file": {
+        "electron/lib/studio/index.cjs": 9,
+        "electron/lib/studio/repo.cjs": 16,
+        "electron/main.cjs": 223,
+        "src/App.jsx": 161,
+        "src/components/game/game.css": 140,
+        "src/components/studio/BuildPage.jsx": 232,
+        "src/components/studio/CodeView.jsx": 153,
+        "src/components/studio/EntirePage.jsx": 149,
+        "src/components/studio/InsightsPage.jsx": 318,
+        "src/components/studio/ModStudio.jsx": 89,
+        "src/components/studio/ModsPage.jsx": 157,
+        "src/components/studio/NeatlogsPage.jsx": 193,
+        "src/components/studio/shared.jsx": 217,
+        "src/components/studio/studio.css": 1343,
+        "src/demo/bridge.js": 9,
+        "src/demo/studioSample.js": 517,
+        "tests/studio-repo.test.cjs": 43
+      },
+      "user_removed_per_file": {
+        "electron/lib/studio/repo.cjs": 1,
+        "electron/main.cjs": 223,
+        "src/App.jsx": 161,
+        "src/components/game/game.css": 124,
+        "src/components/studio/ModStudio.jsx": 387,
+        "src/components/studio/studio.css": 280
+      }
+    }
+  ]
+}
