@@ -15,6 +15,7 @@ const improve = require('./lib/improve.cjs');
 const neatlogs = require('./lib/neatlogs.cjs');
 const entire = require('./lib/entire.cjs');
 const artifacts = require('./lib/artifacts.cjs');
+const tracing = require('./lib/tracing.cjs');
 
 let win;
 let ctx = null; // { repo, repoPath, intent, harnessStore }
@@ -50,8 +51,17 @@ function summary() {
   return { repo: ctx.repo, repoPath: ctx.repoPath, nodes: g.nodes.length, edges: g.edges.length, harness: harnessLib.load(ctx.harnessStore), intentDir: ctx.intent.dir, intentRepo: ctx.intent.name };
 }
 
-async function ingest({ deep = false, max = 200 } = {}) {
+// Entry point: GitHub history -> intent graph (one WORKFLOW trace per ingest).
+function ingest(opts = {}) {
   need();
+  return tracing.workflow('intent-extraction', { input: { repo: ctx.repo, ...opts }, entryPoint: opts.deep ? 'deep-extraction' : 'extraction' }, async () => {
+    const s = await ingestGraph(opts);
+    tracing.setOutput({ nodes: s.nodes, edges: s.edges });
+    return s;
+  });
+}
+
+async function ingestGraph({ deep = false, max = 200 } = {}) {
   log(`ingesting GitHub history for ${ctx.repo}…`);
   const hist = await github.history(ctx.repo, { max });
   log(`${hist.issues.length} issues, ${hist.pulls.length} PRs fetched; extracting intent`);
@@ -95,7 +105,7 @@ function need() { if (!ctx) throw new Error('Open a project first'); }
 
 const handlers = {
   'config:get': () => ({ ...readConfig(), autoOpen: Boolean(process.env.BENANA_AUTOOPEN), env: {
-    cloudflare: artifacts.configured(), github: github.authenticated(), neatlogs: neatlogs.configured(), anthropic: Boolean(env('ANTHROPIC_API_KEY')),
+    cloudflare: artifacts.configured(), github: github.authenticated(), neatlogs: neatlogs.tracing(), anthropic: Boolean(env('ANTHROPIC_API_KEY')),
   } }),
   'project:open': openProject,
   'project:summary': summary,
@@ -122,7 +132,16 @@ const handlers = {
   'sessions:install': () => { need(); return sessions.install(ctx.intent.dir); },
   'sessions:uninstall': () => sessions.uninstall(),
   'sessions:resume': ({ kind, id, cwd, brief }) => { need(); return agents.resumeExternal({ ctx, kind, sessionId: id, cwd, brief }, emit); },
-  'improve:analyze': async ({ useLLM = true } = {}) => { need(); const r = await improve.analyze({ harnessStore: ctx.harnessStore, runs: agents.allRuns(), useLLM }); emit('proposals', improve.proposals(ctx.harnessStore)); return r; },
+  'improve:analyze': async ({ useLLM = true } = {}) => {
+    need();
+    const r = await tracing.workflow('harness-analyst', { input: { harnessVersion: harnessLib.load(ctx.harnessStore).version }, entryPoint: 'run-analyst' }, async () => {
+      const out = await improve.analyze({ harnessStore: ctx.harnessStore, runs: agents.allRuns(), useLLM });
+      tracing.setOutput({ stats: out.stats, proposal: out.proposal?.title || null });
+      return out;
+    });
+    emit('proposals', improve.proposals(ctx.harnessStore));
+    return r;
+  },
   'improve:list': () => { need(); return improve.proposals(ctx.harnessStore); },
   'improve:decide': async ({ id, approve }) => {
     need();
@@ -174,5 +193,15 @@ function createWindow() {
   else win.loadFile(path.join(appRoot, 'dist', 'index.html'));
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  await tracing.init();
+  createWindow();
+});
+let flushed = false;
+app.on('before-quit', (e) => {
+  if (flushed) return;
+  e.preventDefault();
+  flushed = true;
+  tracing.shutdown().finally(() => app.quit());
+});
 app.on('window-all-closed', () => app.quit());

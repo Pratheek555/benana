@@ -4,19 +4,21 @@
 //   - the benana-intent MCP server, the harness system prompt and pre-loaded intent context
 const fs = require('node:fs');
 const path = require('node:path');
+const AGENT_CONFIG = ['.entire', '.claude', '.codex'];
 const { spawn } = require('node:child_process');
 const { git } = require('./git.cjs');
 const { dataDir, appRoot } = require('./env.cjs');
 const graph = require('./graph.cjs');
 const harnessLib = require('./harness.cjs');
 const artifacts = require('./artifacts.cjs');
+const tracing = require('./tracing.cjs');
 
 const MCP = path.join(appRoot, 'electron', 'mcp-server.cjs');
 const runs = new Map();
 
 function runsDir() { const d = path.join(dataDir, 'runs'); fs.mkdirSync(d, { recursive: true }); return d; }
 function saveRun(r) {
-  const { proc, ...rest } = r;
+  const { proc, openTools, ...rest } = r;
   fs.writeFileSync(path.join(runsDir(), `${r.id}.json`), JSON.stringify(rest, null, 2));
 }
 function allRuns() {
@@ -25,15 +27,29 @@ function allRuns() {
     .filter(Boolean).sort((a, b) => b.startedAt - a.startedAt);
 }
 
-async function start({ ctx, task, issue, agent }, emit) {
+// Entry point: one Neatlogs WORKFLOW trace per agent run (attempts, tools and graders nest under it).
+function start(args, emit) {
+  const { task, issue, agent } = args;
+  return tracing.workflow('agent-run', {
+    input: { task, issue: issue ? `#${issue.number} ${issue.title}` : null, agent, label: args.label },
+    entryPoint: issue ? 'inbox-issue' : 'brief',
+  }, async () => {
+    const run = await startRun({ ...args, trace: tracing.capture() }, emit);
+    tracing.setOutput({ id: run.id, status: run.status, files: run.filesChanged, conflicts: (run.conflicts || []).map((c) => c.node) });
+    return run;
+  });
+}
+
+async function startRun({ ctx, task, issue, agent, trace, harness, label }, emit) {
   const { intent, harnessStore, repoPath } = ctx;
   if (!repoPath || !fs.existsSync(path.join(repoPath, '.git'))) throw new Error('Set a local checkout path for this repo first.');
-  const h = harnessLib.load(harnessStore);
+  const h = harness || harnessLib.load(harnessStore); // evals pin a specific version
   const id = `a${Date.now().toString(36).slice(-5)}`;
   const kind = agent || h.agent;
   const r = {
     id, kind, origin: 'native', task, issue: issue || null, status: 'preparing', step: 0,
     startedAt: Date.now(), attempt: 1, harnessVersion: h.version, transcript: [], verify: [], usage: {},
+    trace, traceIds: trace?.traceId ? [trace.traceId] : [], label: label || null,
   };
   runs.set(id, r);
   const update = (patch = {}) => { Object.assign(r, patch); emit('run', publicRun(r)); };
@@ -45,6 +61,12 @@ async function start({ ctx, task, issue, agent }, emit) {
   fs.mkdirSync(path.dirname(r.worktree), { recursive: true });
   await git(repoPath, ['worktree', 'add', '-q', '-b', `benana/${id}`, r.worktree, 'HEAD']);
   r.baseSha = (await git(r.worktree, ['rev-parse', 'HEAD'])).trim();
+  // Untracked agent hook config (Entire, Claude Code, Codex) lives only in the user's checkout;
+  // copy it so session capture also works inside the worktree.
+  for (const d of AGENT_CONFIG) {
+    const src = path.join(repoPath, d);
+    if (fs.existsSync(src) && !fs.existsSync(path.join(r.worktree, d))) fs.cpSync(src, path.join(r.worktree, d), { recursive: true });
+  }
 
   // Intent fork: local clone the agent writes to; mirrored as an Artifacts fork when configured.
   r.intentDir = path.join(dataDir, 'attempts', id, 'intent');
@@ -96,13 +118,44 @@ function agentCommand(r, h, prompt, resumeId) {
   return { cmd: 'claude', args, stdin: prompt };
 }
 
-function runAgent(r, h, prompt, hooks) {
+// Runs the agent, then the graders, until the run passes, fails or is stopped.
+// Attempts and graders are siblings under the run's WORKFLOW span (r.trace).
+async function runAgent(r, h, prompt, hooks) {
+  let next = prompt;
+  while (next != null) {
+    await runAttempt(r, h, next, hooks);
+    if (r.status === 'stopped' || r.spawnFailed) { saveRun(r); return; }
+    if (r.pendingBrief && r.sessionId) {
+      next = r.pendingBrief;
+      r.pendingBrief = null;
+      hooks.say('system', 'sending your brief');
+      continue;
+    }
+    next = await tracing.under(r.trace, () => verify(r, h, hooks));
+  }
+}
+
+// One agent process = one AGENT span, closed when the process exits.
+function runAttempt(r, h, prompt, hooks) {
   const { say, update } = hooks;
-  return new Promise((resolve) => {
-    const { cmd, args, stdin } = agentCommand(r, h, prompt, r.sessionId);
+  const cmd = r.kind === 'codex' ? 'codex' : 'claude';
+  return tracing.under(r.trace, () => tracing.agent(`${cmd} attempt ${r.attempt}`, prompt, (span) => new Promise((resolve) => {
+    r.agentSpan = tracing.capture();
+    r.openTools = new Map();
+    const { args, stdin } = agentCommand(r, h, prompt, r.sessionId);
     const proc = spawn(cmd, args, { cwd: r.worktree, env: process.env });
     r.proc = proc;
     let buf = '';
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      r.proc = null;
+      for (const end of r.openTools.values()) end();
+      r.openTools.clear();
+      tracing.setUsage(span, { model: r.model, provider: cmd === 'codex' ? 'openai' : 'anthropic', usage: r.usage });
+      resolve();
+    };
     proc.stdout.on('data', (d) => {
       buf += d;
       let i;
@@ -113,40 +166,44 @@ function runAgent(r, h, prompt, hooks) {
       }
     });
     proc.stderr.on('data', (d) => { const t = String(d).trim(); if (t && !/^Reading prompt/.test(t)) say('stderr', t); });
-    proc.on('error', (e) => { say('system', `failed to start ${cmd}: ${e.message}`); update({ status: 'failed' }); resolve(); });
-    proc.on('close', async (code) => {
-      r.proc = null;
-      if (r.status === 'stopped') { saveRun(r); return resolve(); }
-      say('system', `${cmd} exited (${code})`);
-      if (r.pendingBrief && r.sessionId) {
-        const brief = r.pendingBrief;
-        r.pendingBrief = null;
-        say('system', 'sending your brief');
-        await runAgent(r, h, brief, hooks);
-        return resolve();
-      }
-      await verifyAndMaybeRetry(r, h, hooks);
-      resolve();
-    });
+    proc.on('error', (e) => { say('system', `failed to start ${cmd}: ${e.message}`); r.spawnFailed = true; update({ status: 'failed' }); finish(); });
+    proc.on('close', (code) => { if (r.status !== 'stopped') say('system', `${cmd} exited (${code})`); finish(); });
     if (stdin != null) proc.stdin.end(stdin); else proc.stdin.end();
-  });
+  })));
 }
+
+const resultText = (c) => (typeof c === 'string' ? c : (c || []).map((x) => x.text || '').join('\n')).slice(0, 2000);
 
 function handleEvent(r, line, say, update) {
   let ev;
   try { ev = JSON.parse(line); } catch { return say('agent', line); }
   // Claude Code stream-json
-  if (ev.type === 'system' && ev.session_id) { r.sessionId = ev.session_id; return update(); }
+  if (ev.type === 'system' && ev.session_id) { r.sessionId = ev.session_id; r.model = ev.model || r.model; return update(); }
   if (ev.type === 'assistant') {
     for (const c of ev.message?.content || []) {
       if (c.type === 'text' && c.text.trim()) say('agent', c.text);
-      if (c.type === 'tool_use') { r.step += 1; say('tool', `${c.name} ${JSON.stringify(c.input).slice(0, 220)}`); }
+      if (c.type === 'tool_use') {
+        r.step += 1;
+        r.openTools?.set(c.id, tracing.openTool(r.agentSpan, c.name, c.input));
+        say('tool', `${c.name} ${JSON.stringify(c.input).slice(0, 220)}`);
+      }
     }
     return update();
   }
+  if (ev.type === 'user') {
+    for (const c of ev.message?.content || []) {
+      if (c.type !== 'tool_result') continue;
+      r.openTools?.get(c.tool_use_id)?.(resultText(c.content));
+      r.openTools?.delete(c.tool_use_id);
+    }
+    return;
+  }
   if (ev.type === 'result') {
     r.final = ev.result || '';
-    r.usage = { costUsd: ev.total_cost_usd, inputTokens: ev.usage?.input_tokens, outputTokens: ev.usage?.output_tokens, turns: ev.num_turns };
+    r.usage = {
+      costUsd: ev.total_cost_usd, inputTokens: ev.usage?.input_tokens, outputTokens: ev.usage?.output_tokens,
+      cacheRead: ev.usage?.cache_read_input_tokens, turns: ev.num_turns,
+    };
     return update();
   }
   // Codex exec --json
@@ -155,18 +212,27 @@ function handleEvent(r, line, say, update) {
   if (item) {
     if (item.type === 'agent_message' && item.text) { r.final = item.text; say('agent', item.text); }
     else if (item.type === 'command_execution' || item.type === 'mcp_tool_call' || item.type === 'file_change') {
-      if (ev.type === 'item.completed') { r.step += 1; say('tool', `${item.type} ${(item.command || item.tool || JSON.stringify(item.changes || '')).toString().slice(0, 200)}`); }
+      const input = item.command || item.tool || item.changes;
+      if (ev.type === 'item.started' && item.id) r.openTools?.set(item.id, tracing.openTool(r.agentSpan, item.type, input));
+      if (ev.type === 'item.completed') {
+        const end = r.openTools?.get(item.id) || tracing.openTool(r.agentSpan, item.type, input);
+        end(item.aggregated_output);
+        r.openTools?.delete(item.id);
+        r.step += 1;
+        say('tool', `${item.type} ${(item.command || item.tool || JSON.stringify(item.changes || '')).toString().slice(0, 200)}`);
+      }
     }
   }
   if (ev.type === 'turn.completed' && ev.usage) r.usage = { inputTokens: ev.usage.input_tokens, outputTokens: ev.usage.output_tokens };
   update();
 }
 
-// Loop 2: graders. Deterministic checks + the intent grader. Failures go back to the agent.
-async function verifyAndMaybeRetry(r, h, hooks) {
+// Loop 2: graders. Deterministic checks + the intent grader. Returns feedback for another
+// attempt, or null once the run is checkpointed.
+async function verify(r, h, hooks) {
   const { say, update, ctx } = hooks;
   update({ status: 'verifying' });
-  const files = (await git(r.worktree, ['status', '--porcelain'])).split('\n').filter(Boolean).map((l) => l.slice(3).trim());
+  const files = (await git(r.worktree, ['status', '--porcelain'])).split('\n').filter(Boolean).map((l) => l.slice(3).trim()).filter((f) => !AGENT_CONFIG.some((d) => f === `${d}/` || f.startsWith(`${d}/`)));
   r.filesChanged = files;
   const results = [];
   results.push({ grader: 'changes', pass: files.length > 0, detail: files.length ? `${files.length} file(s)` : 'agent changed nothing' });
@@ -185,6 +251,7 @@ async function verifyAndMaybeRetry(r, h, hooks) {
       detail: conflicts.map((c) => `${c.acknowledged ? 'acknowledged ' : ''}${c.kind} ${c.node} (${c.title})`).join('; ') || 'no conflicts',
     });
   }
+  for (const x of results) await tracing.guardrail(x.grader, { files, attempt: r.attempt }, x);
   r.verify.push({ attempt: r.attempt, results });
   const failed = results.filter((x) => !x.pass);
   failed.forEach((f) => say('verify', `✖ ${f.grader}: ${f.detail}`));
@@ -195,14 +262,31 @@ async function verifyAndMaybeRetry(r, h, hooks) {
     update({ status: 'running' });
     const feedback = `The Benana graders rejected your attempt:\n${failed.map((f) => `- ${f.grader}: ${f.detail}`).join('\n')}\nFix these. If an intent conflict is a false alarm, cite the node id (e.g. dead_123) and explain why it does not apply, then record that as a Decision with intent_record.`;
     say('system', `feedback sent → attempt ${r.attempt}`);
-    return runAgent(r, h, feedback, hooks);
+    return feedback;
   }
   await checkpoint(r, failed.length === 0, hooks);
+  return null;
+}
+
+// A passing native run is committed on its benana/<id> branch. Entire's git hooks attach the
+// agent session to that commit as an Entire-Checkpoint trailer, which we read back.
+async function commitWorktree(r, say) {
+  if (r.origin !== 'native') return;
+  try {
+    await git(r.worktree, ['add', '-A', '--', '.', ...AGENT_CONFIG.map((d) => `:!${d}`)]);
+    if (!(await git(r.worktree, ['diff', '--cached', '--name-only'])).trim()) return;
+    const trailers = [`Benana-Run: ${r.id}`, ...r.traceIds.map((t) => `Neatlogs-Trace: ${t}`)];
+    await git(r.worktree, ['commit', '-q', '-m', `benana: ${r.task.split('\n')[0].slice(0, 72)}\n\n${trailers.join('\n')}`]);
+    r.commit = (await git(r.worktree, ['rev-parse', 'HEAD'])).trim();
+    r.entireCheckpoint = (await git(r.worktree, ['log', '-1', '--format=%(trailers:key=Entire-Checkpoint,valueonly)'])).trim() || null;
+    say('system', `committed ${r.commit.slice(0, 7)} on benana/${r.id}${r.entireCheckpoint ? ` · Entire checkpoint ${r.entireCheckpoint}` : ' · no Entire checkpoint'}`);
+  } catch (e) { say('system', `commit: ${e.message}`); }
 }
 
 // Merge the attempt's intent fork back, record an AgentRun node, push to Artifacts.
 async function checkpoint(r, passed, { say, update, ctx, emit }) {
   const { intent } = ctx;
+  if (passed) await commitWorktree(r, say);
   try {
     await git(r.intentDir, ['add', '-A']);
     if ((await git(r.intentDir, ['status', '--porcelain'])).trim()) await git(r.intentDir, ['commit', '-q', '-m', `attempt ${r.id}: agent intent\n\nActor: agent:${r.id}`]);
@@ -212,8 +296,17 @@ async function checkpoint(r, passed, { say, update, ctx, emit }) {
   const node = {
     id: `run_${r.id}`, type: 'AgentRun', title: `${r.kind} · ${r.task.slice(0, 80)}`, at: r.startedAt,
     body: (r.final || '').slice(0, 800), status: 'recorded', confidence: 1, outcome: passed ? 'passed' : 'failed',
-    touches: r.filesChanged || [], sources: [`benana:run/${r.id}`, r.sessionId ? `${r.kind}:session/${r.sessionId}` : null].filter(Boolean),
+    touches: r.filesChanged || [],
+    sources: [
+      `benana:run/${r.id}`,
+      r.sessionId ? `${r.kind}:session/${r.sessionId}` : null,
+      ...r.traceIds.map((t) => `neatlogs:trace/${t}`),
+      r.entireCheckpoint ? `entire:checkpoint/${r.entireCheckpoint}` : null,
+      r.commit ? `git:benana/${r.id}@${r.commit}` : null,
+      r.artifactsFork ? `artifacts:${artifacts.namespace()}/${r.artifactsFork}` : null,
+    ].filter(Boolean),
     harnessVersion: r.harnessVersion,
+    provenance: { traceIds: r.traceIds, entireCheckpoint: r.entireCheckpoint || null, commit: r.commit || null, artifactsFork: r.artifactsFork || null },
   };
   intent.write(graph.nodePath(node), graph.serializeNode(node));
   if (r.issue) intent.write(`edges/e_${node.id}_works_on.json`, { id: `e_${node.id}_works_on`, from: node.id, to: `issue_${r.issue.number}`, type: 'works_on', status: 'recorded', confidence: 1 });
@@ -252,7 +345,7 @@ function stop(id) {
 }
 
 function publicRun(r) {
-  const { proc, transcript, ...rest } = r;
+  const { proc, openTools, transcript, ...rest } = r;
   return { ...rest, transcriptLength: transcript.length };
 }
 
@@ -270,7 +363,11 @@ async function continueRun(id, text, ctx, emit) {
   say('you', text);
   r.attempt = 1;
   update({ status: 'running', task: `${r.task}\n+ ${text}` });
-  runAgent(r, h, text, { say, update, emit, ctx });
+  tracing.workflow('agent-brief', { input: { run: id, brief: text }, sessionId: r.sessionId, entryPoint: 'brief' }, () => {
+    r.trace = tracing.capture();
+    if (r.trace.traceId) r.traceIds = [...(r.traceIds || []), r.trace.traceId];
+    return runAgent(r, h, text, { say, update, emit, ctx });
+  });
   return true;
 }
 
@@ -282,7 +379,7 @@ async function resumeExternal({ ctx, kind, sessionId, cwd, brief }, emit) {
   const id = `r${Date.now().toString(36).slice(-5)}`;
   const r = {
     id, kind, origin: 'resumed', task: brief, issue: null, status: 'running', step: 0, startedAt: Date.now(),
-    attempt: 1, harnessVersion: h.version, transcript: [], verify: [], usage: {}, sessionId, worktree: cwd,
+    attempt: 1, harnessVersion: h.version, transcript: [], verify: [], usage: {}, sessionId, worktree: cwd, traceIds: [],
   };
   runs.set(id, r);
   r.intentDir = path.join(dataDir, 'attempts', id, 'intent');
@@ -292,7 +389,11 @@ async function resumeExternal({ ctx, kind, sessionId, cwd, brief }, emit) {
   const update = (patch = {}) => { Object.assign(r, patch); emit('run', publicRun(r)); };
   say('system', `resumed ${kind} session ${sessionId} in ${cwd}`);
   update();
-  runAgent(r, h, brief, { say, update, emit, ctx });
+  tracing.workflow('session-resume', { input: { brief, kind, sessionId }, sessionId, entryPoint: 'attached-session' }, () => {
+    r.trace = tracing.capture();
+    if (r.trace.traceId) r.traceIds.push(r.trace.traceId);
+    return runAgent(r, h, brief, { say, update, emit, ctx });
+  });
   return publicRun(r);
 }
 

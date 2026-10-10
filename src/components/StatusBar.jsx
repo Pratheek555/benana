@@ -24,8 +24,11 @@ export default function StatusBar({ project, agents, tokens, conflicts, integrat
       <span className="seg" title={i.artifacts?.configured ? `${i.artifacts.namespace}/${i.artifacts.repo}` : 'CLOUDFLARE_API_TOKEN not set'}>
         <span className={`dot ${i.artifacts?.configured ? 'ok' : 'bad'}`} /> artifacts
       </span>
-      <span className="seg" title={i.neatlogs?.error || (i.neatlogs?.configured ? 'connected' : 'set NEATLOGS_API_KEY + NEATLOGS_PROJECT_ID')}>
-        <span className={`dot ${i.neatlogs?.ok ? 'ok' : i.neatlogs?.configured ? 'bad' : ''}`} /> neatlogs
+      <span className="seg" title={i.neatlogs?.error || [
+        i.neatlogs?.tracing ? 'tracing on' : 'tracing off (set NEATLOGS_API_KEY)',
+        i.neatlogs?.configured ? 'trace read API on' : 'trace read off (set NEATLOGS_TOKEN + NEATLOGS_PROJECT_ID)',
+      ].join(' · ')}>
+        <span className={`dot ${i.neatlogs?.ok ? 'ok' : i.neatlogs?.error ? 'bad' : ''}`} /> neatlogs
       </span>
       <span className="seg" title={i.entire?.installed ? i.entire.version : 'entire CLI not installed'}>
         <span className={`dot ${i.entire?.installed ? 'ok' : ''}`} /> entire

@@ -32,7 +32,8 @@ benana reads `.env` at the repo root (copy `.env.example` to start).
 | `CLOUDFLARE_ACCOUNT_ID` | no | Otherwise it is read from the token |
 | `ARTIFACTS_NAMESPACE` | no | Default `benana-dev` |
 | `GITHUB_TOKEN` | no | Falls back to `gh auth token` |
-| `NEATLOGS_API_KEY` + `NEATLOGS_PROJECT_ID` | no | L4 reads recent traces. Use a service-account token. |
+| `NEATLOGS_API_KEY` | no | SDK project key. Exports a trace for every agent run, extraction and analyst pass |
+| `NEATLOGS_TOKEN` + `NEATLOGS_PROJECT_ID` | no | Service-account token so the L4 analyst can read traces back (the SDK key can't) |
 | `NEATLOGS_REGION=eu` | no | EU Neatlogs host |
 | `BENANA_DATA_DIR` | no | Local data, default `~/.benana` |
 
@@ -74,7 +75,13 @@ npm start        # production build, then Electron
 
 ## 5. Neatlogs and Entire
 
-- **Neatlogs ingestion** comes from Neatlogs' own integrations: install their Claude Code plugin or Codex hooks (docs.neatlogs.com → Integrations). Then set `NEATLOGS_API_KEY` and `NEATLOGS_PROJECT_ID` so the L4 analyst reads recent traces as evidence. The status bar dot turns green when the API responds.
+- **Neatlogs tracing** is built in (`electron/lib/tracing.cjs`, Neatlogs TypeScript SDK). With `NEATLOGS_API_KEY` set, each entry point exports one trace:
+  - `agent-run`: WORKFLOW → one AGENT span per attempt (model and token counts from the agent CLI) → TOOL spans for each tool call → GUARDRAIL spans for each grader
+  - `session-resume` and `agent-brief`: the same, for resumed or steered sessions
+  - `intent-extraction`: GitHub ingest, with an LLM span for deep extraction
+  - `harness-analyst`: the L4 pass, with an LLM span for the proposal
+
+  Check the pipeline with `npm exec --offline --no -- neatlogs doctor --local --json` and `... doctor --probe --json` (with `.env` exported). Add `NEATLOGS_TOKEN` (service account) to let the L4 analyst read traces back.
 - **Entire:** run `entire enable` in your checkout. benana detects the CLI (status bar dot) and agent sessions get checkpoints linked to commits. Reading Entire checkpoints into the graph is next on the list (see below).
 
 ## 6. Use the intent tools without the app

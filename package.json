@@ -13,6 +13,7 @@
   "dependencies": {
     "cytoscape": "^3.30.2",
     "dotenv": "^16.4.5",
+    "neatlogs": "^1.1.28",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
