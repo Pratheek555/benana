@@ -12,8 +12,20 @@ const LABEL = {
   online: "In game",
 };
 
+// One-line summary of a bot tool call for the overlay.
+function describe(a) {
+  if (a.error) return a.error.slice(0, 80);
+  const r = a.result;
+  if (r?.after) return `${r.after.name} ↑ ${r.after.maxUpwardVelocity} b/t, +${r.after.maxHeightGain} blocks`;
+  if (a.tool === "track_entity" && r) return `${r.name} ↑ ${r.maxUpwardVelocity} b/t, +${r.maxHeightGain} blocks`;
+  if (a.tool === "nearby_entities" && Array.isArray(r)) return r.slice(0, 3).map((e) => `${e.name}#${e.id}`).join(" ") || "nothing nearby";
+  if (a.tool === "game_setup") return (a.args?.commands || []).join(" · ").slice(0, 80);
+  if (a.tool === "equip") return r?.holding || "";
+  return JSON.stringify(a.args || {}).slice(0, 80);
+}
+
 // Live view of the test bot inside the local Paper server. Owner: Track A.
-export default function GamePane() {
+export default function GamePane({ showLog = true }) {
   const [status, setStatus] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -44,7 +56,7 @@ export default function GamePane() {
   };
 
   const running = status && status.server !== "stopped";
-  const last = actions[actions.length - 1];
+  const recent = actions.filter((a) => a.done).slice(-3);
 
   return (
     <section className="game-pane">
@@ -81,22 +93,28 @@ export default function GamePane() {
               : "Start the game to watch the AI player."}
           </div>
         )}
-        {last && (
-          <div className="game-action">
-            <span>{last.tool}</span>
-            {last.args && <code>{JSON.stringify(last.args).slice(0, 80)}</code>}
+        {recent.length > 0 && (
+          <div className="game-actions">
+            {recent.map((a) => (
+              <div key={`${a.at}-${a.tool}`} className={`game-action ${a.error ? "error" : ""}`}>
+                <span>{a.tool}</span>
+                <code>{describe(a)}</code>
+              </div>
+            ))}
           </div>
         )}
       </div>
       {(error || status?.error) && (
         <div className="game-error">{error || status.error}</div>
       )}
-      <pre className="game-log">
-        {lines
-          .slice(-8)
-          .map((l) => l.line)
-          .join("\n")}
-      </pre>
+      {showLog && (
+        <pre className="game-log">
+          {lines
+            .slice(-8)
+            .map((l) => l.line)
+            .join("\n")}
+        </pre>
+      )}
     </section>
   );
 }

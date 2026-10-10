@@ -10,3 +10,5 @@ mvn -q -f fixtures/launch-sword/pom.xml package -Dbugged=true   # bugged: knockb
 ```
 
 The bugged build is also the **labeled injected-bug fallback** for the demo recording.
+
+`seeded`: the spec, test plan, and knockback-bugged source used by Mod Studio's **"Seeded bug (fallback)"** mode. It replaces the builder's first attempt, and the run is labeled as seeded in the UI. The playtester and fixer still run for real.

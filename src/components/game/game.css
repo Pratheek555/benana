@@ -80,10 +80,18 @@
   color: #a7a39a;
   font-size: 13px;
 }
-.game-action {
+.game-actions {
   position: absolute;
   left: 12px;
   bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.game-action.error code {
+  color: #f3a59d;
+}
+.game-action {
   display: flex;
   gap: 8px;
   align-items: center;

@@ -19,6 +19,11 @@ function resolveExecutable(command, platform = process.platform) {
     .split(/\r?\n/)
     .map((x) => x.trim())
     .filter(Boolean);
+  if (platform === "win32") {
+    // `where` also lists extensionless Unix shims (npm, Maven) that Windows cannot execute.
+    const runnable = choices.filter((x) => /\.(exe|com|cmd|bat)$/i.test(x));
+    return runnable.find((x) => /\.(exe|com)$/i.test(x)) || runnable[0] || command;
+  }
   return choices.find((x) => !/\.(cmd|bat)$/i.test(x)) || choices[0] || command;
 }
 

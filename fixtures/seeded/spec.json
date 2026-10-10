@@ -1,0 +1,21 @@
+{
+  "modName": "LaunchSword",
+  "summary": "Hitting a mob with a golden sword launches it into the sky with a burst of particles, with a 3 second cooldown per player.",
+  "behavior": [
+    "When a player hits a living entity while holding a golden sword, launch the entity straight up (upward velocity of at least 1.2 blocks per tick).",
+    "Spawn cloud particles and play a firework launch sound at the entity when it is launched.",
+    "Each player has a 3 second cooldown between launches; hits during the cooldown deal normal damage only.",
+    "Any other item behaves like vanilla."
+  ],
+  "testPlan": {
+    "version": 1,
+    "modName": "LaunchSword",
+    "summary": "Hitting a mob with a golden sword launches it into the sky with a burst of particles, with a 3 second cooldown per player.",
+    "setup": ["time set day", "kill @e[type=!player]", "give @bot golden_sword", "give @bot iron_sword", "summon husk ^ ^ ^3 {PersistenceRequired:1b}"],
+    "checks": [
+      { "id": "launch-on-hit", "title": "A golden sword hit launches the mob upward", "steps": "Equip golden_sword and attack the nearest husk once with trackTicks 20.", "expect": "The husk's maxUpwardVelocity is above 0.8 blocks/tick within 5 ticks of the hit." },
+      { "id": "cooldown", "title": "A second hit within 3 seconds does not launch", "steps": "Within 1 second of the first launch, summon another husk 2 blocks in front of the bot and hit it with the golden sword (trackTicks 20).", "expect": "The second husk's maxUpwardVelocity stays below 0.5 blocks/tick." },
+      { "id": "other-item", "title": "Other items behave like vanilla", "steps": "Wait 4 seconds, summon a husk, equip iron_sword and hit it (trackTicks 20).", "expect": "The husk's maxUpwardVelocity stays below 0.5 blocks/tick." }
+    ]
+  }
+}

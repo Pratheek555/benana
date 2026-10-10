@@ -1,46 +1,456 @@
 .studio {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 320px;
+  grid-template-columns: 280px minmax(0, 1fr) 340px;
   height: 100%;
   background: #f6f5f2;
 }
 .studio-side,
 .studio-inspector {
   padding: 18px;
-  border-right: 1px solid #e4e1da;
   background: #fbfaf7;
   overflow: auto;
 }
+.studio-side {
+  border-right: 1px solid #e4e1da;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .studio-inspector {
-  border-right: 0;
   border-left: 1px solid #e4e1da;
 }
-.studio-inspector h3 {
-  margin: 0 0 8px;
-  font-size: 13px;
+.studio h4 {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a857b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .studio-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
 }
 .studio-muted {
+  margin: 0;
   color: #716c64;
   font-size: 12px;
   line-height: 1.5;
 }
+.studio-prompt {
+  width: 100%;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #dcd8cf;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.studio-prompt:focus {
+  outline: 2px solid #b9b3f0;
+  border-color: transparent;
+}
+.studio-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.studio-examples button {
+  padding: 3px 8px;
+  border: 1px solid #e0dcd3;
+  border-radius: 999px;
+  background: #fff;
+  color: #4b4842;
+  font-size: 11px;
+  cursor: pointer;
+}
+.studio-seed {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 11px;
+  color: #716c64;
+  line-height: 1.4;
+}
+.studio-go {
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #20211f;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.studio-go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.studio-error {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #fbe9e7;
+  color: #8f2f27;
+  font-size: 12px;
+  margin: 6px 0;
+}
 .studio-link {
+  margin-top: auto;
   border: 0;
   background: none;
   padding: 0;
   color: #5a54c8;
   font-size: 12px;
   cursor: pointer;
+  text-align: left;
 }
-.studio-main {
-  min-width: 0;
-  padding: 16px;
+.studio-mods {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+}
+.studio-mod {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.studio-mod.active {
+  background: #fff;
+  border-color: #e4e1da;
+}
+.studio-mod strong {
+  font-size: 13px;
+}
+.studio-mod small {
+  grid-column: 1 / -1;
+  color: #8a857b;
+  font-size: 11px;
+}
+.studio-lessons {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: #4b4842;
+  line-height: 1.45;
+}
+.pill {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #eceae4;
+  color: #6b665d;
+}
+.pill.running,
+.pill.queued {
+  background: #fdf0d5;
+  color: #8a5a00;
+}
+.pill.passed {
+  background: #dff1e5;
+  color: #22673d;
+}
+.pill.failed {
+  background: #fbe2df;
+  color: #9a3027;
+}
+
+.studio-main {
+  min-width: 0;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.studio-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #a19b90;
+}
+.studio-stepper .step {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+.studio-stepper .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d6d1c7;
+}
+.studio-stepper .step.done {
+  color: #22673d;
+}
+.studio-stepper .step.done .dot {
+  background: #3c9a5f;
+}
+.studio-stepper .step.current {
+  background: #20211f;
+  color: #fff;
+}
+.studio-stepper .step.current .dot {
+  background: #f2c14e;
+  animation: studio-pulse 1s ease-in-out infinite;
+}
+.studio-stepper .step.failed {
+  background: #fbe2df;
+  color: #9a3027;
+}
+.studio-attempt {
+  margin-left: auto;
+  font-weight: 600;
+  color: #20211f;
+}
+@keyframes studio-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.studio-feed {
+  height: 230px;
+  flex: none;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e4e1da;
+  font-size: 12px;
+}
+.feed-row {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  line-height: 1.45;
+  border-bottom: 1px dashed #f0ede7;
+}
+.feed-role {
+  flex: none;
+  width: 78px;
+  font-weight: 600;
+  font-size: 11px;
+}
+.feed-row.spec .feed-role {
+  color: #6a4fc4;
+}
+.feed-row.builder .feed-role {
+  color: #2f6fb5;
+}
+.feed-row.fixer .feed-role {
+  color: #c06a12;
+}
+.feed-row.playtester .feed-role {
+  color: #2d8a52;
+}
+.feed-row.benana .feed-role {
+  color: #8a857b;
+}
+.feed-attempt {
+  flex: none;
+  color: #a19b90;
+  font-size: 11px;
+}
+.feed-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #34322e;
+}
+.feed-text code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #f1efe9;
+  font-size: 11px;
+}
+.feed-row.phase .feed-text {
+  font-weight: 600;
+}
+.feed-row.failure .feed-text,
+.feed-row.error .feed-text {
+  color: #9a3027;
+  font-weight: 600;
+}
+.feed-row.result .feed-text {
+  color: #6b665d;
+}
+
+.insp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.insp-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.insp-seed {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #fdf0d5;
+  color: #8a5a00;
+  font-size: 11px;
+}
+.insp-prompt {
+  margin: 8px 0;
+  color: #4b4842;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.studio-stop {
+  padding: 4px 10px;
+  border: 1px solid #c8463d;
+  border-radius: 6px;
+  background: #fff;
+  color: #c8463d;
+  font-size: 12px;
+  cursor: pointer;
+}
+.live {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #3c9a5f;
+  color: #fff;
+  font-size: 9px;
+  animation: studio-pulse 1.2s ease-in-out infinite;
+}
+.insp-checks,
+.insp-attempts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.insp-checks li {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+}
+.insp-checks strong {
+  display: block;
+}
+.insp-checks small {
+  display: block;
+  color: #716c64;
+  line-height: 1.4;
+}
+.check-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #eceae4;
+  color: #8a857b;
+  font-size: 11px;
+  font-weight: 700;
+}
+.check-icon.pass {
+  background: #3c9a5f;
+  color: #fff;
+}
+.check-icon.fail {
+  background: #c8463d;
+  color: #fff;
+}
+.check-icon.blocked {
+  background: #e0a526;
+  color: #fff;
+}
+.attempt {
+  padding: 8px 10px;
+  border: 1px solid #e4e1da;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+}
+.attempt.failed {
+  border-color: #f0c9c4;
+}
+.attempt.passed {
+  border-color: #bfe0ca;
+}
+.attempt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.attempt-fail {
+  margin: 4px 0;
+  color: #9a3027;
+  line-height: 1.4;
+}
+.attempt-lesson {
+  margin: 4px 0;
+  color: #22673d;
+  line-height: 1.4;
+}
+.attempt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 0;
+  color: #716c64;
+  font-size: 11px;
+}
+.attempt-sessions {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.session {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  color: #4b4842;
+  font-size: 11px;
+}
+.tag {
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #eceae4;
+  color: #6b665d;
+}
+button.tag {
+  cursor: pointer;
+}
+.tag.entire {
+  background: #e3f0e8;
+  color: #22673d;
+}
+.tag.neatlogs {
+  background: #e8e6fb;
+  color: #4a43b0;
+}
+.insp-partners {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b4842;
+}
+.insp-partners .tag {
+  margin-right: 6px;
 }
