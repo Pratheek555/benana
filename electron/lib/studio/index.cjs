@@ -300,6 +300,12 @@ function create({ prompt, seed = false }) {
   return publicMod(mod);
 }
 
+function repoOf(id) {
+  const mod = mods.get(id);
+  if (!mod?.repoDir) throw new Error('This mod has no repository yet.');
+  return mod.repoDir;
+}
+
 function handlers(deps) {
   emit = deps.emit;
   log = deps.log;
@@ -323,6 +329,9 @@ function handlers(deps) {
       const mod = mods.get(id);
       return mod?.repoDir ? repo.checkpoints(mod.repoDir) : { ok: false, items: [], error: 'No repository yet.' };
     },
+    'studio:files': ({ id }) => repo.files(repoOf(id)),
+    'studio:file': ({ id, path: rel }) => repo.readFile(repoOf(id), rel),
+    'studio:diff': ({ id, sha }) => repo.diff(repoOf(id), sha),
     'studio:lessons': () => lessons(),
     'studio:partners': async () => ({ neatlogs: await neatlogs.status() }),
   };

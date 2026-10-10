@@ -100,6 +100,21 @@ async function history(dir) {
   return (await git(dir, 'log', '--format=%h %s%n%(trailers:key=Entire-Checkpoint)', '-20')).out.trim();
 }
 
+async function files(dir) {
+  const res = await git(dir, 'ls-files', '-z');
+  return res.out.split('\0').filter(Boolean);
+}
+
+async function readFile(dir, rel) {
+  if (!(await files(dir)).includes(rel)) throw new Error('Not a tracked file in this mod repository.');
+  return fs.readFileSync(path.join(dir, rel), 'utf8').slice(0, 200000);
+}
+
+async function diff(dir, sha) {
+  if (!/^[0-9a-f]{7,40}$/.test(sha || '')) throw new Error('Unknown commit.');
+  return (await git(dir, 'show', '--format=%s%n%n%b', '--patch', '--no-color', sha)).out.slice(0, 200000);
+}
+
 async function build(dir, name) {
   const res = await exec('mvn', ['-q', '-B', 'package'], dir, { timeoutMs: 6 * 60 * 1000 });
   const log = `${res.out}\n${res.err}`.trim();
@@ -108,4 +123,4 @@ async function build(dir, name) {
   return { ok: res.ok && fs.existsSync(jar), jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000) };
 }
 
-module.exports = { modsDir, create, commit, checkpoints, history, build };
+module.exports = { modsDir, create, commit, checkpoints, history, files, readFile, diff, build };

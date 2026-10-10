@@ -204,7 +204,7 @@ for (const [channel, fn] of Object.entries(handlers)) {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1480, height: 920, minWidth: 1100, minHeight: 680, backgroundColor: '#f4f1ea',
+    width: 1480, height: 920, minWidth: 1100, minHeight: 680, backgroundColor: '#101214',
     title: 'benana', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });

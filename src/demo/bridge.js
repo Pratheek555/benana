@@ -1,3 +1,5 @@
+import { studioSample } from "./studioSample.js";
+
 const now = Date.now();
 const attempt1 = {
   id: "demo-1",
@@ -270,7 +272,14 @@ const data = {
     ],
   },
 };
+Object.assign(data, studioSample);
+
 async function invoke(channel, payload = {}) {
+  if (channel === "studio:create")
+    return {
+      ok: false,
+      error: "Builds run in the desktop app. This preview shows finished sample runs.",
+    };
   if (channel === "neatlogs:evidence") {
     const run = runs.find((item) => item.id === payload.id);
     if (run?.id === attempt1.id) return { ok: true, data: data[channel] };

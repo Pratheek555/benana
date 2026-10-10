@@ -17,7 +17,7 @@ import ModStudio from "./components/studio/ModStudio.jsx";
 
 export default function App() {
   const [deepIngest, setDeepIngest] = React.useState(false);
-  const [studioMode, setStudioMode] = React.useState(!isDemo);
+  const [studioMode, setStudioMode] = React.useState(true);
   const workspace = useWorkspace();
   const {
     project,

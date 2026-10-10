@@ -1,422 +1,124 @@
 import React from "react";
-import { call, on, ago } from "../../api.js";
-import GamePane from "../game/GamePane.jsx";
+import { call, on } from "../../api.js";
+import BuildPage from "./BuildPage.jsx";
+import ModsPage from "./ModsPage.jsx";
+import InsightsPage from "./InsightsPage.jsx";
+import NeatlogsPage from "./NeatlogsPage.jsx";
+import EntirePage from "./EntirePage.jsx";
 import "./studio.css";
 
-const EXAMPLES = [
-  "A golden sword that launches any mob it hits into the sky with particles, with a 3 second cooldown.",
-  "Arrows that explode on impact without breaking blocks, with a 5 second cooldown per player.",
-  "Right-clicking with a blaze rod shoots a fireball where you look.",
+const PAGES = [
+  { key: "build", label: "Build", title: "Build a mod", sub: "Describe it, watch the AI player test it, and follow every fix." },
+  { key: "mods", label: "Mods", title: "Mods", sub: "Every mod Benana built, with its plugin code and attempt history." },
+  { key: "insights", label: "Insights", title: "Insights", sub: "Pass rates, spend, and what the agents learned across all mods." },
+  { key: "neatlogs", label: "Neatlogs", title: "Neatlogs traces", sub: "Every agent session, linked to its trace." },
+  { key: "entire", label: "Entire", title: "Entire checkpoints", sub: "Each commit linked to the agent session that produced it." },
 ];
 
-const PHASES = [
-  ["spec", "Spec"],
-  ["repo", "Repo"],
-  ["build", "Build"],
-  ["compile", "Compile"],
-  ["deploy", "Deploy"],
-  ["playtest", "Playtest"],
-  ["fix", "Fix"],
-  ["done", "Done"],
-];
-
-const ROLE = {
-  spec: "Spec agent",
-  builder: "Builder",
-  fixer: "Fixer",
-  playtester: "Playtester",
-  benana: "Benana",
+const ICONS = {
+  build: <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3zM3 7.5l9 4.5 9-4.5M12 12v9" />,
+  mods: (
+    <>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+    </>
+  ),
+  insights: <path d="M4 20h16M8 16v-5M12 16V7M16 16v-8" />,
+  neatlogs: (
+    <>
+      <circle cx="6" cy="6" r="2.2" />
+      <circle cx="18" cy="6" r="2.2" />
+      <circle cx="12" cy="18" r="2.2" />
+      <path d="M8 7l2.8 9M16 7l-2.8 9M8.2 6h7.6" />
+    </>
+  ),
+  entire: <path d="M12 3 3 8l9 5 9-5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5" />,
+  workspace: <path d="M4 6h16M4 12h10M4 18h7" />,
 };
 
-function phaseIndex(mod) {
-  if (!mod) return -1;
-  if (mod.phase === "fix") return 6;
-  const i = PHASES.findIndex(([key]) => key === mod.phase);
-  return i;
-}
-
-function latestVerdict(mod) {
-  const withVerdict = [...(mod?.attempts || [])].reverse().find((a) => a.verdict);
-  return withVerdict?.verdict || null;
-}
-
 export default function ModStudio({ onOpenWorkspace }) {
+  const [page, setPage] = React.useState("build");
   const [mods, setMods] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState(null);
-  const [feed, setFeed] = React.useState([]);
-  const [prompt, setPrompt] = React.useState("");
-  const [seed, setSeed] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState("");
   const [lessons, setLessons] = React.useState([]);
-  const selectedRef = React.useRef(null);
-  selectedRef.current = selectedId;
+  const [game, setGame] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const current = PAGES.find((p) => p.key === page);
+  const mod = mods.find((m) => m.id === selectedId) || null;
+  const running = mods.some((m) => m.running);
+  const openMod = (id) => {
+    setSelectedId(id);
+    setPage("mods");
+  };
 
   React.useEffect(() => {
     call("studio:list")
       .then((list) => {
         setMods(list);
-        if (list[0]) setSelectedId(list[0].id);
+        setSelectedId((id) => id || list[0]?.id || null);
       })
       .catch((e) => setError(e.message));
     call("studio:lessons").then(setLessons).catch(() => {});
+    call("game:status").then(setGame).catch(() => {});
     const offs = [
-      on("studio:mod", (mod) => {
-        setMods((prev) => {
-          const rest = prev.filter((m) => m.id !== mod.id);
-          return [mod, ...rest].sort((a, b) => b.createdAt - a.createdAt);
-        });
-        if (mod.status === "passed") call("studio:lessons").then(setLessons).catch(() => {});
+      on("studio:mod", (next) => {
+        setMods((prev) => [next, ...prev.filter((m) => m.id !== next.id)].sort((a, b) => b.createdAt - a.createdAt));
+        if (next.status === "passed") call("studio:lessons").then(setLessons).catch(() => {});
       }),
-      on("studio:feed", ({ modId, item }) => {
-        if (modId === selectedRef.current)
-          setFeed((prev) => [...prev.slice(-599), item]);
-      }),
+      on("game:status", setGame),
     ];
     return () => offs.forEach((off) => off());
   }, []);
 
-  React.useEffect(() => {
-    setFeed([]);
-    if (!selectedId) return;
-    call("studio:get", { id: selectedId })
-      .then((mod) => setFeed(mod.feed.slice(-600)))
-      .catch(() => {});
-  }, [selectedId]);
-
-  const mod = mods.find((m) => m.id === selectedId) || null;
-  const running = mods.some((m) => m.running);
-
-  const start = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const created = await call("studio:create", { prompt, seed });
-      setSelectedId(created.id);
-      setPrompt("");
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="studio">
-      <aside className="studio-side">
-        <div className="studio-brand">
-          <span className="brand">B</span>
-          <strong>Mod Studio</strong>
-        </div>
-        <p className="studio-muted">
-          Describe a Minecraft mod. Benana writes it, plays it in-game, and
-          fixes what breaks.
-        </p>
-        <textarea
-          className="studio-prompt"
-          value={prompt}
-          disabled={seed}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="A golden sword that launches mobs into the sky…"
-          rows={4}
-        />
-        <div className="studio-examples">
-          {EXAMPLES.map((ex) => (
-            <button key={ex} onClick={() => setPrompt(ex)} title={ex}>
-              {ex.split(" ").slice(0, 4).join(" ")}…
-            </button>
-          ))}
-        </div>
-        <label className="studio-seed">
-          <input
-            type="checkbox"
-            checked={seed}
-            onChange={(e) => setSeed(e.target.checked)}
-          />
-          <span>
-            Seeded bug (fallback). Starts from a labeled buggy LaunchSword;
-            the playtester and fixer still run for real.
-          </span>
-        </label>
-        <button
-          className="studio-go"
-          disabled={busy || running || (!seed && prompt.trim().length < 8)}
-          onClick={start}
-        >
-          {running ? "A mod is running…" : "Build and playtest"}
-        </button>
-        {error && <div className="studio-error">{error}</div>}
-
-        <h4>Mods</h4>
-        <div className="studio-mods">
-          {mods.map((m) => (
-            <button
-              key={m.id}
-              className={`studio-mod ${m.id === selectedId ? "active" : ""}`}
-              onClick={() => setSelectedId(m.id)}
-            >
-              <span className={`pill ${m.status}`}>{m.status}</span>
-              <strong>{m.name}</strong>
-              <small>
-                {m.attempts.length} attempt{m.attempts.length === 1 ? "" : "s"}{" "}
-                · {ago(m.createdAt)} ago{m.seed ? " · seeded" : ""}
-              </small>
-            </button>
-          ))}
-          {!mods.length && <p className="studio-muted">No mods yet.</p>}
-        </div>
-
-        {lessons.length > 0 && (
-          <>
-            <h4>Learned by the fixer</h4>
-            <ul className="studio-lessons">
-              {lessons.slice(-4).map((l) => (
-                <li key={l.at}>{l.lesson}</li>
-              ))}
-            </ul>
-          </>
-        )}
-        <button className="studio-link" onClick={onOpenWorkspace}>
-          Open repository workspace
-        </button>
-      </aside>
-
-      <main className="studio-main">
-        <Stepper mod={mod} />
-        <GamePane showLog={false} />
-        <Feed feed={feed} mod={mod} />
-      </main>
-
-      <aside className="studio-inspector">
-        {mod ? <Inspector mod={mod} /> : <p className="studio-muted">Describe a mod to start.</p>}
-      </aside>
-    </div>
-  );
-}
-
-function Stepper({ mod }) {
-  const current = phaseIndex(mod);
-  const done = mod?.status === "passed";
-  const failed = ["failed", "stopped"].includes(mod?.status);
-  return (
-    <div className="studio-stepper">
-      {PHASES.map(([key, label], i) => (
-        <div
-          key={key}
-          className={`step ${i < current || (done && i <= current) ? "done" : ""} ${
-            i === current && !done ? (failed ? "failed" : "current") : ""
-          }`}
-        >
-          <span className="dot" />
-          {label}
-        </div>
-      ))}
-      {mod && (
-        <span className="studio-attempt">
-          {mod.name}
-          {mod.attempts.length ? ` · attempt ${mod.attempts.length}` : ""}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function Feed({ feed, mod }) {
-  const ref = React.useRef(null);
-  React.useEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [feed.length]);
-  const visible = feed.filter((f) => f.kind !== "result" || f.isError || f.role === "playtester");
-  return (
-    <section className="studio-feed" ref={ref}>
-      {!visible.length && (
-        <p className="studio-muted">
-          {mod ? "Waiting for agent activity…" : "Agent activity appears here."}
-        </p>
-      )}
-      {visible.slice(-250).map((f, i) => (
-        <div key={`${f.at}-${i}`} className={`feed-row ${f.role} ${f.kind}`}>
-          <span className="feed-role">{ROLE[f.role] || f.role}</span>
-          {f.attempt ? <span className="feed-attempt">#{f.attempt}</span> : null}
-          <span className="feed-text">
-            {f.kind === "tool" ? (
-              <>
-                <code>{f.name}</code> {f.summary}
-              </>
-            ) : f.kind === "result" ? (
-              <>
-                <code>{f.name}</code> → {f.text.slice(0, 300)}
-              </>
-            ) : (
-              f.text
-            )}
-          </span>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function CheckIcon({ status }) {
-  const map = { pass: "✓", fail: "✕", blocked: "!", pending: "·" };
-  return <span className={`check-icon ${status}`}>{map[status] || "·"}</span>;
-}
-
-function Inspector({ mod }) {
-  const verdict = latestVerdict(mod);
-  const byId = new Map((verdict?.checks || []).map((c) => [c.id, c]));
-  const last = mod.attempts[mod.attempts.length - 1];
-  return (
-    <>
-      <div className="insp-head">
-        <h3>{mod.name}</h3>
-        <span className={`pill ${mod.status}`}>{mod.status}</span>
-      </div>
-      {mod.seed && (
-        <div className="insp-seed">
-          Seeded bug fallback: attempt 1 uses a labeled buggy fixture.
-        </div>
-      )}
-      <p className="insp-prompt">“{mod.prompt}”</p>
-      {mod.running && (
-        <button className="studio-stop" onClick={() => call("studio:stop", { id: mod.id })}>
-          Stop
-        </button>
-      )}
-      {mod.error && <div className="studio-error">{mod.error}</div>}
-
-      <h4>
-        In-game test plan
-        {verdict?.live && last?.status === "running" ? (
-          <span className="live">live</span>
-        ) : null}
-      </h4>
-      {!mod.testPlan && <p className="studio-muted">The spec agent is writing it…</p>}
-      <ul className="insp-checks">
-        {(mod.testPlan?.checks || []).map((c) => {
-          const r = byId.get(c.id);
-          return (
-            <li key={c.id}>
-              <CheckIcon status={r?.status || "pending"} />
-              <div>
-                <strong>{c.title}</strong>
-                <small>{r?.observed || c.expect}</small>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      {verdict?.serverErrors?.length > 0 && (
-        <div className="studio-error">
-          {verdict.serverErrors.length} server error(s):{" "}
-          {verdict.serverErrors[0].message.slice(0, 160)}
-        </div>
-      )}
-
-      <h4>Attempts</h4>
-      <ol className="insp-attempts">
-        {mod.attempts.map((a) => (
-          <Attempt key={a.n} attempt={a} />
+      <nav className="rail" aria-label="Mod Studio">
+        <div className="rail-brand" title="Benana Mod Studio">B</div>
+        {PAGES.map((p) => (
+          <button
+            key={p.key}
+            className={`rail-item ${page === p.key ? "active" : ""}`}
+            onClick={() => setPage(p.key)}
+            aria-current={page === p.key ? "page" : undefined}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">{ICONS[p.key]}</svg>
+            <span>{p.label}</span>
+            {p.key === "build" && running && <i className="rail-live" />}
+          </button>
         ))}
-      </ol>
-      {!mod.attempts.length && <p className="studio-muted">No attempts yet.</p>}
-
-      <h4>Partners</h4>
-      <Partners mod={mod} />
-    </>
-  );
-}
-
-function Attempt({ attempt }) {
-  return (
-    <li className={`attempt ${attempt.status}`}>
-      <div className="attempt-head">
-        <strong>
-          #{attempt.n} {attempt.role === "seeded" ? "Seeded (labeled)" : ROLE[attempt.role]}
-        </strong>
-        <span className={`pill ${attempt.status}`}>{attempt.status}</span>
-      </div>
-      {attempt.failure && <p className="attempt-fail">{attempt.failure.summary}</p>}
-      {attempt.lesson && <p className="attempt-lesson">Lesson: {attempt.lesson}</p>}
-      {attempt.context && (
-        <p className="attempt-meta">
-          Fixer context: {attempt.context.entireCheckpoints} Entire checkpoints
-          {attempt.context.neatlogsTrace ? ", Neatlogs trace" : ""}
-        </p>
-      )}
-      <div className="attempt-meta">
-        {attempt.commit?.sha && <code>{attempt.commit.sha.slice(0, 7)}</code>}
-        {attempt.commit?.checkpoint && (
-          <span className="tag entire" title="Entire checkpoint">
-            Entire {attempt.commit.checkpoint.slice(0, 10)}
-          </span>
-        )}
-        {attempt.playtestCommit?.checkpoint && (
-          <span className="tag entire" title="Entire checkpoint for the playtest session">
-            Entire {attempt.playtestCommit.checkpoint.slice(0, 10)}
-          </span>
-        )}
-      </div>
-      <div className="attempt-sessions">
-        {attempt.sessions.map((s, i) => (
-          <Session key={i} session={s} />
-        ))}
-      </div>
-    </li>
-  );
-}
-
-function Session({ session }) {
-  const [trace, setTrace] = React.useState(null);
-  const check = () =>
-    call("studio:evidence", { sessionId: session.sessionId })
-      .then(setTrace)
-      .catch((e) => setTrace({ error: e.message }));
-  return (
-    <div className="session">
-      <span>
-        {ROLE[session.role] || session.role} · {session.model}
-        {session.usage?.costUsd ? ` · $${session.usage.costUsd.toFixed(2)}` : ""}
-      </span>
-      {session.sessionId && (
-        <button className="tag neatlogs" onClick={check}>
-          {trace
-            ? trace.matched
-              ? `Neatlogs: ${trace.traces.length} trace${trace.traces.length === 1 ? "" : "s"}`
-              : trace.configured === false
-                ? "Neatlogs not configured"
-                : "No trace yet"
-            : "Neatlogs trace"}
+        <button className="rail-item rail-foot" onClick={onOpenWorkspace} title="Open the repository workspace">
+          <svg viewBox="0 0 24 24" aria-hidden="true">{ICONS.workspace}</svg>
+          <span>Repo</span>
         </button>
-      )}
-    </div>
-  );
-}
+      </nav>
 
-function Partners({ mod }) {
-  const [cps, setCps] = React.useState(null);
-  React.useEffect(() => {
-    if (!mod.repoDir) return;
-    call("studio:checkpoints", { id: mod.id }).then(setCps).catch(() => {});
-  }, [mod.id, mod.repoDir, mod.attempts.length, mod.status]);
-  const p = mod.partners;
-  return (
-    <div className="insp-partners">
-      <div>
-        <span className={`tag ${p?.entire?.enabled ? "entire" : "off"}`}>Entire</span>
-        {p?.entire?.enabled
-          ? `${cps?.items?.length ?? "…"} checkpoints in the mod repo`
-          : p?.entire?.error || "Not set up yet"}
+      <div className="studio-body">
+        <header className="studio-top">
+          <div>
+            <h1>{current.title}</h1>
+            <p>{current.sub}</p>
+          </div>
+          <div className="top-status">
+            <span className={`status-dot ${game?.server || "stopped"}`} />
+            <span>{game?.server === "running" ? "Server running" : game?.server === "starting" ? "Server starting" : "Server stopped"}</span>
+            <span className="sep" />
+            <span className={`status-dot ${game?.bot === "online" ? "running" : "offline"}`} />
+            <span>{game?.bot === "online" ? "Bot in game" : "Bot offline"}</span>
+            {game?.mock && <span className="tag mock">Mock runtime</span>}
+          </div>
+        </header>
+        {error && <div className="studio-error page-error">{error}</div>}
+
+        {page === "build" && (
+          <BuildPage mods={mods} mod={mod} setSelectedId={setSelectedId} lessons={lessons} onSeeMods={() => setPage("mods")} />
+        )}
+        {page === "mods" && <ModsPage mods={mods} mod={mod} setSelectedId={setSelectedId} onBuild={() => setPage("build")} />}
+        {page === "insights" && <InsightsPage mods={mods} lessons={lessons} />}
+        {page === "neatlogs" && <NeatlogsPage mods={mods} onOpenMod={openMod} />}
+        {page === "entire" && <EntirePage mods={mods} onOpenMod={openMod} />}
       </div>
-      <div>
-        <span className={`tag ${p?.neatlogs?.enabled ? "neatlogs" : "off"}`}>Neatlogs</span>
-        {p?.neatlogs?.enabled ? "Agent sessions traced" : p?.neatlogs?.error || "Not set up yet"}
-      </div>
-      {mod.repoDir && (
-        <button className="studio-link" onClick={() => call("open-path", mod.repoDir)}>
-          Open mod repository
-        </button>
-      )}
     </div>
   );
 }

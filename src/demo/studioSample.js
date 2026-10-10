@@ -1,0 +1,517 @@
+const NOW = Date.now();
+const MIN = 60_000;
+const OPUS = "claude-opus-5-5";
+const SONNET = "claude-sonnet-5-5";
+const at = (agoMin) => NOW - agoMin * MIN;
+
+const check = (id, title, expect) => ({ id, title, expect });
+const vcheck = (id, status, observed) => ({ id, status, observed });
+const verdict = ({ passed, finished = true, checks, live = false, error = null }) => ({
+  passed,
+  finished,
+  checks,
+  live,
+  error,
+  serverErrors: [],
+});
+const commit = (sha, checkpoint = null) => ({ sha, checkpoint });
+
+const session = ({ role, model = OPUS, startAgo, lenMin = null, sessionId, cost, inTok, outTok, ok = true, error = null }) => ({
+  role,
+  model,
+  sessionId,
+  startedAt: at(startAgo),
+  endedAt: lenMin == null ? null : at(startAgo - lenMin),
+  ok: lenMin == null ? undefined : ok,
+  error,
+  usage: {
+    inputTokens: inTok,
+    outputTokens: outTok,
+    cacheReadInputTokens: Math.round(inTok * 0.6),
+    cacheCreationInputTokens: 0,
+    costUsd: cost,
+  },
+});
+
+const attempt = ({
+  n,
+  role,
+  status,
+  startAgo,
+  sessions,
+  build = { ok: true },
+  deploy = null,
+  commit: c,
+  playtestCommit = null,
+  verdict: v = null,
+  failure = null,
+  lesson = null,
+  context = null,
+  summary = "",
+}) => ({
+  n,
+  role,
+  status,
+  startedAt: at(startAgo),
+  sessions,
+  build,
+  deploy,
+  commit: c,
+  playtestCommit,
+  verdict: v,
+  failure,
+  lesson,
+  context,
+  summary,
+});
+
+const mod = ({ id, name, prompt, seed = false, status, phase, running = false, ago, spec, testPlan, sessions, attempts, feed = [], error = null }) => ({
+  id,
+  name,
+  prompt,
+  seed,
+  status,
+  phase,
+  running,
+  createdAt: at(ago),
+  updatedAt: at(0),
+  spec,
+  testPlan,
+  sessions,
+  attempts,
+  feed,
+  repoDir: `/sample/benana-mods/${name.toLowerCase()}-${id.slice(-4)}`,
+  partners: { entire: { enabled: true }, neatlogs: { enabled: true } },
+  error,
+});
+
+const brief = ({ feed, ...rest }) => ({ ...rest, feedCount: feed.length });
+
+const launchPlan = {
+  modName: "LaunchSword",
+  checks: [
+    check("launch", "Hit launches the mob upward", "Mob rises at least 6 blocks"),
+    check("cooldown", "Second hit inside 3 s does nothing", "No launch during cooldown"),
+    check("particles", "Particles play on launch", "A particle burst near the mob"),
+    check("no-errors", "No server errors", "Console stays clean"),
+  ],
+};
+
+const blazePlan = {
+  modName: "BlazeBolt",
+  checks: [
+    check("fire", "Right-click fires a fireball", "A fireball spawns from the player"),
+    check("aim", "Fireball follows the look direction", "Travel matches the view angle"),
+    check("no-blocks", "Fireball does not break blocks in flight", "No block changes in flight"),
+  ],
+};
+
+const arrowPlan = {
+  modName: "PhantomArrows",
+  checks: [
+    check("explode", "Arrow explodes on impact", "Explosion effect at the hit point"),
+    check("blocks", "Blocks survive the explosion", "No block changes at impact"),
+    check("cooldown", "Second shot within 5 s is refused", "No second arrow for 5 seconds"),
+  ],
+};
+
+const trailPlan = {
+  modName: "TrailBlazer",
+  checks: [
+    check("trail", "Glowing trail while sneaking", "Particles follow the player while sneaking"),
+    check("fade", "Trail fades after 2 seconds", "Particles gone within 2 seconds"),
+    check("gate", "No trail while walking", "No particles when not sneaking"),
+  ],
+};
+
+const MODS = [
+  mod({
+    id: "mod_d4",
+    name: "TrailBlazer",
+    prompt: "Sneaking while holding a feather spawns a trail of glowing particles behind you, fading after 2 seconds.",
+    status: "running",
+    phase: "playtest",
+    running: true,
+    ago: 5,
+    spec: {
+      summary: "A feather that trails glowing particles while the player sneaks.",
+      behavior: ["Sneaking with a feather spawns particles", "Particles fade after 2 seconds", "Walking does not spawn particles"],
+    },
+    testPlan: trailPlan,
+    sessions: [session({ role: "spec", startAgo: 5, lenMin: 1, sessionId: "sess-d-spec", cost: 0.35, inTok: 14800, outTok: 2400 })],
+    attempts: [
+      attempt({
+        n: 1,
+        role: "builder",
+        status: "running",
+        startAgo: 3,
+        sessions: [
+          session({ role: "builder", startAgo: 3, lenMin: 2, sessionId: "sess-d-build", cost: 0.94, inTok: 66000, outTok: 17000 }),
+          session({ role: "playtester", model: SONNET, startAgo: 1, sessionId: "sess-d-pt1", cost: 0.12, inTok: 21000, outTok: 900 }),
+        ],
+        deploy: { loaded: true },
+        commit: commit("4a7f1d92", "b6e3d0a8c4f1"),
+        verdict: verdict({ passed: false, finished: false, live: true, checks: [vcheck("trail", "pass", "Glowing trail seen while sneaking")] }),
+      }),
+    ],
+    feed: [
+      { at: at(5), role: "benana", kind: "phase", phase: "spec", text: "Writing the spec and an in-game test plan" },
+      { at: at(4.5), role: "spec", kind: "plan", text: "3 checks: Glowing trail while sneaking · Trail fades after 2 seconds · No trail while walking" },
+      { at: at(4), role: "benana", kind: "phase", phase: "repo", text: "Creating the mod repository with Entire and Neatlogs hooks" },
+      { at: at(3), attempt: 1, role: "benana", kind: "phase", phase: "build", text: "Attempt 1: writing TrailBlazer" },
+      { at: at(2.5), attempt: 1, role: "builder", kind: "tool", name: "Edit", summary: "src/main/java/dev/benana/mod/TrailBlazer.java" },
+      { at: at(2), attempt: 1, role: "builder", kind: "text", text: "Particle trail spawns on move events while the player is sneaking." },
+      { at: at(1.8), attempt: 1, role: "benana", kind: "note", text: "Committed 4a7f1d9, Entire checkpoint b6e3d0a8c4f1" },
+      { at: at(1.5), attempt: 1, role: "benana", kind: "phase", phase: "playtest", text: "Attempt 1: the AI player is testing TrailBlazer in-game" },
+      { at: at(1.2), attempt: 1, role: "playtester", kind: "tool", name: "move_to", summary: "toward the spawn point" },
+      { at: at(1), attempt: 1, role: "playtester", kind: "result", name: "track_entity", text: "14 trail particles visible while sneaking" },
+      { at: at(0.5), attempt: 1, role: "playtester", kind: "text", text: "Trail appears while sneaking. Checking the fade timing next." },
+    ],
+  }),
+  mod({
+    id: "mod_b2",
+    name: "BlazeBolt",
+    prompt: "Right-clicking with a blaze rod shoots a fireball where you look.",
+    status: "passed",
+    phase: "done",
+    ago: 120,
+    spec: {
+      summary: "A blaze rod that fires a fireball along the player's view.",
+      behavior: ["Right-click fires one fireball", "The fireball follows the look direction"],
+    },
+    testPlan: blazePlan,
+    sessions: [session({ role: "spec", startAgo: 120, lenMin: 1, sessionId: "sess-b-spec", cost: 0.38, inTok: 15100, outTok: 2600 })],
+    attempts: [
+      attempt({
+        n: 1,
+        role: "builder",
+        status: "passed",
+        startAgo: 117,
+        sessions: [
+          session({ role: "builder", startAgo: 117, lenMin: 6, sessionId: "sess-b-build", cost: 1.12, inTok: 74000, outTok: 21000 }),
+          session({ role: "playtester", model: SONNET, startAgo: 110, lenMin: 5, sessionId: "sess-b-pt1", cost: 0.46, inTok: 61000, outTok: 3300 }),
+        ],
+        deploy: { loaded: true },
+        commit: commit("e19a4c0d", "a4d0f9e2c115"),
+        playtestCommit: commit("b0d7e13f", "91c7e0a3b2d4"),
+        verdict: verdict({
+          passed: true,
+          checks: [
+            vcheck("fire", "pass", "One fireball spawned"),
+            vcheck("aim", "pass", "Travel matched the view angle"),
+            vcheck("no-blocks", "pass", "No block changes"),
+          ],
+        }),
+        summary: "Spawned a fireball entity along the player's look vector on right-click.",
+      }),
+    ],
+    feed: [],
+  }),
+  mod({
+    id: "mod_c3",
+    name: "PhantomArrows",
+    prompt: "Arrows that explode on impact without breaking blocks, with a 5 second cooldown per player.",
+    status: "failed",
+    phase: "done",
+    ago: 1440,
+    spec: {
+      summary: "Arrows that explode on impact, leave blocks intact, and share a per-player cooldown.",
+      behavior: ["Arrows explode on impact", "Blocks are not broken", "Shots are limited to one per 5 seconds"],
+    },
+    testPlan: arrowPlan,
+    sessions: [session({ role: "spec", startAgo: 1440, lenMin: 1, sessionId: "sess-c-spec", cost: 0.4, inTok: 16200, outTok: 2800 })],
+    attempts: [
+      attempt({
+        n: 1,
+        role: "builder",
+        status: "failed",
+        startAgo: 1436,
+        sessions: [session({ role: "builder", startAgo: 1436, lenMin: 5, sessionId: "sess-c-build1", cost: 1.04, inTok: 69000, outTok: 18000 })],
+        build: { ok: false },
+        commit: commit("5c2e8a10"),
+        failure: { kind: "build", summary: "The plugin did not compile." },
+      }),
+      attempt({
+        n: 2,
+        role: "fixer",
+        status: "failed",
+        startAgo: 1428,
+        sessions: [
+          session({ role: "fixer", startAgo: 1428, lenMin: 4, sessionId: "sess-c-fix2", cost: 0.79, inTok: 102000, outTok: 8400 }),
+          session({ role: "playtester", model: SONNET, startAgo: 1422, lenMin: 6, sessionId: "sess-c-pt2", cost: 0.52, inTok: 79000, outTok: 3600 }),
+        ],
+        deploy: { loaded: true },
+        commit: commit("9e4c51f0", "d02a7b6e9f18"),
+        playtestCommit: commit("2a8d6f3c", "7f3b9c1d0e52"),
+        verdict: verdict({
+          passed: false,
+          checks: [
+            vcheck("explode", "pass", "Arrow exploded on the target"),
+            vcheck("blocks", "fail", "Two blocks broke at impact"),
+            vcheck("cooldown", "fail", "Second arrow fired at 2 s"),
+          ],
+        }),
+        failure: { kind: "playtest", summary: "blocks: Two blocks broke at impact · cooldown: Second arrow fired at 2 s" },
+        lesson: "Cancel block updates in the projectile hit event.",
+        context: { entireCheckpoints: 1, neatlogsTrace: true },
+      }),
+      attempt({
+        n: 3,
+        role: "fixer",
+        status: "failed",
+        startAgo: 1412,
+        sessions: [
+          session({ role: "fixer", startAgo: 1412, lenMin: 3, sessionId: "sess-c-fix3", cost: 0.74, inTok: 110000, outTok: 7600 }),
+          session({ role: "playtester", model: SONNET, startAgo: 1407, lenMin: 4, sessionId: "sess-c-pt3", cost: 0.41, inTok: 54000, outTok: 2100, ok: false, error: "Playtester stopped before finishing." }),
+        ],
+        deploy: { loaded: true },
+        commit: commit("c3f0b8d7", "e8a1c6f04b29"),
+        playtestCommit: commit("6d9e2a14"),
+        verdict: verdict({
+          passed: false,
+          finished: false,
+          error: "The playtester did not finish.",
+          checks: [
+            vcheck("explode", "pass", "Arrow exploded on the target"),
+            vcheck("blocks", "blocked", "Not reached"),
+            vcheck("cooldown", "blocked", "Not reached"),
+          ],
+        }),
+        failure: { kind: "playtest", summary: "The playtester did not finish." },
+        context: { entireCheckpoints: 2, neatlogsTrace: false },
+      }),
+    ],
+    feed: [
+      { at: at(1436), attempt: 1, role: "benana", kind: "error", text: "Attempt 1 failed (build): The plugin did not compile." },
+      { at: at(1412), attempt: 3, role: "benana", kind: "phase", phase: "fix", text: "Attempt 3: fixing what the playtester found" },
+      { at: at(1407), attempt: 3, role: "benana", kind: "failure", text: "Attempt 3 failed (playtest): The playtester did not finish." },
+      { at: at(1404), attempt: 3, role: "benana", kind: "phase", phase: "done", text: "PhantomArrows still fails after 3 attempts" },
+    ],
+  }),
+  mod({
+    id: "mod_a1",
+    name: "LaunchSword",
+    prompt: "A golden sword that launches any mob it hits into the sky with particles, with a 3 second cooldown.",
+    seed: true,
+    status: "passed",
+    phase: "done",
+    ago: 2880,
+    spec: {
+      summary: "A golden sword that launches a struck mob into the sky with a particle burst and a 3 second cooldown.",
+      behavior: ["Hitting a mob launches it upward", "Particles play at launch", "Hits within 3 seconds of a launch do nothing"],
+    },
+    testPlan: launchPlan,
+    sessions: [session({ role: "spec", startAgo: 2880, lenMin: 2, sessionId: "sess-a-spec", cost: 0.42, inTok: 18200, outTok: 3100 })],
+    attempts: [
+      attempt({
+        n: 1,
+        role: "seeded",
+        status: "failed",
+        startAgo: 2870,
+        sessions: [session({ role: "playtester", model: SONNET, startAgo: 2858, lenMin: 9, sessionId: "sess-a-pt1", cost: 0.61, inTok: 96000, outTok: 4200 })],
+        deploy: { loaded: true },
+        commit: commit("a91f0c2e", "3f9a1c0be712"),
+        playtestCommit: commit("d4e7b19a", "8b2e6d10c4a7"),
+        verdict: verdict({
+          passed: false,
+          checks: [
+            vcheck("launch", "fail", "Mob rose 0.4 blocks, needs 6+"),
+            vcheck("cooldown", "pass", "No launch during cooldown"),
+            vcheck("particles", "pass", "Burst seen"),
+            vcheck("no-errors", "pass", "Console clean"),
+          ],
+        }),
+        failure: { kind: "playtest", summary: "launch: Mob rose 0.4 blocks, needs 6+" },
+      }),
+      attempt({
+        n: 2,
+        role: "fixer",
+        status: "passed",
+        startAgo: 2850,
+        sessions: [
+          session({ role: "fixer", startAgo: 2850, lenMin: 4, sessionId: "sess-a-fix2", cost: 0.88, inTok: 121000, outTok: 9800 }),
+          session({ role: "playtester", model: SONNET, startAgo: 2845, lenMin: 7, sessionId: "sess-a-pt2", cost: 0.57, inTok: 88000, outTok: 3900 }),
+        ],
+        deploy: { loaded: true },
+        commit: commit("77c0e5a3", "c15d90f2a8e3"),
+        playtestCommit: commit("f2c6a88e", "6e0a4d7b91c2"),
+        verdict: verdict({
+          passed: true,
+          checks: [
+            vcheck("launch", "pass", "Mob rose 6.8 blocks"),
+            vcheck("cooldown", "pass", "No launch during cooldown"),
+            vcheck("particles", "pass", "Burst seen"),
+            vcheck("no-errors", "pass", "Console clean"),
+          ],
+        }),
+        lesson: "Set the launch velocity after the damage event resolves, or the server overwrites it.",
+        context: { entireCheckpoints: 2, neatlogsTrace: true },
+        summary: "Moved the velocity change into a scheduled task after the damage event.",
+      }),
+    ],
+    feed: [
+      { at: at(2862), attempt: 1, role: "benana", kind: "phase", phase: "playtest", text: "Attempt 1: the AI player is testing LaunchSword in-game" },
+      { at: at(2852), attempt: 1, role: "benana", kind: "failure", text: "Attempt 1 failed (playtest): launch: Mob rose 0.4 blocks, needs 6+" },
+      { at: at(2849), attempt: 2, role: "benana", kind: "phase", phase: "fix", text: "Attempt 2: fixing what the playtester found" },
+      { at: at(2800), attempt: 2, role: "benana", kind: "phase", phase: "done", text: "LaunchSword passed after 2 attempts" },
+    ],
+  }),
+].sort((a, b) => b.createdAt - a.createdAt);
+
+const byId = (id) => {
+  const m = MODS.find((item) => item.id === id);
+  if (!m) throw new Error("Unknown mod.");
+  return m;
+};
+
+const LESSONS = [
+  {
+    lesson: "Set the launch velocity after the damage event resolves, or the server overwrites it.",
+    mod: "LaunchSword",
+    at: at(2790),
+  },
+];
+
+const GAME = { server: "running", bot: "online", version: "1.21.4", mock: true, viewerUrl: null, error: null };
+
+const JAVA = {
+  LaunchSword: `package dev.benana.mod;
+
+import org.bukkit.Bukkit;
+import org.bukkit.Particle;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.Vector;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+public class LaunchSword implements Listener {
+    private static final long COOLDOWN_MS = 3000;
+    private final JavaPlugin plugin;
+    private final Map<UUID, Long> lastLaunch = new HashMap<>();
+
+    public LaunchSword(JavaPlugin plugin) {
+        this.plugin = plugin;
+    }
+
+    @EventHandler
+    public void onHit(EntityDamageByEntityEvent event) {
+        if (!(event.getDamager() instanceof Player player)) return;
+        if (!(event.getEntity() instanceof LivingEntity target)) return;
+        long now = System.currentTimeMillis();
+        if (now - lastLaunch.getOrDefault(player.getUniqueId(), 0L) < COOLDOWN_MS) return;
+        lastLaunch.put(player.getUniqueId(), now);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            target.setVelocity(new Vector(0, 1.2, 0));
+            target.getWorld().spawnParticle(Particle.CLOUD, target.getLocation(), 40);
+        });
+    }
+}
+`,
+};
+
+const POM = `<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>dev.benana</groupId>
+  <artifactId>sample-mod</artifactId>
+  <version>1.0.0</version>
+</project>
+`;
+
+const DIFFS = {
+  "77c0e5a3": `Attempt 2 (fixer): fix from playtest evidence LaunchSword
+
+Entire-Checkpoint: c15d90f2a8e3
+
+diff --git a/src/main/java/dev/benana/mod/LaunchSword.java b/src/main/java/dev/benana/mod/LaunchSword.java
+@@ onHit
+         lastLaunch.put(player.getUniqueId(), now);
+-        target.setVelocity(new Vector(0, 1.2, 0));
+-        target.getWorld().spawnParticle(Particle.CLOUD, target.getLocation(), 40);
++        Bukkit.getScheduler().runTask(plugin, () -> {
++            target.setVelocity(new Vector(0, 1.2, 0));
++            target.getWorld().spawnParticle(Particle.CLOUD, target.getLocation(), 40);
++        });
+`,
+};
+
+function checkpointsOf(m) {
+  return m.attempts.flatMap((a) => {
+    const sessionId = a.sessions.find((s) => s.role === "builder" || s.role === "fixer")?.sessionId ?? null;
+    return [
+      ["commit", a.commit],
+      ["playtest", a.playtestCommit],
+    ]
+      .filter(([, c]) => c?.checkpoint)
+      .map(([kind, c]) => ({
+        checkpoint_id: c.checkpoint,
+        message: `Attempt ${a.n} (${a.role}) ${kind}`,
+        session_id: sessionId,
+        agent: "claude",
+      }));
+  });
+}
+
+function fileText(m, rel) {
+  if (rel.endsWith(".java")) return JAVA[m.name] || `package dev.benana.mod;\n\npublic class ${m.name} {\n}\n`;
+  if (rel === "pom.xml") return POM;
+  if (rel === "src/main/resources/plugin.yml")
+    return `name: ${m.name}\nversion: 1.0.0\nmain: dev.benana.mod.${m.name}\napi-version: "1.21"\n`;
+  if (rel === "playtest/test-plan.json") return JSON.stringify(m.testPlan, null, 2);
+  return "";
+}
+
+function evidenceFor({ sessionId = "" }) {
+  const matched = /[02468ace]$/.test(sessionId);
+  const traces = matched
+    ? [
+        {
+          traceId: `tr_${sessionId.slice(-8)}`,
+          traceName: "agent.session",
+          durationMs: 4200,
+          spans: [
+            { spanName: "agent turn", status: "success" },
+            { spanName: "tool: Edit", status: "success" },
+            ...(sessionId.includes("pt")
+              ? [{ spanName: "mcp: track_entity", status: "error", failure: "Entity not found in the test world" }]
+              : []),
+          ],
+        },
+      ]
+    : [];
+  return {
+    source: "neatlogs",
+    configured: true,
+    matched,
+    matchReason: matched ? `Linked by session ${sessionId}` : "No trace yet for this session.",
+    traces,
+  };
+}
+
+export const studioSample = {
+  "studio:list": () => MODS.map(brief),
+  "studio:get": ({ id }) => ({ ...brief(byId(id)), feed: byId(id).feed }),
+  "studio:stop": () => false,
+  "studio:lessons": () => LESSONS,
+  "studio:partners": { neatlogs: { configured: true, ok: true } },
+  "studio:evidence": evidenceFor,
+  "studio:checkpoints": ({ id }) => ({ ok: true, items: checkpointsOf(byId(id)) }),
+  "studio:files": ({ id }) => {
+    const m = byId(id);
+    return ["pom.xml", "src/main/resources/plugin.yml", `src/main/java/dev/benana/mod/${m.name}.java`, "playtest/test-plan.json"];
+  },
+  "studio:file": ({ id, path }) => fileText(byId(id), path),
+  "studio:diff": ({ sha }) =>
+    DIFFS[sha] ||
+    `Sample commit ${sha}\n\ndiff --git a/playtest/test-plan.json b/playtest/test-plan.json\n@@ checks\n+  "checks": []\n`,
+  "game:status": GAME,
+  "game:start": GAME,
+  "game:stop": GAME,
+  "game:demo": { demo: false },
+};
