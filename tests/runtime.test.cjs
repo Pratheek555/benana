@@ -286,7 +286,7 @@ test("Entire normalization retains raw ranked evidence and rejects an empty grap
 });
 
 test("Neatlogs evidence requires exact session correlation", async () => {
-  process.env.NEATLOGS_API_KEY = "test";
+  process.env.NEATLOGS_TOKEN = "test";
   process.env.NEATLOGS_PROJECT_ID = "project";
   const calls = [];
   const result = await neatlogs.evidence(
@@ -332,6 +332,19 @@ test("retry workspace is an exact snapshot including deletes, renames, and neste
   assert.equal(fs.readFileSync(path.join(target, "renamed.txt"), "utf8"), "renamed");
   assert.equal(fs.readFileSync(path.join(target, "nested", "new.txt"), "utf8"), "untracked nested");
   assert.equal(fs.readFileSync(path.join(target, ".git"), "utf8"), "target git");
+});
+
+test("Neatlogs evidence uses the trace ids Benana recorded for the run", async () => {
+  process.env.NEATLOGS_TOKEN = "test";
+  process.env.NEATLOGS_PROJECT_ID = "project";
+  const calls = [];
+  const result = await neatlogs.evidence(
+    { id: "run2", sessionId: "s", traceIds: ["abc123"] },
+    { api: async (resource) => { calls.push(resource); return { spans: [{ spanId: "root" }] }; } },
+  );
+  assert.equal(result.matched, true);
+  assert.deepEqual(calls, ["/traces/abc123/spans?limit=100"]);
+  assert.equal(result.traces[0].traceId, "abc123");
 });
 
 test("provider resume commands and event usage preserve native contracts", () => {

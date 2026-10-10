@@ -122,7 +122,7 @@ async function enrich(nodes, log) {
   const targets = nodes.filter((n) => n.type === 'DeadEnd' || n.type === 'Decision').slice(0, 20);
   log(`deep extraction: asking claude about ${targets.length} nodes`);
   const prompt = `For each item, state in one sentence WHY it was done (Decision) or WHY it was abandoned (DeadEnd), using only the given text. If the text does not say, answer "unknown". Reply with JSON only: {"<id>": "<reason>"}.\n\n${targets.map((t) => `${t.id} [${t.type}] ${t.title}\n${(t.body || '').slice(0, 300)}`).join('\n\n')}`;
-  const out = await askClaude(prompt, { json: true }).catch((e) => { log(`deep extraction skipped: ${e.message}`); return null; });
+  const out = await askClaude(prompt, { json: true, name: 'explain-intent' }).catch((e) => { log(`deep extraction skipped: ${e.message}`); return null; });
   if (!out) return;
   for (const t of targets) {
     const r = out[t.id];

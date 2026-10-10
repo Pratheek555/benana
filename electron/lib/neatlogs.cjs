@@ -1,13 +1,15 @@
 // Neatlogs: read side of run quality for Loop 4 (public API), plus status for the UI.
-// Ingestion is done by Neatlogs' own Claude Code plugin / Codex hooks (see execute_yourself.md).
+// Two credentials: NEATLOGS_API_KEY is the SDK project key tracing.cjs exports spans with;
+// reading traces back needs a service-account token in NEATLOGS_TOKEN (the SDK key can't read).
 const { env } = require("./env.cjs");
 
 const base = () =>
   (env("NEATLOGS_REGION") === "eu"
     ? "https://eu.app.neatlogs.com"
     : "https://app.neatlogs.com") + "/api/v1/public";
+const tracing = () => Boolean(env("NEATLOGS_API_KEY"));
 const configured = () =>
-  Boolean(env("NEATLOGS_API_KEY") && env("NEATLOGS_PROJECT_ID"));
+  Boolean(env("NEATLOGS_TOKEN") && env("NEATLOGS_PROJECT_ID"));
 
 async function api(p, init = {}) {
   const timeoutMs = init.timeoutMs || 15000;
@@ -17,7 +19,7 @@ async function api(p, init = {}) {
     ...request,
     signal: request.signal || AbortSignal.timeout(timeoutMs),
     headers: {
-      Authorization: `Bearer ${env("NEATLOGS_API_KEY")}`,
+      Authorization: `Bearer ${env("NEATLOGS_TOKEN")}`,
       "x-project-id": env("NEATLOGS_PROJECT_ID"),
       "Content-Type": "application/json",
       ...(request.headers || {}),
@@ -55,8 +57,9 @@ async function evidence(run, deps = {}) {
       configured: false,
       matched: false,
       traces: [],
-      error: "Set NEATLOGS_API_KEY and NEATLOGS_PROJECT_ID to link traces.",
+      error: "Set NEATLOGS_TOKEN (service account) and NEATLOGS_PROJECT_ID to read traces back.",
     };
+  if (run.traceIds?.length) return byTraceIds(run, deps.api || api);
   if (!run.sessionId)
     return {
       source: "neatlogs",
@@ -114,13 +117,34 @@ async function evidence(run, deps = {}) {
   }
 }
 
+// Benana's own run traces: the ids were recorded when the run started, so the match is exact.
+async function byTraceIds(run, request) {
+  const traces = [];
+  for (const id of run.traceIds) {
+    try {
+      const spans = traceItems(await request(`/traces/${encodeURIComponent(id)}/spans?limit=100`));
+      traces.push({ traceId: id, spans, raw: { spans } });
+    } catch (error) {
+      traces.push({ traceId: id, spans: [], spansError: error.message });
+    }
+  }
+  return {
+    source: "neatlogs",
+    configured: true,
+    matched: traces.some((t) => t.spans.length),
+    traces,
+    matchReason: `Benana recorded trace ${run.traceIds.join(", ")} for this run.`,
+  };
+}
+
 async function status() {
-  if (!configured()) return { configured: false };
+  const out = { tracing: tracing(), configured: configured() };
+  if (!out.configured) return { ...out, ok: out.tracing };
   try {
     const t = await recentTraces(5);
-    return { configured: true, ok: true, recent: t.length };
+    return { ...out, ok: true, recent: t.length };
   } catch (e) {
-    return { configured: true, ok: false, error: e.message };
+    return { ...out, ok: false, error: e.message };
   }
 }
 
@@ -131,4 +155,5 @@ module.exports = {
   searchTraces,
   status,
   traceItems,
+  tracing,
 };
