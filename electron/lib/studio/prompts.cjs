@@ -1,7 +1,7 @@
 // Prompts for the spec, builder, and fixer agents. The playtester prompt lives with the game runtime.
 
 const TESTABLE = `The playtester controls a real player bot ("@bot") on a local Paper 1.21.4 superflat server with these tools:
-game_setup(console commands run as the bot; ^ and ~ are relative to it), bot_state, nearby_entities (id, type, position, velocity),
+game_setup(console commands run as the bot; ^ and ~ are relative to it), bot_state, nearby_entities (id, type, position, velocity), attack_sequence(entityIds, intervalTicks, trackTicks) (back-to-back hits in one call, for cooldowns),
 equip(item), look_at, move_to, attack(entityId, trackTicks), use_item(entityId?, trackTicks), track_entity(entityId, ticks)
 (per-tick position and velocity with maxUpwardVelocity and maxHeightGain), wait_ticks, chat (including /commands), read_chat,
 server_log (console, including plugin exceptions).`;

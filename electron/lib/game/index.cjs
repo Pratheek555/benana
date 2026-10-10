@@ -14,12 +14,14 @@ const { resolveExecutable, spawnExecutable, terminateProcessTree } = require('..
 const { Server, VERSION, PORT } = require('./server.cjs');
 
 const BOT = 'BenanaBot';
+// The bot is kept near this spot so it stays inside the viewer's fixed camera orbit.
+const ARENA = [0.5, 65, 0.5];
 const VIEWER_PORT = 3007;
 const HOST = path.join(__dirname, 'host.cjs');
 const MCP = path.join(appRoot, 'electron', 'mcp-minecraft.cjs');
 const mock = () => process.env.BENANA_GAME_MOCK === '1';
 
-const BOT_TOOLS = new Set(['bot_state', 'nearby_entities', 'equip', 'look_at', 'move_to', 'attack', 'use_item', 'track_entity', 'wait_ticks', 'chat', 'read_chat']);
+const BOT_TOOLS = new Set(['bot_state', 'nearby_entities', 'equip', 'look_at', 'move_to', 'attack', 'attack_sequence', 'use_item', 'track_entity', 'wait_ticks', 'chat', 'read_chat']);
 const TOOLS = ['game_setup', ...BOT_TOOLS, 'server_log', 'report_check', 'finish'];
 const playtesterTools = TOOLS.map((t) => `mcp__minecraft__${t}`);
 
@@ -116,7 +118,7 @@ async function prepareWorld() {
 }
 
 async function prepareBot() {
-  for (const cmd of [`gamemode survival ${BOT}`, `effect give ${BOT} resistance infinite 4 true`, `effect give ${BOT} saturation infinite 0 true`, `clear ${BOT}`])
+  for (const cmd of [`tp ${BOT} ${ARENA.join(' ')} 0 0`, `gamemode survival ${BOT}`, `effect give ${BOT} resistance infinite 4 true`, `effect give ${BOT} saturation infinite 0 true`, `clear ${BOT}`])
     await server.command(cmd);
 }
 
@@ -125,6 +127,12 @@ async function runTool(tool, args = {}) {
   if (BOT_TOOLS.has(tool)) return botCall(tool, args);
   if (tool === 'game_setup') {
     const out = [];
+    const { position } = await botCall('bot_state');
+    if (Math.hypot(position[0] - ARENA[0], position[2] - ARENA[2]) > 8) {
+      await server.command(`tp ${BOT} ${ARENA.join(' ')} 0 0`);
+      await botCall('wait_ticks', { ticks: 5 });
+      out.push({ command: 'tp back to the arena center', output: 'Benana keeps the bot in camera view' });
+    }
     for (const raw of args.commands || []) {
       const cmd = String(raw).replace(/^\//, '').replaceAll('@bot', BOT);
       out.push({ command: cmd, output: await server.command(`execute as ${BOT} at ${BOT} run ${cmd}`) });
@@ -257,6 +265,7 @@ function playtestPrompt(testPlan) {
     `Mod under test: ${testPlan.modName}: ${testPlan.summary}`,
     'Run `game_setup` with the setup commands, then perform every check like a player would and measure the outcome with tools.',
     '`attack` and `use_item` accept `trackTicks` to record the target right after the action; use it whenever the expected effect is movement.',
+    'Each tool call takes 1-8 real seconds. For anything timing-sensitive (cooldowns, combos), summon all targets first and use `attack_sequence`, which hits them a few ticks apart in one call.',
     'Call `report_check` once per check with what you expected, what you observed, and evidence. Check `server_log` for plugin errors.',
     'Finish with `finish`. Do not edit files.',
     '',

@@ -25,6 +25,7 @@ const tools = [
   { name: 'look_at', description: 'Aim at an entity or position.', inputSchema: obj({ entityId, position }) },
   { name: 'move_to', description: 'Walk to an entity or position.', inputSchema: obj({ entityId, position, range: { type: 'number' } }) },
   { name: 'attack', description: 'Left-click (hit) an entity with the held item. Walks into reach first if needed.', inputSchema: obj({ entityId, trackTicks }, ['entityId']) },
+  { name: 'attack_sequence', description: 'Hit several entities back to back, intervalTicks apart (default 4), in ONE call, and track each. Use for cooldowns and combos; separate attack calls are seconds apart.', inputSchema: obj({ entityIds: { type: 'array', items: { type: 'number' } }, intervalTicks: { type: 'number' }, trackTicks }, ['entityIds']) },
   { name: 'use_item', description: 'Right-click with the held item, on an entity if entityId is given.', inputSchema: obj({ entityId, trackTicks }) },
   { name: 'track_entity', description: 'Sample an entity every tick: position, velocity, and position delta, plus maxUpwardVelocity and maxHeightGain.', inputSchema: obj({ entityId, ticks: { type: 'number' } }, ['entityId']) },
   { name: 'wait_ticks', description: 'Let the game run (20 ticks = 1 second).', inputSchema: obj({ ticks: { type: 'number' } }, ['ticks']) },

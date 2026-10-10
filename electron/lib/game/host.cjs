@@ -12,6 +12,27 @@ Module._load = function loadWithoutCanvas(request, ...rest) {
   return load.call(this, request, ...rest);
 };
 
+// Serve the viewer page with a closer camera. The stock page orbits from 28 blocks away, which makes the bot
+// and mobs too small to read on a recording. OrbitControls zooms on wheel events, including synthetic ones.
+const viewerRoutes = require('prismarine-viewer/lib/common');
+const setupRoutes = viewerRoutes.setupRoutes;
+const ZOOM_PAGE = require('node:fs')
+  .readFileSync(require.resolve('prismarine-viewer/public/index.html'), 'utf8')
+  .replace('</body>', `<script>
+  setTimeout(function zoom() {
+    var c = document.querySelector('canvas');
+    if (!c) return setTimeout(zoom, 300);
+    var n = 0, t = setInterval(function () {
+      c.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true }));
+      if (++n >= 12) clearInterval(t);
+    }, 20);
+  }, 2500);
+</script></body>`);
+viewerRoutes.setupRoutes = (app, prefix = '') => {
+  app.get(`${prefix}/`, (_req, res) => res.type('html').send(ZOOM_PAGE));
+  setupRoutes(app, prefix);
+};
+
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const { mineflayer: viewer } = require('prismarine-viewer');
@@ -33,6 +54,8 @@ bot.once('spawn', () => {
   moves.canDig = false;
   bot.pathfinder.setMovements(moves);
   viewer(bot, { port: Number(VIEWER_PORT), firstPerson: VIEWER_FIRST_PERSON === '1', viewDistance: 4 });
+  // The viewer places its camera on the bot's first `move` event; a bot standing still never sends one.
+  setInterval(() => bot.entity && bot.emit('move', bot.entity.position.clone()), 1000);
   send({ event: 'status', bot: 'online' });
 });
 bot.on('entityDead', (e) => dead.add(e.id));
@@ -146,6 +169,22 @@ const tools = {
     await bot.lookAt(e.position.offset(0, (e.height || 1.6) * 0.8, 0), true);
     bot.attack(e);
     return trackTicks ? { attacked: e.id, after: await track(e, trackTicks) } : { attacked: e.id };
+  },
+  // Hits several entities a few ticks apart in one call. Separate tool calls are 1-8s apart,
+  // which is too slow for testing cooldowns and combos.
+  async attack_sequence({ entityIds = [], intervalTicks = 4, trackTicks = 20 }) {
+    const started = Date.now();
+    const tracks = [];
+    for (const [i, id] of entityIds.entries()) {
+      const e = entity(id);
+      if (e.position.distanceTo(bot.entity.position) > 3.5) await tools.move_to({ entityId: id, range: 2 });
+      await bot.lookAt(e.position.offset(0, (e.height || 1.6) * 0.8, 0), true);
+      bot.attack(e);
+      const hitAtMs = Date.now() - started;
+      tracks.push(track(e, trackTicks).then((after) => ({ entityId: e.id, hitAtMs, after: { ...after, samples: after.samples.slice(0, 8) } })));
+      if (i < entityIds.length - 1) await bot.waitForTicks(Math.max(1, Number(intervalTicks) || 4));
+    }
+    return { hits: await Promise.all(tracks) };
   },
   async use_item({ entityId, trackTicks = 0 } = {}) {
     if (entityId != null) {

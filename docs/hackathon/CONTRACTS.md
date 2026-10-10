@@ -115,6 +115,7 @@ This stdio MCP server forwards calls to the bot's local control API (`BENANA_GAM
 | `look_at(entityId \| position)` | Aim the bot |
 | `move_to(entityId \| position, range?)` | Pathfind toward a target |
 | `attack(entityId, trackTicks?)` | Left-click an entity. Use `trackTicks` to sample it right after the hit |
+| `attack_sequence(entityIds[], intervalTicks?, trackTicks?)` | Hit several entities a few ticks apart in one call, for cooldown and combo checks |
 | `use_item(entityId?, trackTicks?)` | Right-click, optionally on an entity |
 | `track_entity(entityId, ticks?)` | Per-tick position and velocity samples |
 | `wait_ticks(ticks)` | Let the game advance |
