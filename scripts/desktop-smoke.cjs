@@ -17,7 +17,8 @@ require("../electron/lib/artifacts.cjs").configured = () => false;
 require("../electron/main.cjs");
 
 app.whenReady().then(async () => {
-  const window = BrowserWindow.getAllWindows()[0];
+  // main.cjs opens its window after tracing initializes, so it may not exist yet.
+  const window = BrowserWindow.getAllWindows()[0] || (await once(app, "browser-window-created"))[1];
   const errors = [];
   window.webContents.on("console-message", (_event, level, message) => {
     if (level === 3) errors.push(message);

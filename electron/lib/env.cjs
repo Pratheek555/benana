@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 
 const appRoot = path.resolve(__dirname, '..', '..');
 
-dotenv.config({ path: path.join(appRoot, '.env') });
+dotenv.config({ path: path.join(appRoot, '.env'), quiet: true });
 
 const dataDir = process.env.BENANA_DATA_DIR || path.join(os.homedir(), '.benana');
 
