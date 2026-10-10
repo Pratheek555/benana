@@ -1,5 +1,0 @@
-GITHUB_CLIENT_ID=your_github_app_client_id
-GITHUB_CLIENT_SECRET=your_github_app_client_secret
-GITHUB_APP_SLUG=your_github_app_slug
-PUBLIC_ORIGIN=http://localhost:5173
-TOKEN_ENCRYPTION_KEY=base64_encoded_32_byte_key

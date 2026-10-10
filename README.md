@@ -1,35 +1,21 @@
-# Benana
+# benana
 
-A collaboration platform where people and agents can pick up engineering work with its code, decisions, and evidence intact.
+A desktop, self-improving coding-agent harness built around an **intent graph**: what you want the code to do is captured as a graph of intents, and agents work against it.
 
-The MVP centers on issues, attempts by humans or agents, and checkpoints that can be forked into new attempts. Cloudflare Artifacts is the intended Git storage foundation. Existing GitHub repositories remain the starting point for the MVP.
+- **Four loops**
+  - **L1 agent** — runs `claude` or `codex` in a git worktree with the `benana-intent` MCP server attached.
+  - **L2 graders** — check that the run made changes, kept the diff in scope, passed tests, and passed `intent.check`; failures trigger a retry.
+  - **L3 inbox** — polls GitHub issues every 2 minutes; issues labelled `benana:auto` start a run automatically.
+  - **L4 analyst** — reviews traces and proposes harness changes, which need your approval.
+- **Artifacts** (Cloudflare) — git-backed storage for the intent and harness repos plus per-agent forks.
+- **Neatlogs** — trace collection the L4 analyst reads from.
+- **Entire** — code-to-session provenance.
 
-## Repository layout
-
-```text
-apps/
-  web/                 Issue board, attempt history, and review interface.
-  worker/              Cloudflare API, integrations, and storage coordination.
-  cli/                 Local Codex capture, Git workspaces, and session upload.
-packages/
-  contracts/           Shared API and portable context definitions.
-docs/
-  mvp.md               Architecture, stack, workflow, and completion gates.
-```
-
-The web application signs users in through the GitHub App, saves a repository selection, and reads live GitHub issues. Shared Zod contracts validate the browser and Worker boundary. The fixture issue board, attempt evidence, checkpoint review, and fork workflow remain available under `/demo`.
-
-Read [the MVP plan](docs/mvp.md) before implementation. It specifies local Codex execution, the chosen stack, Cloudflare Artifacts usage, architecture boundaries, and completion gates.
-
-## Run the local application
-
-Install Node.js 20.19+ or 22.12+ and pnpm 10. Then run:
+## Quick start
 
 ```sh
-pnpm install
-pnpm dev
+cp .env.example .env   # fill in what you need
+npm install && npm run dev
 ```
 
-Open the web URL printed by Vite. The root development command starts the web application and the Worker API together. The web server proxies `/api` requests to the Worker on port 8787. Run `pnpm check` to typecheck, lint, test, and build both applications.
-
-Apply the local D1 migrations and configure the GitHub App before using the live root route. See [GitHub App setup](docs/github-app-setup.md). The `/demo` routes keep new issues and forked attempts in memory and reset them on reload. The browser does not run Codex or checkout commands.
+Full setup, prerequisites, and usage: [execute_yourself.md](execute_yourself.md). Older design docs live in [docs/legacy/](docs/legacy/).
