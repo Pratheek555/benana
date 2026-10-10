@@ -1,14 +1,31 @@
 {
-  "name": "benana",
+  "name": "benana-harness",
+  "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.33.4",
+  "description": "Benana: a self-improving coding-agent harness built around an intent graph.",
+  "main": "electron/main.cjs",
   "scripts": {
-    "dev": "pnpm --parallel --filter @benana/worker --filter @benana/web dev",
-    "db:migrate:local": "pnpm --filter @benana/worker exec wrangler d1 migrations apply benana-local --local",
-    "build": "pnpm --filter @benana/worker build && pnpm --filter @benana/web build",
-    "typecheck": "pnpm --filter @benana/contracts exec tsc -p tsconfig.json && pnpm --filter @benana/worker typecheck && pnpm --filter @benana/web typecheck",
-    "lint": "pnpm --filter @benana/worker lint && pnpm --filter @benana/web lint",
-    "test": "pnpm --filter @benana/worker test && pnpm --filter @benana/web test",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
+    "dev": "concurrently -k -n vite,electron -c yellow,gray \"vite\" \"wait-on tcp:127.0.0.1:5199 && cross-env BENANA_DEV=1 electron .\"",
+    "build": "vite build",
+    "start": "vite build && electron .",
+    "mcp": "node electron/mcp-server.cjs"
+  },
+  "dependencies": {
+    "cytoscape": "^3.30.2",
+    "dotenv": "^16.4.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
+  },
+  "allowScripts": {
+    "electron@33.2.1": true,
+    "esbuild@0.21.5": true
   }
 }
