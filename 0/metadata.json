@@ -1,0 +1,68 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4KWWB28EZC28BNZ6WPQY9HE",
+  "session_id": "57e9f4f0-61f7-495f-9337-75ca28248f30",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-10T21:53:09.8503814Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md",
+    "docs/hackathon/CONTRACTS.md",
+    "docs/hackathon/SUBMISSION.md",
+    "docs/hackathon/cfo-plan.md",
+    "electron/lib/game/host.cjs",
+    "electron/lib/game/index.cjs",
+    "electron/lib/studio/prompts.cjs",
+    "electron/mcp-minecraft.cjs"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "0c7b38f5b682",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 308,
+    "cache_creation_tokens": 521477,
+    "cache_read_tokens": 26345976,
+    "output_tokens": 174785,
+    "api_call_count": 156
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-10T21:53:09.6320417Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 608,
+    "total_committed": 0,
+    "total_lines_changed": 608,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 752,
+      "user_lines_removed": 608,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "README.md": 23,
+        "docs/hackathon/CONTRACTS.md": 132,
+        "docs/hackathon/SUBMISSION.md": 25,
+        "docs/hackathon/cfo-plan.md": 63,
+        "electron/lib/game/host.cjs": 39,
+        "electron/lib/game/index.cjs": 345,
+        "electron/lib/studio/prompts.cjs": 1,
+        "electron/mcp-minecraft.cjs": 124
+      },
+      "user_removed_per_file": {
+        "README.md": 17,
+        "docs/hackathon/CONTRACTS.md": 131,
+        "electron/lib/game/index.cjs": 336,
+        "electron/lib/studio/prompts.cjs": 1,
+        "electron/mcp-minecraft.cjs": 123
+      }
+    }
+  ]
+}
