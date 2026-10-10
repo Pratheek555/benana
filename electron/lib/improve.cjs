@@ -11,7 +11,7 @@ function stats(runs) {
   return {
     runs: done.length,
     passed: done.filter((r) => r.status === 'passed').length,
-    retries: done.filter((r) => r.verify.length > 1).length,
+    retries: runs.filter((r) => r.retryOf).length,
     fails,
   };
 }
@@ -24,7 +24,7 @@ async function analyze({ harnessStore, runs, useLLM = true }) {
 
   if (useLLM && s.runs > 0) {
     const sample = runs.filter((r) => r.verify?.length).slice(0, 8).map((r) => ({
-      task: r.task.slice(0, 200), status: r.status, attempts: r.verify.length,
+      task: r.task.slice(0, 200), status: r.status, attempt: r.attempt,
       failures: r.verify.flatMap((v) => v.results.filter((x) => !x.pass).map((x) => `${x.grader}: ${String(x.detail).slice(0, 160)}`)),
     }));
     proposal = await askClaude(`You improve a coding-agent harness. Current harness:\n${JSON.stringify(h, null, 2)}\n\nRun stats: ${JSON.stringify(s)}\nRecent runs: ${JSON.stringify(sample, null, 2)}\nNeatlogs traces available: ${traces.length}\n\nPropose ONE small change that would most reduce failures. Reply JSON only:\n{"title": "...", "rationale": "...", "patch": {"addRules": ["..."], "graders": {}}}\nOnly include grader keys you want to change. Never loosen a grader just to make runs pass.`, { json: true }).catch(() => null);

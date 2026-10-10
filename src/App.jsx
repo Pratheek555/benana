@@ -1,122 +1,156 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { call, on } from './api.js';
-import Setup from './components/Setup.jsx';
-import StatusBar from './components/StatusBar.jsx';
-import AgentBar from './components/AgentBar.jsx';
-import LoopConsole from './components/LoopConsole.jsx';
-import Transcript from './components/Transcript.jsx';
-import Brief from './components/Brief.jsx';
-import GraphPanel from './components/GraphPanel.jsx';
-import ConnectModal from './components/ConnectModal.jsx';
+import React from "react";
+import { call, hasDesktopBridge, isDemo } from "./api.js";
+import ConnectModal from "./components/ConnectModal.jsx";
+import GraphPanel from "./components/GraphPanel.jsx";
+import Sidebar from "./components/workspace/Sidebar.jsx";
+import TaskWorkspace from "./components/workspace/TaskWorkspace.jsx";
+import RunInspector, { Checks } from "./components/workspace/RunInspector.jsx";
+import GraphWorkspace from "./components/workspace/GraphWorkspace.jsx";
+import {
+  SecondaryView,
+  RuntimeSetup,
+  ProjectSetup,
+} from "./components/workspace/SecondaryViews.jsx";
+import { Badge } from "./components/workspace/ui.jsx";
+import { useWorkspace } from "./hooks/useWorkspace.js";
 
 export default function App() {
-  const [config, setConfig] = useState(null);
-  const [project, setProject] = useState(null);
-  const [runs, setRuns] = useState({});
-  const [sessions, setSessions] = useState([]);
-  const [inbox, setInbox] = useState([]);
-  const [proposals, setProposals] = useState([]);
-  const [selected, setSelected] = useState(null); // { origin: 'native'|'attached', id, kind }
-  const [focusNodes, setFocusNodes] = useState([]);
-  const [graphTick, setGraphTick] = useState(0);
-  const [toast, setToast] = useState(null);
-  const [connectOpen, setConnectOpen] = useState(false);
-  const [integrations, setIntegrations] = useState(null);
-  const [busy, setBusy] = useState('');
+  const [deepIngest, setDeepIngest] = React.useState(false);
+  const workspace = useWorkspace();
+  const {
+    project,
+    setProject,
+    runs,
+    sessions,
+    inbox,
+    proposals,
+    integrations,
+    selected,
+    setSelected,
+    route,
+    setRoute,
+    toast,
+    connect,
+    setConnect,
+    notify,
+    run,
+    session,
+    selectStartedRun,
+    newTask,
+    refresh,
+    graphTick,
+  } = workspace;
 
-  const notify = useCallback((text, level = 'info') => {
-    setToast({ text, level });
-    setTimeout(() => setToast((t) => (t?.text === text ? null : t)), level === 'error' ? 6000 : 3500);
-  }, []);
+  if (!hasDesktopBridge() && !isDemo) return <RuntimeSetup />;
+  if (!project) return <ProjectSetup onOpen={setProject} />;
 
-  useEffect(() => {
-    call('config:get').then((c) => {
-      setConfig(c);
-      if (c.autoOpen && c.last?.repo) open(c.last);
-    }).catch(() => setConfig({}));
-  }, []);
-
-  useEffect(() => {
-    const offs = [
-      on('run', (r) => setRuns((m) => ({ ...m, [r.id]: { ...m[r.id], ...r } }))),
-      on('inbox', setInbox),
-      on('proposals', setProposals),
-      on('project', setProject),
-      on('graph-changed', () => { setGraphTick((t) => t + 1); call('project:summary').then(setProject).catch(() => {}); }),
-      on('log', (l) => (l.level !== 'info' || /pushed|synced|committed/.test(l.text)) && notify(l.text, l.level)),
-    ];
-    return () => offs.forEach((off) => off());
-  }, [notify]);
-
-  const refresh = useCallback(async () => {
-    const [r, s, i, p, st] = await Promise.all([
-      call('run:list'), call('sessions:detect'), call('inbox:list'),
-      call('improve:list').catch(() => []), call('status:integrations').catch(() => null),
-    ]);
-    setRuns(Object.fromEntries(r.map((x) => [x.id, x])));
-    setSessions(s);
-    setInbox(i);
-    setProposals(p);
-    setIntegrations(st);
-  }, []);
-
-  useEffect(() => {
-    if (!project) return undefined;
-    refresh();
-    const t = setInterval(() => call('sessions:detect').then(setSessions).catch(() => {}), 5000);
-    return () => clearInterval(t);
-  }, [project?.repo, refresh]);
-
-  const open = async (args) => {
-    setBusy('Opening project…');
-    try {
-      const p = await call('project:open', args);
-      setProject(p);
-      if (!p.nodes) {
-        setBusy('Building intent graph from GitHub history…');
-        setProject(await call('graph:ingest', { deep: args.deep }));
-      }
-    } catch (e) { notify(e.message, 'error'); }
-    setBusy('');
-  };
-
-  const selectedRun = selected?.origin !== 'attached' ? runs[selected?.id] : null;
-  const selectedSession = selected?.origin === 'attached' ? sessions.find((s) => s.id === selected.id) : null;
-
-  useEffect(() => {
-    if (selectedRun?.context) setFocusNodes(selectedRun.context.map((c) => c.id).concat((selectedRun.conflicts || []).map((c) => c.node), selectedRun.issue ? [`issue_${selectedRun.issue.number}`] : []));
-  }, [selectedRun?.id, selectedRun?.context, selectedRun?.conflicts]);
-
-  const agents = useMemo(() => [
-    ...Object.values(runs).sort((a, b) => b.startedAt - a.startedAt).map((r) => ({ ...r, origin: r.origin || 'native' })),
-    ...sessions.map((s) => ({ ...s, origin: 'attached' })),
-  ], [runs, sessions]);
-
-  const tokens = Object.values(runs).reduce((n, r) => n + (r.usage?.inputTokens || 0) + (r.usage?.outputTokens || 0), 0);
-  const conflicts = Object.values(runs).reduce((n, r) => n + (r.conflicts?.length || 0), 0);
-
-  if (!project) return <Setup config={config} onOpen={open} busy={busy} toast={toast} />;
+  const center =
+    route === "tasks" ? (
+      <TaskWorkspace
+        project={project}
+        run={run}
+        runs={runs}
+        session={session}
+        onStarted={selectStartedRun}
+        notify={notify}
+      />
+    ) : ["entire", "history", "insights"].includes(route) ? (
+      <GraphWorkspace kind={route} runs={runs} graphTick={graphTick} />
+    ) : route === "settings" ? (
+      <main className="page">
+        <header>
+          <h1>Settings</h1>
+          <p>Repository verification and agent defaults.</p>
+        </header>
+        <Checks run={{ verify: [] }} project={project} />
+      </main>
+    ) : route === "benana-graph" ? (
+      <main className="page graph-page">
+        <header>
+          <Badge tone="violet">Benana</Badge>
+          <h1>Intent graph</h1>
+          <p>Explore recorded direction, decisions, and dead ends.</p>
+        </header>
+        <button
+          className="analyze"
+          onClick={() =>
+            call("graph:ingest", { deep: deepIngest })
+              .then(() => notify("Intent graph re-ingested"))
+              .catch((error) => notify(error.message, "error"))
+          }
+        >
+          Re-ingest intent
+        </button>
+        <label className="deep-ingest">
+          <input
+            type="checkbox"
+            checked={deepIngest}
+            onChange={(event) => setDeepIngest(event.target.checked)}
+          />
+          Deep extraction with agent-assisted analysis
+        </label>
+        <GraphPanel
+          tick={graphTick}
+          focus={[]}
+          onClearFocus={() => {}}
+          project={project}
+        />
+      </main>
+    ) : (
+      <SecondaryView
+        route={route}
+        inbox={inbox}
+        proposals={proposals}
+        notify={notify}
+        setConnect={setConnect}
+        onStarted={selectStartedRun}
+        refresh={refresh}
+        integrations={integrations}
+      />
+    );
 
   return (
-    <div className="app">
-      <StatusBar project={project} agents={agents} tokens={tokens} conflicts={conflicts} integrations={integrations} busy={busy} />
-      <div className="body">
-        <AgentBar agents={agents} selected={selected} onSelect={setSelected}
-          onSpawn={() => { setSelected(null); document.getElementById('brief-input')?.focus(); }}
-          onConnect={() => setConnectOpen(true)} />
-        <div className="console">
-          <LoopConsole
-            inbox={inbox} runs={runs} proposals={proposals} sessions={sessions} project={project}
-            selected={selected} onSelect={setSelected} notify={notify} setBusy={setBusy}
-            onFocusNodes={setFocusNodes} onRefresh={refresh}
-          />
-          <Transcript run={selectedRun} session={selectedSession} />
-          <Brief run={selectedRun} session={selectedSession} project={project} notify={notify}
-            onStarted={(r) => setSelected({ origin: 'native', id: r.id })} />
-        </div>
-        <GraphPanel tick={graphTick} focus={focusNodes} onClearFocus={() => setFocusNodes([])} project={project} />
-      </div>
-      {connectOpen && <ConnectModal onClose={() => setConnectOpen(false)} notify={notify} />}
+    <div className="workspace">
+      <Sidebar
+        project={project}
+        runs={runs}
+        sessions={sessions}
+        inbox={inbox}
+        route={route}
+        setRoute={setRoute}
+        selected={selected}
+        setSelected={setSelected}
+        onNew={newTask}
+      />
+      {center}
+      {route === "tasks" && (
+        <RunInspector
+          run={run}
+          project={project}
+          integrations={integrations}
+          notify={notify}
+        />
+      )}
+      {route === "entire" && (
+        <aside className="inspector source-panel">
+          <h3>Graph source</h3>
+          <button className="source active">
+            <Badge tone="green">Entire</Badge>Repository relationships
+          </button>
+          <button className="source" onClick={() => setRoute("benana-graph")}>
+            <Badge tone="violet">Benana</Badge>Intent graph
+          </button>
+        </aside>
+      )}
+      {connect && (
+        <ConnectModal
+          onClose={() => {
+            setConnect(false);
+            setRoute("tasks");
+          }}
+          notify={notify}
+        />
+      )}
       {toast && <div className={`toast ${toast.level}`}>{toast.text}</div>}
     </div>
   );

@@ -1,299 +1,679 @@
-// Loop 1 (agent) + Loop 2 (verify). Each attempt gets:
-//   - its own git worktree of the user's local checkout
-//   - its own fork of the intent repo (local clone + Artifacts fork when configured)
-//   - the benana-intent MCP server, the harness system prompt and pre-loaded intent context
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawn } = require('node:child_process');
-const { git } = require('./git.cjs');
-const { dataDir, appRoot } = require('./env.cjs');
-const graph = require('./graph.cjs');
-const harnessLib = require('./harness.cjs');
-const artifacts = require('./artifacts.cjs');
-
-const MCP = path.join(appRoot, 'electron', 'mcp-server.cjs');
+const fs = require("node:fs");
+const path = require("node:path");
+const { git } = require("./git.cjs");
+const { dataDir } = require("./env.cjs");
+const graph = require("./graph.cjs");
+const harnessLib = require("./harness.cjs");
+const artifacts = require("./artifacts.cjs");
+const entire = require("./entire.cjs");
+const { runCommand, spawnExecutable, terminateProcessTree } = require("./processes.cjs");
+const attemptWorkspace = require("./attempt-workspace.cjs");
+const { agentCommand, handleEvent } = require("./providers.cjs");
 const runs = new Map();
+const retrying = new Map();
+let sequence = 0;
+const terminal = new Set(["passed", "failed", "stopped"]);
 
-function runsDir() { const d = path.join(dataDir, 'runs'); fs.mkdirSync(d, { recursive: true }); return d; }
-function saveRun(r) {
-  const { proc, ...rest } = r;
-  fs.writeFileSync(path.join(runsDir(), `${r.id}.json`), JSON.stringify(rest, null, 2));
+function newId(prefix = "a") {
+  sequence = (sequence + 1) % 1296;
+  return `${prefix}${Date.now().toString(36)}${sequence.toString(36).padStart(2, "0")}`;
 }
-function allRuns() {
-  return fs.readdirSync(runsDir()).filter((f) => f.endsWith('.json'))
-    .map((f) => { try { return JSON.parse(fs.readFileSync(path.join(runsDir(), f), 'utf8')); } catch { return null; } })
-    .filter(Boolean).sort((a, b) => b.startedAt - a.startedAt);
+function runsDir() {
+  const dir = path.join(dataDir, "runs");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
-
-async function start({ ctx, task, issue, agent }, emit) {
-  const { intent, harnessStore, repoPath } = ctx;
-  if (!repoPath || !fs.existsSync(path.join(repoPath, '.git'))) throw new Error('Set a local checkout path for this repo first.');
-  const h = harnessLib.load(harnessStore);
-  const id = `a${Date.now().toString(36).slice(-5)}`;
-  const kind = agent || h.agent;
-  const r = {
-    id, kind, origin: 'native', task, issue: issue || null, status: 'preparing', step: 0,
-    startedAt: Date.now(), attempt: 1, harnessVersion: h.version, transcript: [], verify: [], usage: {},
-  };
-  runs.set(id, r);
-  const update = (patch = {}) => { Object.assign(r, patch); emit('run', publicRun(r)); };
-  const say = (role, text) => { r.transcript.push({ role, text: String(text).slice(0, 4000), at: Date.now() }); emit('transcript', { id, line: r.transcript.at(-1) }); };
-  update();
-
-  // Workspace: a dedicated worktree so the user's own checkout is never touched.
-  r.worktree = path.join(dataDir, 'worktrees', id);
-  fs.mkdirSync(path.dirname(r.worktree), { recursive: true });
-  await git(repoPath, ['worktree', 'add', '-q', '-b', `benana/${id}`, r.worktree, 'HEAD']);
-  r.baseSha = (await git(r.worktree, ['rev-parse', 'HEAD'])).trim();
-
-  // Intent fork: local clone the agent writes to; mirrored as an Artifacts fork when configured.
-  r.intentDir = path.join(dataDir, 'attempts', id, 'intent');
-  fs.mkdirSync(path.dirname(r.intentDir), { recursive: true });
-  await git(path.dirname(intent.dir), ['clone', '-q', intent.dir, r.intentDir]);
-  await git(r.intentDir, ['config', 'user.name', `agent-${id}`]);
-  await git(r.intentDir, ['config', 'user.email', `${id}@benana.local`]);
-  if (artifacts.configured()) {
-    artifacts.fork(intent.name, `${intent.name}-${id}`).then((f) => { r.artifactsFork = f.name || `${intent.name}-${id}`; update(); })
-      .catch((e) => say('system', `artifacts fork skipped: ${e.message}`));
-  }
-
-  const g = graph.loadGraph(intent);
-  r.context = graph.context(g, { text: task });
-  say('system', `intent.context → ${r.context.map((c) => c.id).join(', ') || 'nothing relevant yet'}`);
-  update({ status: 'running' });
-  await runAgent(r, h, buildPrompt(task, issue, r.context), { say, update, emit, ctx });
-  return publicRun(r);
+function saveRun(run) {
+  const { proc, verifyProc, ...saved } = run;
+  fs.writeFileSync(
+    path.join(runsDir(), `${run.id}.json`),
+    JSON.stringify(saved, null, 2),
+  );
 }
-
-function buildPrompt(task, issue, ctxNodes) {
-  const lines = [];
-  if (issue) lines.push(`GitHub issue #${issue.number}: ${issue.title}\n${(issue.body || '').slice(0, 2000)}`);
-  lines.push(`Task: ${task}`);
-  if (ctxNodes.length) {
-    lines.push('\nRelevant project intent (from the Benana intent graph; cite ids when you rely on them):');
-    for (const c of ctxNodes) lines.push(`- [${c.type} ${c.id}] ${c.title}${c.reason ? ` — ${c.reason}` : ''} (${c.status}, conf ${c.confidence})`);
-  }
-  return lines.join('\n');
-}
-
-function agentCommand(r, h, prompt, resumeId) {
-  const env = { BENANA_INTENT_DIR: r.intentDir, BENANA_ATTEMPT: r.id };
-  if (r.kind === 'codex') {
-    const args = ['exec', '--json', '--full-auto', '--skip-git-repo-check', '-C', r.worktree,
-      '-c', 'mcp_servers.benana-intent.command="node"',
-      '-c', `mcp_servers.benana-intent.args=[${JSON.stringify(MCP)}]`,
-      '-c', `mcp_servers.benana-intent.env={BENANA_INTENT_DIR=${JSON.stringify(r.intentDir)},BENANA_ATTEMPT=${JSON.stringify(r.id)}}`];
-    if (resumeId) args.splice(1, 0, 'resume', resumeId);
-    args.push(`${harnessLib.systemPrompt(h)}\n\n${prompt}`);
-    return { cmd: 'codex', args };
-  }
-  const mcpFile = path.join(dataDir, 'attempts', r.id, 'mcp.json');
-  fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: { 'benana-intent': { command: 'node', args: [MCP], env } } }));
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--mcp-config', mcpFile,
-    '--append-system-prompt', harnessLib.systemPrompt(h), '--permission-mode', 'acceptEdits',
-    '--allowedTools', 'mcp__benana-intent__intent_context,mcp__benana-intent__intent_check,mcp__benana-intent__intent_record,Read,Edit,Write,Glob,Grep'];
-  if (resumeId) args.push('--resume', resumeId);
-  return { cmd: 'claude', args, stdin: prompt };
-}
-
-function runAgent(r, h, prompt, hooks) {
-  const { say, update } = hooks;
-  return new Promise((resolve) => {
-    const { cmd, args, stdin } = agentCommand(r, h, prompt, r.sessionId);
-    const proc = spawn(cmd, args, { cwd: r.worktree, env: process.env });
-    r.proc = proc;
-    let buf = '';
-    proc.stdout.on('data', (d) => {
-      buf += d;
-      let i;
-      while ((i = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, i).trim();
-        buf = buf.slice(i + 1);
-        if (line) handleEvent(r, line, say, update);
+function savedRuns(repo) {
+  return fs
+    .readdirSync(runsDir())
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => {
+      try {
+        return JSON.parse(fs.readFileSync(path.join(runsDir(), name), "utf8"));
+      } catch {
+        return null;
       }
-    });
-    proc.stderr.on('data', (d) => { const t = String(d).trim(); if (t && !/^Reading prompt/.test(t)) say('stderr', t); });
-    proc.on('error', (e) => { say('system', `failed to start ${cmd}: ${e.message}`); update({ status: 'failed' }); resolve(); });
-    proc.on('close', async (code) => {
-      r.proc = null;
-      if (r.status === 'stopped') { saveRun(r); return resolve(); }
-      say('system', `${cmd} exited (${code})`);
-      if (r.pendingBrief && r.sessionId) {
-        const brief = r.pendingBrief;
-        r.pendingBrief = null;
-        say('system', 'sending your brief');
-        await runAgent(r, h, brief, hooks);
-        return resolve();
-      }
-      await verifyAndMaybeRetry(r, h, hooks);
-      resolve();
-    });
-    if (stdin != null) proc.stdin.end(stdin); else proc.stdin.end();
-  });
+    })
+    .filter((run) => run && (!repo || run.repo === repo))
+    .sort((a, b) => b.startedAt - a.startedAt);
 }
-
-function handleEvent(r, line, say, update) {
-  let ev;
-  try { ev = JSON.parse(line); } catch { return say('agent', line); }
-  // Claude Code stream-json
-  if (ev.type === 'system' && ev.session_id) { r.sessionId = ev.session_id; return update(); }
-  if (ev.type === 'assistant') {
-    for (const c of ev.message?.content || []) {
-      if (c.type === 'text' && c.text.trim()) say('agent', c.text);
-      if (c.type === 'tool_use') { r.step += 1; say('tool', `${c.name} ${JSON.stringify(c.input).slice(0, 220)}`); }
-    }
-    return update();
-  }
-  if (ev.type === 'result') {
-    r.final = ev.result || '';
-    r.usage = { costUsd: ev.total_cost_usd, inputTokens: ev.usage?.input_tokens, outputTokens: ev.usage?.output_tokens, turns: ev.num_turns };
-    return update();
-  }
-  // Codex exec --json
-  if (ev.type === 'thread.started' && ev.thread_id) { r.sessionId = ev.thread_id; return update(); }
-  const item = ev.item || ev.msg;
-  if (item) {
-    if (item.type === 'agent_message' && item.text) { r.final = item.text; say('agent', item.text); }
-    else if (item.type === 'command_execution' || item.type === 'mcp_tool_call' || item.type === 'file_change') {
-      if (ev.type === 'item.completed') { r.step += 1; say('tool', `${item.type} ${(item.command || item.tool || JSON.stringify(item.changes || '')).toString().slice(0, 200)}`); }
-    }
-  }
-  if (ev.type === 'turn.completed' && ev.usage) r.usage = { inputTokens: ev.usage.input_tokens, outputTokens: ev.usage.output_tokens };
-  update();
+function hydrate(repo) {
+  for (const run of savedRuns(repo))
+    if (!runs.has(run.id)) runs.set(run.id, run);
+  return list(repo);
 }
-
-// Loop 2: graders. Deterministic checks + the intent grader. Failures go back to the agent.
-async function verifyAndMaybeRetry(r, h, hooks) {
-  const { say, update, ctx } = hooks;
-  update({ status: 'verifying' });
-  const files = (await git(r.worktree, ['status', '--porcelain'])).split('\n').filter(Boolean).map((l) => l.slice(3).trim());
-  r.filesChanged = files;
-  const results = [];
-  results.push({ grader: 'changes', pass: files.length > 0, detail: files.length ? `${files.length} file(s)` : 'agent changed nothing' });
-  results.push({ grader: 'diff scope', pass: files.length <= h.graders.maxFilesChanged, detail: `${files.length}/${h.graders.maxFilesChanged} files` });
-  if (h.graders.testCommand) {
-    const t = await sh(h.graders.testCommand, r.worktree);
-    results.push({ grader: 'tests', pass: t.code === 0, detail: t.tail });
-  }
-  if (h.graders.intentCheck) {
-    const g = graph.loadGraph({ ...ctx.intent, dir: r.intentDir, list: ctx.intent.list, read: ctx.intent.read });
-    const conflicts = graph.check(g, { text: r.task, files, attempt: r.id, acknowledge: r.final || '' });
-    const open = conflicts.filter((c) => !c.acknowledged);
-    r.conflicts = open;
-    results.push({
-      grader: 'intent.check', pass: open.length === 0, conflicts,
-      detail: conflicts.map((c) => `${c.acknowledged ? 'acknowledged ' : ''}${c.kind} ${c.node} (${c.title})`).join('; ') || 'no conflicts',
-    });
-  }
-  r.verify.push({ attempt: r.attempt, results });
-  const failed = results.filter((x) => !x.pass);
-  failed.forEach((f) => say('verify', `✖ ${f.grader}: ${f.detail}`));
-  if (!failed.length) say('verify', '✔ all graders passed');
-
-  if (failed.length && r.attempt < h.graders.maxAttempts && r.sessionId) {
-    r.attempt += 1;
-    update({ status: 'running' });
-    const feedback = `The Benana graders rejected your attempt:\n${failed.map((f) => `- ${f.grader}: ${f.detail}`).join('\n')}\nFix these. If an intent conflict is a false alarm, cite the node id (e.g. dead_123) and explain why it does not apply, then record that as a Decision with intent_record.`;
-    say('system', `feedback sent → attempt ${r.attempt}`);
-    return runAgent(r, h, feedback, hooks);
-  }
-  await checkpoint(r, failed.length === 0, hooks);
+function allRuns(repo) {
+  return savedRuns(repo);
 }
-
-// Merge the attempt's intent fork back, record an AgentRun node, push to Artifacts.
-async function checkpoint(r, passed, { say, update, ctx, emit }) {
-  const { intent } = ctx;
-  try {
-    await git(r.intentDir, ['add', '-A']);
-    if ((await git(r.intentDir, ['status', '--porcelain'])).trim()) await git(r.intentDir, ['commit', '-q', '-m', `attempt ${r.id}: agent intent\n\nActor: agent:${r.id}`]);
-    if (r.artifactsFork) await artifacts.push({ ...intent, dir: r.intentDir, name: r.artifactsFork }).catch(() => {});
-    await git(intent.dir, ['pull', '-q', '--no-rebase', '--no-edit', r.intentDir, 'HEAD']);
-  } catch (e) { say('system', `intent merge: ${e.message}`); }
-  const node = {
-    id: `run_${r.id}`, type: 'AgentRun', title: `${r.kind} · ${r.task.slice(0, 80)}`, at: r.startedAt,
-    body: (r.final || '').slice(0, 800), status: 'recorded', confidence: 1, outcome: passed ? 'passed' : 'failed',
-    touches: r.filesChanged || [], sources: [`benana:run/${r.id}`, r.sessionId ? `${r.kind}:session/${r.sessionId}` : null].filter(Boolean),
-    harnessVersion: r.harnessVersion,
-  };
-  intent.write(graph.nodePath(node), graph.serializeNode(node));
-  if (r.issue) intent.write(`edges/e_${node.id}_works_on.json`, { id: `e_${node.id}_works_on`, from: node.id, to: `issue_${r.issue.number}`, type: 'works_on', status: 'recorded', confidence: 1 });
-  for (const c of r.conflicts || []) intent.write(`edges/e_${node.id}_flagged_${c.node}.json`, { id: `e_${node.id}_flagged_${c.node}`, from: node.id, to: c.node, type: 'flagged_by_intent', status: 'recorded', confidence: 1 });
-  graph.writeEvent(intent, { type: 'agent_run', run: r.id, outcome: node.outcome, at: Date.now() });
-  await intent.commit(`checkpoint ${r.id} (${node.outcome})`, `agent:${r.id}`);
-  if (artifacts.configured()) artifacts.push(intent).catch((e) => say('system', `artifacts push: ${e.message}`));
-  update({ status: passed ? 'passed' : 'failed', endedAt: Date.now() });
-  saveRun(r);
-  emit('graph-changed', {});
-}
-
-function sh(command, cwd) {
-  return new Promise((resolve) => {
-    const p = spawn('/bin/sh', ['-c', command], { cwd, env: process.env });
-    let out = '';
-    p.stdout.on('data', (d) => { out += d; });
-    p.stderr.on('data', (d) => { out += d; });
-    p.on('close', (code) => resolve({ code, tail: out.trim().split('\n').slice(-6).join('\n') }));
-  });
-}
-
-function steer(id, text, emit) {
-  const r = runs.get(id);
-  if (!r) throw new Error('unknown run');
-  r.pendingBrief = text;
-  r.transcript.push({ role: 'you', text, at: Date.now() });
-  emit('transcript', { id, line: r.transcript.at(-1) });
-  return true;
-}
-
-function stop(id) {
-  const r = runs.get(id);
-  if (r?.proc) { r.status = 'stopped'; r.proc.kill('SIGTERM'); }
-  return true;
-}
-
-function publicRun(r) {
-  const { proc, transcript, ...rest } = r;
+function publicRun(run) {
+  const { proc, verifyProc, transcript = [], ...rest } = run;
   return { ...rest, transcriptLength: transcript.length };
 }
+function get(id, repo) {
+  const run = runs.get(id);
+  return run && (!repo || run.repo === repo)
+    ? { ...publicRun(run), transcript: run.transcript || [] }
+    : null;
+}
+function list(repo) {
+  return [...runs.values()]
+    .filter((run) => !repo || run.repo === repo)
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .map(publicRun);
+}
 
-function get(id) { const r = runs.get(id); return r ? { ...publicRun(r), transcript: r.transcript } : null; }
-function list() { return [...runs.values()].map(publicRun); }
+function hooksFor(run, emit, ctx) {
+  return {
+    ctx,
+    emit,
+    update(patch = {}) {
+      if (terminal.has(run.status)) return false;
+      Object.assign(run, patch);
+      saveRun(run);
+      emit("run", publicRun(run));
+      return true;
+    },
+    say(role, text) {
+      if (terminal.has(run.status)) return false;
+      run.transcript.push({
+        role,
+        text: String(text).slice(0, 8000),
+        at: Date.now(),
+      });
+      saveRun(run);
+      emit("transcript", { id: run.id, line: run.transcript.at(-1) });
+      return true;
+    },
+  };
+}
 
-// Continue a native run (or an attached session) with a new brief, via the agent's resume.
+function failure(kind, title, detail, evidence = []) {
+  return { kind, title, detail: String(detail || ""), evidence };
+}
+function proposeRecovery(run, failed) {
+  const details = failed
+    .map((item) => `${item.grader}: ${item.detail}`)
+    .join("\n");
+  const prompt = `Benana verification failed. Apply these corrections and retry:\n${failed.map((item) => `- ${item.grader}: ${item.detail}`).join("\n")}`;
+  return {
+    id: `recovery_${run.id}_${Date.now().toString(36)}`,
+    title: "Apply verification feedback and retry",
+    diagnosis: details,
+    changes: [{ label: "Extra agent instruction", before: "", after: prompt }],
+    prompt,
+    canRetry: Boolean(run.worktree && fs.existsSync(run.worktree)),
+  };
+}
+
+async function prepareRun({ ctx, task, issue, agent, parent, recovery }, emit) {
+  const { intent, harnessStore, repoPath } = ctx;
+  if (!repoPath || !fs.existsSync(path.join(repoPath, ".git")))
+    throw new Error("Set a local checkout path for this repo first.");
+  const h = harnessLib.load(harnessStore);
+  const id = newId(parent ? "r" : "a");
+  const run = {
+    id,
+    rootId: parent?.rootId || parent?.id || id,
+    retryOf: parent?.id,
+    recoveryId: recovery?.id,
+    kind: agent || parent?.kind || h.agent,
+    origin: "native",
+    repo: ctx.repo,
+    task,
+    issue: issue || parent?.issue || null,
+    status: "preparing",
+    step: 0,
+    startedAt: Date.now(),
+    attempt: parent ? parent.attempt + 1 : 1,
+    harnessVersion: h.version,
+    transcript: [],
+    verify: [],
+    usage: {},
+  };
+  runs.set(id, run);
+  const hooks = hooksFor(run, emit, ctx);
+  hooks.update();
+  try {
+    run.worktree = path.join(dataDir, "worktrees", id);
+    const base = parent?.baseSha || "HEAD";
+    run.baseSha = await attemptWorkspace.create({
+      repoPath,
+      worktree: run.worktree,
+      branch: `benana/${id}`,
+      base,
+      snapshotFrom: parent?.worktree,
+    });
+    if (run.status === "stopped") return { run, failed: true };
+    run.intentDir = path.join(dataDir, "attempts", id, "intent");
+    fs.mkdirSync(path.dirname(run.intentDir), { recursive: true });
+    await git(path.dirname(intent.dir), [
+      "clone",
+      "-q",
+      intent.dir,
+      run.intentDir,
+    ]);
+    await git(run.intentDir, ["config", "user.name", `agent-${id}`]);
+    await git(run.intentDir, ["config", "user.email", `${id}@benana.local`]);
+    if (run.status === "stopped") return { run, failed: true };
+    const intentEntries = graph
+      .context(graph.loadGraph(intent), { text: task })
+      .map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        summary: `${entry.type}: ${entry.title}`,
+        reason: entry.reason || "",
+        source: "benana-intent",
+        raw: entry,
+      }));
+    const entireContext = await entire.context(repoPath, task);
+    if (run.status === "stopped") return { run, failed: true };
+    run.contextBundle = {
+      entries: [...intentEntries, ...entireContext.entries],
+      ...(entireContext.errors?.length ? { errors: entireContext.errors } : {}),
+    };
+    hooks.say(
+      "system",
+      `context loaded: ${run.contextBundle.entries.length} record(s)`,
+    );
+    if (!hooks.update({ status: "running" })) return { run, failed: true };
+    if (artifacts.configured())
+      try {
+        const fork = await artifacts.fork(intent.name, `${intent.name}-${id}`);
+        if (!terminal.has(run.status)) {
+          run.artifactsFork = fork.name || `${intent.name}-${id}`;
+          hooks.update();
+        }
+      } catch (error) {
+        hooks.say("system", `artifacts fork skipped: ${error.message}`);
+      }
+    if (run.status === "stopped") return { run, failed: true };
+    return { run, h, hooks };
+  } catch (error) {
+    hooks.say("system", `setup failed: ${error.message}`);
+    hooks.update({
+      status: "failed",
+      endedAt: Date.now(),
+      failure: failure("setup", "Run setup failed", error.message, [
+        { label: "Local setup error", text: error.message, source: "local" },
+      ]),
+      recovery: {
+        id: `recovery_${id}_setup`,
+        title: "Fix setup and start again",
+        diagnosis: error.message,
+        changes: [],
+        prompt: "",
+        canRetry: false,
+        blockReason: "The workspace was not prepared safely.",
+      },
+    });
+    return { run, failed: true };
+  }
+}
+
+async function start(input, emit) {
+  const prepared = await prepareRun(input, emit);
+  if (!prepared.failed)
+    executeAttempt(
+      prepared.run,
+      prepared.h,
+      buildPrompt(prepared.run, input.issue, input.recovery),
+      prepared.hooks,
+    ).catch((error) =>
+      failExecution(prepared.run, prepared.hooks, error.message),
+    );
+  return publicRun(prepared.run);
+}
+
+function buildPrompt(run, issue, recovery) {
+  const lines = [];
+  if (issue)
+    lines.push(
+      `GitHub issue #${issue.number}: ${issue.title}\n${(issue.body || "").slice(0, 2000)}`,
+    );
+  lines.push(`Task: ${run.task}`);
+  if (run.contextBundle.entries.length) {
+    lines.push("\nContext records sent by Benana:");
+    for (const entry of run.contextBundle.entries)
+      lines.push(
+        `- [${entry.source} ${entry.id}] ${entry.title}${entry.reason ? `; reason: ${entry.reason}` : ""}\n  ${entry.summary}`,
+      );
+  }
+  if (run.contextBundle.errors?.length)
+    lines.push(
+      `\nContext provider errors:\n${run.contextBundle.errors.map((x) => `- ${x}`).join("\n")}`,
+    );
+  if (recovery?.prompt)
+    lines.push(`\nApproved recovery instruction:\n${recovery.prompt}`);
+  return lines.join("\n");
+}
+
+function executeAttempt(run, h, prompt, hooks, deps = {}) {
+  return new Promise((resolve) => {
+    const command = agentCommand(run, h, prompt);
+    let proc;
+    try {
+      proc = (deps.spawnExecutable || spawnExecutable)(
+        command.cmd,
+        command.args,
+        {
+          cwd: run.worktree,
+          env: {
+            ...process.env,
+            BENANA_RUN_ID: run.id,
+            BENANA_ATTEMPT: String(run.attempt),
+          },
+        },
+      );
+    } catch (error) {
+      failExecution(run, hooks, error.message);
+      return resolve();
+    }
+    run.proc = proc;
+    hooks.update();
+    let buffer = "";
+    let spawnError = null;
+    proc.stdout?.on("data", (data) => {
+      if (terminal.has(run.status)) return;
+      buffer += data;
+      let index;
+      while ((index = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (line) handleEvent(run, line, hooks);
+      }
+    });
+    proc.stderr?.on("data", (data) => {
+      const text = String(data).trim();
+      if (text && !/^Reading prompt/.test(text)) hooks.say("stderr", text);
+    });
+    proc.once("error", (error) => {
+      spawnError = error;
+    });
+    let settled = false;
+    const finish = () => { if (settled) return false; settled = true; resolve(); return true; };
+    proc.once("close", async (code) => {
+      run.proc = null;
+      if (terminal.has(run.status)) return finish();
+      if (spawnError || code !== 0 || run.terminalFailure) {
+        failExecution(
+          run,
+          hooks,
+          spawnError?.message ||
+            run.terminalFailure ||
+            `${command.cmd} exited with code ${code}`,
+        );
+        return finish();
+      }
+      hooks.say("system", `${command.cmd} exited successfully`);
+      try {
+        await verify(run, h, hooks, deps);
+      } catch (error) {
+        if (!terminal.has(run.status)) failVerificationTool(run, hooks, error);
+      }
+      finish();
+    });
+    command.stdin != null ? proc.stdin.end(command.stdin) : proc.stdin.end();
+  });
+}
+
+function failVerificationTool(run, hooks, error) {
+  const detail = error?.message || String(error);
+  hooks.say("system", `verification could not complete: ${detail}`);
+  hooks.update({
+    status: "failed",
+    endedAt: Date.now(),
+    failure: failure("execution", "Verification could not complete", detail, [
+      { label: "Verifier error", text: detail, source: "local" },
+    ]),
+    recovery: { id: `recovery_${run.id}_verifier`, title: "Fix verification setup", diagnosis: detail, changes: [], prompt: "", canRetry: false, blockReason: "The verifier itself failed." },
+  });
+}
+
+function failExecution(run, hooks, detail) {
+  hooks.say("system", detail);
+  if (/ENOENT|not found|not recognized|cannot find.*file/i.test(detail)) {
+    const provider = run.kind === "codex" ? "Codex" : "Claude Code";
+    hooks.update({
+      status: "failed", endedAt: Date.now(),
+      failure: failure("setup", `${provider} could not start`, detail, [{ label: "Launch error", text: detail, source: "local" }]),
+      recovery: {
+        id: `recovery_${run.id}_setup`, title: `Set up ${provider}`,
+        diagnosis: "The coding-agent executable is unavailable. An agent instruction cannot repair this launch prerequisite.",
+        changes: [], prompt: "", canRetry: false,
+        blockReason: `Install ${provider}, make its command available on PATH, and restart Benana. Then start a new task. This failed attempt remains in history.`,
+      },
+    });
+    return;
+  }
+  const recovery = {
+    id: `recovery_${run.id}_execution`,
+    title: "Apply execution feedback and retry",
+    diagnosis: detail,
+    changes: [
+      {
+        label: "Extra agent instruction",
+        before: "",
+        after: `The previous agent process failed before verification: ${detail}\nComplete the task and report any blocking error.`,
+      },
+    ],
+    prompt: `The previous agent process failed before verification: ${detail}\nComplete the task and report any blocking error.`,
+    canRetry: Boolean(run.worktree && fs.existsSync(run.worktree)),
+  };
+  hooks.update({
+    status: "failed",
+    endedAt: Date.now(),
+    failure: failure("execution", "Agent process failed", detail, [
+      { label: "Local process error", text: detail, source: "local" },
+    ]),
+    recovery,
+  });
+}
+async function verify(run, h, hooks, deps = {}) {
+  if (run.status === "stopped") return;
+  hooks.update({ status: "verifying" });
+  const files = await attemptWorkspace.changedFiles(run.worktree);
+  run.filesChanged = files;
+  let testResult = null;
+  if (h.graders.testCommand?.trim())
+    testResult = await (deps.runCommand || runCommand)(
+      h.graders.testCommand,
+      run.worktree,
+      {
+        onSpawn: (proc) => {
+          run.verifyProc = proc;
+          if (run.status === "stopped") terminateProcessTree(proc);
+        },
+      },
+    );
+  run.verifyProc = null;
+  if (run.status === "stopped") return;
+  const results = gradeBasics(files, h.graders, testResult);
+  if (h.graders.intentCheck) {
+    const intentGraph = graph.loadGraph({
+      ...hooks.ctx.intent,
+      dir: run.intentDir,
+      list: hooks.ctx.intent.list,
+      read: hooks.ctx.intent.read,
+    });
+    const conflicts = graph.check(intentGraph, {
+      text: run.task,
+      files,
+      attempt: run.id,
+      acknowledge: run.final || "",
+    });
+    run.conflicts = conflicts.filter((item) => !item.acknowledged);
+    results.push({
+      grader: "intent.check",
+      pass: run.conflicts.length === 0,
+      conflicts,
+      detail:
+        conflicts
+          .map((item) => `${item.kind} ${item.node} (${item.title})`)
+          .join("; ") || "no conflicts",
+    });
+  }
+  run.verify.push({ attempt: run.attempt, results });
+  const failed = results.filter((item) => !item.pass);
+  failed.forEach((item) =>
+    hooks.say("verify", `FAIL ${item.grader}: ${item.detail}`),
+  );
+  if (failed.length) {
+    const recovery = proposeRecovery(run, failed);
+    hooks.update({
+      status: "recording",
+      failure: failure(
+        "verification",
+        "Verification failed",
+        failed.map((item) => `${item.grader}: ${item.detail}`).join("\n"),
+        failed.map((item) => ({
+          label: item.grader,
+          text: item.detail,
+          source: "local",
+        })),
+      ),
+      recovery,
+    });
+    await checkpoint(run, false, hooks);
+  } else {
+    hooks.say("verify", "All graders passed.");
+    await checkpoint(run, true, hooks);
+  }
+}
+
+function gradeBasics(files, graders, testResult) {
+  const results = [
+    {
+      grader: "changes",
+      pass: files.length > 0,
+      detail: files.length
+        ? `${files.length} file(s)`
+        : "agent changed nothing",
+    },
+    {
+      grader: "diff scope",
+      pass: files.length <= graders.maxFilesChanged,
+      detail: `${files.length}/${graders.maxFilesChanged} files`,
+    },
+  ];
+  if (!graders.testCommand?.trim())
+    results.push({
+      grader: "tests",
+      pass: false,
+      detail: "Configure a test command before a run can pass.",
+    });
+  else
+    results.push({
+      grader: "tests",
+      pass: testResult?.code === 0 && !testResult?.error,
+      detail:
+        testResult?.tail || testResult?.error || `exit ${testResult?.code}`,
+    });
+  return results;
+}
+
+async function checkpoint(run, passed, hooks) {
+  if (terminal.has(run.status)) return;
+  const { intent } = hooks.ctx;
+  try {
+    await git(run.intentDir, ["add", "-A"]);
+    if ((await git(run.intentDir, ["status", "--porcelain"])).trim())
+      await git(run.intentDir, [
+        "commit",
+        "-q",
+        "-m",
+        `attempt ${run.id}: agent intent\n\nActor: agent:${run.id}`,
+      ]);
+    await git(intent.dir, [
+      "pull",
+      "-q",
+      "--no-rebase",
+      "--no-edit",
+      run.intentDir,
+      "HEAD",
+    ]);
+  } catch (error) {
+    hooks.say("system", `intent merge: ${error.message}`);
+  }
+  if (terminal.has(run.status)) return;
+  const node = {
+    id: `run_${run.id}`,
+    type: "AgentRun",
+    title: `${run.kind} · ${run.task.slice(0, 80)}`,
+    at: run.startedAt,
+    body: (run.final || "").slice(0, 800),
+    status: "recorded",
+    confidence: 1,
+    outcome: passed ? "passed" : "failed",
+    touches: run.filesChanged || [],
+    sources: [
+      `benana:run/${run.id}`,
+      run.sessionId ? `${run.kind}:session/${run.sessionId}` : null,
+    ].filter(Boolean),
+    harnessVersion: run.harnessVersion,
+  };
+  intent.write(graph.nodePath(node), graph.serializeNode(node));
+  if (run.issue) intent.write(`edges/e_${node.id}_works_on.json`, { id: `e_${node.id}_works_on`, from: node.id, to: `issue_${run.issue.number}`, type: "works_on", status: "recorded", confidence: 1 });
+  for (const conflict of run.conflicts || []) intent.write(`edges/e_${node.id}_flagged_${conflict.node}.json`, { id: `e_${node.id}_flagged_${conflict.node}`, from: node.id, to: conflict.node, type: "flagged_by_intent", status: "recorded", confidence: 1 });
+  graph.writeEvent(intent, {
+    type: "agent_run",
+    run: run.id,
+    outcome: node.outcome,
+    at: Date.now(),
+  });
+  await intent.commit(
+    `checkpoint ${run.id} (${node.outcome})`,
+    `agent:${run.id}`,
+  );
+  if (terminal.has(run.status)) return;
+  if (artifacts.configured()) {
+    if (run.artifactsFork) await artifacts.push({ ...intent, dir: run.intentDir, name: run.artifactsFork });
+    if (terminal.has(run.status)) return;
+    await artifacts.push(intent);
+  }
+  if (terminal.has(run.status)) return;
+  hooks.update({
+    status: passed ? "passed" : "failed",
+    endedAt: run.endedAt || Date.now(),
+  });
+  hooks.emit("graph-changed", {});
+}
+
+async function retry(id, recoveryId, ctx, emit) {
+  const parent = runs.get(id);
+  if (!parent) throw new Error("unknown run");
+  if (parent.status !== "failed")
+    throw new Error("Only a failed run can be retried.");
+  if (!parent.recovery || parent.recovery.id !== recoveryId)
+    throw new Error(
+      "Recovery proposal is stale or does not belong to this run.",
+    );
+  if (!parent.recovery.canRetry)
+    throw new Error(
+      parent.recovery.blockReason || "This run cannot be retried.",
+    );
+  const existing = [...runs.values()].find(
+    (run) => run.retryOf === id && run.recoveryId === recoveryId,
+  );
+  if (existing) return publicRun(existing);
+  if (retrying.has(id)) return retrying.get(id);
+  const promise = start(
+    { ctx, task: parent.task, parent, recovery: parent.recovery },
+    emit,
+  ).finally(() => retrying.delete(id));
+  retrying.set(id, promise);
+  return promise;
+}
 async function continueRun(id, text, ctx, emit) {
-  const r = runs.get(id);
-  if (!r) throw new Error('unknown run');
-  if (r.proc) return steer(id, text, emit);
-  const h = harnessLib.load(ctx.harnessStore);
-  const say = (role, t) => { r.transcript.push({ role, text: String(t).slice(0, 4000), at: Date.now() }); emit('transcript', { id, line: r.transcript.at(-1) }); };
-  const update = (patch = {}) => { Object.assign(r, patch); emit('run', publicRun(r)); };
-  say('you', text);
-  r.attempt = 1;
-  update({ status: 'running', task: `${r.task}\n+ ${text}` });
-  runAgent(r, h, text, { say, update, emit, ctx });
+  const run = runs.get(id);
+  if (!run) throw new Error("unknown run");
+  if (!terminal.has(run.status)) {
+    throw new Error(
+      "This run is active. Stop it first, then start a new run with the revised brief.",
+    );
+  }
+  if (run.status === "failed" || run.failure)
+    throw new Error(
+      "Apply the current recovery proposal before retrying a failed run.",
+    );
+  return start(
+    {
+      ctx,
+      task: `${run.task}\n\nAdditional brief: ${text}`,
+      parent: run,
+      recovery: {
+        id: `brief_${run.id}_${Date.now().toString(36)}`,
+        prompt: text,
+      },
+    },
+    emit,
+  );
+}
+function stop(id, emit = () => {}) {
+  const run = runs.get(id);
+  if (!run) return false;
+  if (!terminal.has(run.status)) {
+    run.status = run.failure ? "failed" : "stopped";
+    run.endedAt = Date.now();
+    terminateProcessTree(run.proc);
+    terminateProcessTree(run.verifyProc);
+    saveRun(run);
+    emit("run", publicRun(run));
+  }
   return true;
 }
-
-// Level 3: take over a session detected on this machine by resuming it inside Benana's loops.
-// It runs in the session's own directory (not a worktree), so graders see that checkout.
-async function resumeExternal({ ctx, kind, sessionId, cwd, brief }, emit) {
-  const { intent, harnessStore } = ctx;
-  const h = harnessLib.load(harnessStore);
-  const id = `r${Date.now().toString(36).slice(-5)}`;
-  const r = {
-    id, kind, origin: 'resumed', task: brief, issue: null, status: 'running', step: 0, startedAt: Date.now(),
-    attempt: 1, harnessVersion: h.version, transcript: [], verify: [], usage: {}, sessionId, worktree: cwd,
-  };
-  runs.set(id, r);
-  r.intentDir = path.join(dataDir, 'attempts', id, 'intent');
-  fs.mkdirSync(path.dirname(r.intentDir), { recursive: true });
-  await git(path.dirname(intent.dir), ['clone', '-q', intent.dir, r.intentDir]);
-  const say = (role, t) => { r.transcript.push({ role, text: String(t).slice(0, 4000), at: Date.now() }); emit('transcript', { id, line: r.transcript.at(-1) }); };
-  const update = (patch = {}) => { Object.assign(r, patch); emit('run', publicRun(r)); };
-  say('system', `resumed ${kind} session ${sessionId} in ${cwd}`);
-  update();
-  runAgent(r, h, brief, { say, update, emit, ctx });
-  return publicRun(r);
+async function diff(id) {
+  const run = runs.get(id);
+  if (!run?.worktree) throw new Error("unknown run");
+  return attemptWorkspace.diff(run);
 }
 
-module.exports = { start, stop, steer, get, list, allRuns, continueRun, resumeExternal };
+async function resumeExternal({ ctx, kind, sessionId, cwd, brief }, emit) {
+  const h = harnessLib.load(ctx.harnessStore);
+  const id = newId("x");
+  const run = {
+    id,
+    rootId: id,
+    kind,
+    origin: "resumed",
+    repo: ctx.repo,
+    task: brief,
+    issue: null,
+    status: "running",
+    step: 0,
+    startedAt: Date.now(),
+    attempt: 1,
+    harnessVersion: h.version,
+    transcript: [],
+    verify: [],
+    usage: {},
+    sessionId,
+    worktree: cwd,
+    baseSha: (await git(cwd, ["rev-parse", "HEAD"])).trim(),
+  };
+  runs.set(id, run);
+  run.intentDir = path.join(dataDir, "attempts", id, "intent");
+  fs.mkdirSync(path.dirname(run.intentDir), { recursive: true });
+  await git(path.dirname(ctx.intent.dir), [
+    "clone",
+    "-q",
+    ctx.intent.dir,
+    run.intentDir,
+  ]);
+  const intentEntries = graph.context(graph.loadGraph(ctx.intent), { text: brief }).map((entry) => ({ id: entry.id, title: entry.title, summary: `${entry.type}: ${entry.title}`, reason: entry.reason || "", source: "benana-intent", raw: entry }));
+  const entireContext = await entire.context(ctx.repoPath, brief);
+  run.contextBundle = { entries: [...intentEntries, ...entireContext.entries], ...(entireContext.errors?.length ? { errors: entireContext.errors } : {}) };
+  const hooks = hooksFor(run, emit, ctx);
+  hooks.say("system", `resumed ${kind} session ${sessionId} in ${cwd}`);
+  executeAttempt(run, h, brief, hooks);
+  return publicRun(run);
+}
+
+module.exports = {
+  allRuns,
+  continueRun,
+  diff,
+  get,
+  hydrate,
+  list,
+  resumeExternal,
+  retry,
+  start,
+  stop,
+  _test: {
+    executeAttempt,
+    failure,
+    gradeBasics,
+    agentCommand,
+    handleEvent,
+    proposeRecovery,
+    register: (run) => runs.set(run.id, run),
+    verify,
+  },
+};

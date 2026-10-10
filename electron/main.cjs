@@ -29,19 +29,32 @@ function readConfig() { try { return JSON.parse(fs.readFileSync(configFile, 'utf
 function writeConfig(c) { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(configFile, JSON.stringify(c, null, 2)); }
 
 async function openProject({ repo, repoPath }) {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo || '')) throw new Error('Repo must look like owner/name');
+  repo = String(repo || '').trim();
+  if (repo.includes('://')) {
+    const match = repo.match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/i);
+    if (!match) throw new Error('Repository must be owner/name or an HTTPS GitHub URL.');
+    repo = `${match[1]}/${match[2]}`;
+  }
+  repo = repo.replace(/\/$/, '').replace(/\.git$/, '');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Repository must be owner/name or an HTTPS GitHub URL.');
   const intent = await new RepoStore('intent', repo).init();
   const harnessStore = await new RepoStore('harness', repo).init();
   await harnessLib.ensure(harnessStore);
+  inbox.clear();
   ctx = { repo, repoPath: repoPath || '', intent, harnessStore };
+  agents.hydrate(repo);
   writeConfig({ ...readConfig(), last: { repo, repoPath } });
+  const openedRepo = repo;
   if (artifacts.configured()) {
     Promise.all([artifacts.pull(intent), artifacts.pull(harnessStore)])
-      .then(() => { log('synced intent + harness from Artifacts'); emit('graph-changed', {}); })
-      .catch((e) => log(`Artifacts sync: ${e.message}`, 'warn'));
+      .then(() => { if (ctx?.repo === openedRepo) { log('synced intent + harness from Artifacts'); emit('graph-changed', {}); } })
+      .catch((e) => { if (ctx?.repo === openedRepo) log(`Artifacts sync: ${e.message}`, 'warn'); });
   }
   startPolling();
-  return summary();
+  const opened = summary();
+  emit('project', opened);
+  emit('inbox', []);
+  return opened;
 }
 
 function summary() {
@@ -52,18 +65,22 @@ function summary() {
 
 async function ingest({ deep = false, max = 200 } = {}) {
   need();
+  const owner = ctx;
   log(`ingesting GitHub history for ${ctx.repo}…`);
-  const hist = await github.history(ctx.repo, { max });
+  const hist = await github.history(owner.repo, { max });
+  if (ctx !== owner) throw new Error('The open project changed during ingestion. Run ingestion again.');
   log(`${hist.issues.length} issues, ${hist.pulls.length} PRs fetched; extracting intent`);
-  const g = await extract(ctx.repo, hist, { deep, log });
-  graph.writeGraph(ctx.intent, g);
-  graph.writeEvent(ctx.intent, { type: 'ingest', source: 'github', issues: hist.issues.length, pulls: hist.pulls.length, at: Date.now() });
-  const sha = await ctx.intent.commit(`${deep ? 'deep ' : ''}extraction from GitHub: ${g.nodes.length} nodes, ${g.edges.length} edges`, 'extractor');
+  const g = await extract(owner.repo, hist, { deep, log });
+  if (ctx !== owner) throw new Error('The open project changed during ingestion. Run ingestion again.');
+  graph.writeGraph(owner.intent, g);
+  graph.writeEvent(owner.intent, { type: 'ingest', source: 'github', issues: hist.issues.length, pulls: hist.pulls.length, at: Date.now() });
+  const sha = await owner.intent.commit(`${deep ? 'deep ' : ''}extraction from GitHub: ${g.nodes.length} nodes, ${g.edges.length} edges`, 'extractor');
   log(sha ? `committed graph snapshot ${sha.slice(0, 7)}` : 'graph unchanged');
   if (artifacts.configured()) {
-    artifacts.push(ctx.intent).then((r) => log(`pushed to Artifacts ${artifacts.namespace()}/${r.name}`)).catch((e) => log(`Artifacts push: ${e.message}`, 'warn'));
-    artifacts.push(ctx.harnessStore).catch(() => {});
+    artifacts.push(owner.intent).then((r) => { if (ctx === owner) log(`pushed to Artifacts ${artifacts.namespace()}/${r.name}`); }).catch((e) => { if (ctx === owner) log(`Artifacts push: ${e.message}`, 'warn'); });
+    artifacts.push(owner.harnessStore).catch(() => {});
   }
+  if (ctx !== owner) throw new Error('The open project changed during ingestion.');
   emit('graph-changed', {});
   return summary();
 }
@@ -73,8 +90,10 @@ function startPolling() {
   clearInterval(pollTimer);
   const tick = async () => {
     if (!ctx) return;
+    const owner = ctx;
     try {
-      const issues = await github.openIssues(ctx.repo);
+      const issues = await github.openIssues(owner.repo);
+      if (ctx !== owner) return;
       for (const i of issues) {
         if (inbox.has(i.number)) continue;
         const auto = i.labels.some((l) => l.name === 'benana:auto');
@@ -92,9 +111,15 @@ function startPolling() {
 }
 
 function need() { if (!ctx) throw new Error('Open a project first'); }
+function scopedRun(id) {
+  need();
+  const run = agents.get(id, ctx.repo);
+  if (!run) throw new Error('unknown run for the open project');
+  return run;
+}
 
 const handlers = {
-  'config:get': () => ({ ...readConfig(), autoOpen: Boolean(process.env.BENANA_AUTOOPEN), env: {
+  'config:get': () => ({ ...readConfig(), autoOpen: process.env.BENANA_AUTOOPEN === '1', env: {
     cloudflare: artifacts.configured(), github: github.authenticated(), neatlogs: neatlogs.configured(), anthropic: Boolean(env('ANTHROPIC_API_KEY')),
   } }),
   'project:open': openProject,
@@ -112,34 +137,48 @@ const handlers = {
     emit('inbox', [...inbox.values()].sort((a, b) => b.at - a.at));
     return agents.start({ ctx, task, issue, agent }, emit);
   },
-  'run:list': () => agents.list(),
-  'run:get': ({ id }) => agents.get(id),
-  'run:stop': ({ id }) => agents.stop(id),
-  'run:brief': ({ id, text }) => { need(); return agents.continueRun(id, text, ctx, emit); },
-  'sessions:detect': ({ all } = {}) => sessions.detect(all || !ctx ? '' : ctx.repoPath),
-  'sessions:transcript': ({ kind, id }) => sessions.transcript(kind, id),
+  'run:list': () => agents.list(ctx?.repo),
+  'run:get': ({ id }) => scopedRun(id),
+  'run:stop': ({ id }) => { scopedRun(id); return agents.stop(id, emit); },
+  'run:brief': ({ id, text }) => { scopedRun(id); return agents.continueRun(id, text, ctx, emit); },
+  'run:retry': ({ id, recoveryId }) => { scopedRun(id); return agents.retry(id, recoveryId, ctx, emit); },
+  'run:diff': ({ id }) => { scopedRun(id); return agents.diff(id); },
+  'neatlogs:evidence': ({ id }) => neatlogs.evidence(scopedRun(id)),
+  'entire:overview': () => entire.overview(ctx?.repoPath),
+  'entire:context': ({ text }) => entire.context(ctx?.repoPath, text),
+  'entire:graph': () => entire.graph(ctx?.repoPath),
+  'sessions:detect': () => { need(); return ctx.repoPath ? sessions.detect(ctx.repoPath) : []; },
+  'sessions:transcript': ({ kind, id }) => { need(); return sessions.transcript(kind, id, ctx.repoPath); },
   'sessions:plan': () => { need(); return sessions.plan(ctx.intent.dir); },
   'sessions:install': () => { need(); return sessions.install(ctx.intent.dir); },
   'sessions:uninstall': () => sessions.uninstall(),
-  'sessions:resume': ({ kind, id, cwd, brief }) => { need(); return agents.resumeExternal({ ctx, kind, sessionId: id, cwd, brief }, emit); },
-  'improve:analyze': async ({ useLLM = true } = {}) => { need(); const r = await improve.analyze({ harnessStore: ctx.harnessStore, runs: agents.allRuns(), useLLM }); emit('proposals', improve.proposals(ctx.harnessStore)); return r; },
+  'sessions:resume': ({ kind, id, brief }) => {
+    need();
+    const session = sessions.resolveForRepo(kind, id, ctx.repoPath);
+    return agents.resumeExternal({ ctx, kind: session.kind, sessionId: session.id, cwd: session.cwd, brief }, emit);
+  },
+  'improve:analyze': async ({ useLLM = true } = {}) => { need(); const owner = ctx; const r = await improve.analyze({ harnessStore: owner.harnessStore, runs: agents.allRuns(owner.repo), useLLM }); if (ctx === owner) emit('proposals', improve.proposals(owner.harnessStore)); return r; },
   'improve:list': () => { need(); return improve.proposals(ctx.harnessStore); },
   'improve:decide': async ({ id, approve }) => {
     need();
-    const p = await improve.decide({ harnessStore: ctx.harnessStore, id, approve });
-    if (artifacts.configured()) artifacts.push(ctx.harnessStore).catch(() => {});
-    emit('proposals', improve.proposals(ctx.harnessStore));
-    emit('project', summary());
+    const owner = ctx;
+    const p = await improve.decide({ harnessStore: owner.harnessStore, id, approve });
+    if (artifacts.configured()) artifacts.push(owner.harnessStore).catch(() => {});
+    if (ctx === owner) {
+      emit('proposals', improve.proposals(owner.harnessStore));
+      emit('project', summary());
+    }
     return p;
   },
-  'improve:stats': () => improve.stats(agents.allRuns()),
+  'improve:stats': () => improve.stats(agents.allRuns(ctx?.repo)),
   'harness:update': async (patch) => {
     need();
-    const h = harnessLib.load(ctx.harnessStore);
+    const owner = ctx;
+    const h = harnessLib.load(owner.harnessStore);
     const next = { ...h, ...patch, graders: { ...h.graders, ...(patch.graders || {}) }, version: h.version + 1 };
-    ctx.harnessStore.write('harness.json', next);
-    await ctx.harnessStore.commit(`harness v${next.version}: manual edit`, 'human');
-    emit('project', summary());
+    owner.harnessStore.write('harness.json', next);
+    await owner.harnessStore.commit(`harness v${next.version}: manual edit`, 'human');
+    if (ctx === owner) emit('project', summary());
     return next;
   },
   'status:integrations': async () => ({
@@ -160,7 +199,7 @@ for (const [channel, fn] of Object.entries(handlers)) {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1480, height: 920, minWidth: 1100, minHeight: 680, backgroundColor: '#000000',
+    width: 1480, height: 920, minWidth: 1100, minHeight: 680, backgroundColor: '#f4f1ea',
     title: 'benana', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });

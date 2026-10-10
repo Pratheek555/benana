@@ -80,6 +80,24 @@ const codexAdapter = {
 const adapters = [claudeAdapter, codexAdapter];
 const index = new Map();
 
+function withinRepo(repoPath, cwd) {
+  const relative = path.relative(path.resolve(repoPath), path.resolve(cwd));
+  return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
+}
+
+function resolveForRepo(kind, id, repoPath) {
+  if (!repoPath) throw new Error('Open a local repository before resuming a session.');
+  detect(repoPath);
+  const session = index.get(`${kind}:${id}`);
+  if (!session) throw new Error('This session is no longer available. Refresh detected sessions.');
+  const description = session.adapter.describe(session.file);
+  const repo = fs.realpathSync(repoPath);
+  const cwd = fs.realpathSync(description.cwd);
+  if (description.id !== id || !withinRepo(repo, cwd))
+    throw new Error('The selected session does not belong to the open repository.');
+  return { kind: session.kind, id: description.id, cwd };
+}
+
 // Detect sessions touched in the last day, optionally only those inside a given repo path.
 function detect(repoPath) {
   const now = Date.now();
@@ -91,7 +109,7 @@ function detect(repoPath) {
       if (now - st.mtimeMs > RECENT_MS) continue;
       try {
         const d = a.describe(file);
-        if (repoPath && d.cwd && !d.cwd.startsWith(repoPath)) continue;
+        if (repoPath && d.cwd && !withinRepo(fs.realpathSync(repoPath), fs.realpathSync(d.cwd))) continue;
         if (repoPath && !d.cwd) continue;
         const last = d.messages.at(-1);
         const s = { id: d.id, kind: a.kind, origin: 'attached', cwd: d.cwd, file, updatedAt: st.mtimeMs, active: now - st.mtimeMs < ACTIVE_MS, lastMessage: last?.text?.slice(0, 160) || '', title: d.messages.find((m) => m.role === 'user')?.text.slice(0, 80) || d.id };
@@ -103,7 +121,8 @@ function detect(repoPath) {
   return out.sort((x, y) => y.updatedAt - x.updatedAt).slice(0, 20);
 }
 
-function transcript(kind, id) {
+function transcript(kind, id, repoPath) {
+  resolveForRepo(kind, id, repoPath);
   const s = index.get(`${kind}:${id}`);
   if (!s) return [];
   return s.adapter.messages(readLines(s.file)).slice(-80);
@@ -146,4 +165,4 @@ async function uninstall() {
 
 const stripBlock = (s) => s.replace(/\n*# >>> benana[\s\S]*?# <<< benana\n?/g, '\n');
 
-module.exports = { detect, transcript, plan, install, uninstall };
+module.exports = { detect, transcript, plan, install, uninstall, resolveForRepo, withinRepo };
