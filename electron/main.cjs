@@ -8,6 +8,7 @@ const { RepoStore } = require('./lib/store.cjs');
 const github = require('./lib/github.cjs');
 const { extract } = require('./lib/extract.cjs');
 const graph = require('./lib/graph.cjs');
+const codeGraph = require('./lib/code-graph.cjs');
 const harnessLib = require('./lib/harness.cjs');
 const agents = require('./lib/agents.cjs');
 const sessions = require('./lib/sessions.cjs');
@@ -138,7 +139,22 @@ const handlers = {
   'graph:ingest': ingest,
   'graph:load': async ({ sha } = {}) => { need(); return sha ? graph.loadGraphAt(ctx.intent, sha) : graph.loadGraph(ctx.intent); },
   'graph:history': async () => { need(); return ctx.intent.log(); },
-  'graph:context': ({ text, files }) => { need(); return graph.context(graph.loadGraph(ctx.intent), { text, files }); },
+  'graph:context': async ({ text, files = [] }) => {
+    need();
+    const code = files.length ? await codeGraph.snapshot(ctx.repoPath) : { links: [] };
+    return graph.context(graph.loadGraph(ctx.intent), { text, files, related: codeGraph.related(code, files) });
+  },
+  'graph:summary': () => { need(); return graph.summary(graph.loadGraph(ctx.intent)); },
+  'graph:node': ({ id }) => { need(); const n = graph.node(graph.loadGraph(ctx.intent), id); if (!n) throw new Error(`no node ${id}`); return n; },
+  'graph:neighborhood': ({ id, depth = 1 }) => { need(); return graph.neighborhood(graph.loadGraph(ctx.intent), id, Math.min(depth, 3)); },
+  'graph:why': async ({ file }) => { need(); return codeGraph.why(graph.loadGraph(ctx.intent), await codeGraph.snapshot(ctx.repoPath), file); },
+  'graph:diff': async ({ from, to }) => {
+    need();
+    const at = (sha) => (sha ? graph.loadGraphAt(ctx.intent, sha) : graph.loadGraph(ctx.intent));
+    return graph.diff(await at(from), await at(to));
+  },
+  // Entire's code map (files + import/call/co-change links) with intent counts on each file.
+  'graph:code': async () => { need(); return codeGraph.overlay(graph.loadGraph(ctx.intent), await codeGraph.snapshot(ctx.repoPath)); },
   'inbox:list': () => [...inbox.values()].sort((a, b) => b.at - a.at),
   'run:start': async ({ task, issueNumber, agent }) => {
     need();

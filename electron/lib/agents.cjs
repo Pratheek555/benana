@@ -6,6 +6,7 @@ const graph = require("./graph.cjs");
 const harnessLib = require("./harness.cjs");
 const artifacts = require("./artifacts.cjs");
 const entire = require("./entire.cjs");
+const codeGraph = require("./code-graph.cjs");
 const { runCommand, spawnExecutable, terminateProcessTree } = require("./processes.cjs");
 const attemptWorkspace = require("./attempt-workspace.cjs");
 const { agentCommand, handleEvent } = require("./providers.cjs");
@@ -167,18 +168,23 @@ async function prepareRun({ ctx, task, issue, agent, parent, recovery, harness, 
     await git(run.intentDir, ["config", "user.name", `agent-${id}`]);
     await git(run.intentDir, ["config", "user.email", `${id}@benana.local`]);
     if (run.status === "stopped") return { run, failed: true };
+    // Entire finds the code the task is about; the intent graph then supplies the decisions and
+    // dead ends on those files and on the files they import or change together with.
+    const entireContext = await entire.context(repoPath, task);
+    if (run.status === "stopped") return { run, failed: true };
+    const files = [...new Set(entireContext.entries.map((entry) => entry.file).filter(Boolean))];
+    const code = files.length ? await codeGraph.snapshot(repoPath) : { links: [] };
+    run.contextFiles = files;
     const intentEntries = graph
-      .context(graph.loadGraph(intent), { text: task })
+      .context(graph.loadGraph(intent), { text: task, files, related: codeGraph.related(code, files) })
       .map((entry) => ({
         id: entry.id,
         title: entry.title,
         summary: `${entry.type}: ${entry.title}`,
-        reason: entry.reason || "",
+        reason: entry.reason || (entry.via === "related-file" ? "touches a file connected to this task's code" : ""),
         source: "benana-intent",
         raw: entry,
       }));
-    const entireContext = await entire.context(repoPath, task);
-    if (run.status === "stopped") return { run, failed: true };
     run.contextBundle = {
       entries: [...intentEntries, ...entireContext.entries],
       ...(entireContext.errors?.length ? { errors: entireContext.errors } : {}),

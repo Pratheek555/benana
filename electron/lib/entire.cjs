@@ -39,34 +39,25 @@ function sourcedItems(value) {
   return items(value).map((item) => ({ ...item, source: "entire", raw: item }));
 }
 function searchEntries(raw) {
-  return items(raw).map((match, index) => ({
-    id: String(match.id || match.symbol?.id || `entire_${index}`),
-    title: String(
-      match.title ||
-        match.name ||
-        match.symbol?.name ||
-        match.file ||
-        match.path ||
-        `Entire match ${index + 1}`,
-    ),
-    summary: String(
-      match.summary ||
-        match.snippet ||
-        match.context ||
-        match.text ||
-        match.content ||
-        JSON.stringify(match),
-    ).slice(0, 4000),
-    reason: String(
-      match.reason ||
-        match.explanation ||
-        match.rank_reason ||
-        match.ranking?.reason ||
-        "",
-    ),
-    source: "entire",
-    raw: match,
-  }));
+  return items(raw).map((match, index) => {
+    const file = match.file_path || match.file || match.path || match.symbol?.file_path;
+    const symbol = match.symbol_name || match.qualified_name || match.name || match.symbol?.name;
+    const lines = match.start_line ? `:${match.start_line}${match.end_line && match.end_line !== match.start_line ? `-${match.end_line}` : ""}` : "";
+    return {
+      id: String(match.id || match.symbol_id || match.symbol?.id || `entire_${index}`),
+      title: String(match.title || (symbol && file ? `${symbol} (${file}${lines})` : symbol || file || `Entire match ${index + 1}`)),
+      summary: String(
+        match.summary || match.snippet || match.context || match.text || match.content || JSON.stringify(match),
+      ).slice(0, 4000),
+      reason: String(
+        match.reason || match.explanation || match.rank_reason || match.ranking?.reason ||
+          (match.signals?.length ? `matched on ${match.signals.join(", ")}` : ""),
+      ),
+      file: file || undefined,
+      source: "entire",
+      raw: match,
+    };
+  });
 }
 function snapshotGraph(text) {
   const nodes = [];
