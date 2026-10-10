@@ -13,9 +13,11 @@ import {
 } from "./components/workspace/SecondaryViews.jsx";
 import { Badge } from "./components/workspace/ui.jsx";
 import { useWorkspace } from "./hooks/useWorkspace.js";
+import ModStudio from "./components/studio/ModStudio.jsx";
 
 export default function App() {
   const [deepIngest, setDeepIngest] = React.useState(false);
+  const [studioMode, setStudioMode] = React.useState(!isDemo);
   const workspace = useWorkspace();
   const {
     project,
@@ -42,6 +44,8 @@ export default function App() {
   } = workspace;
 
   if (!hasDesktopBridge() && !isDemo) return <RuntimeSetup />;
+  if (studioMode)
+    return <ModStudio onOpenWorkspace={() => setStudioMode(false)} />;
   if (!project) return <ProjectSetup onOpen={setProject} />;
 
   const center =

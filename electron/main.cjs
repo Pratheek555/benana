@@ -15,6 +15,8 @@ const improve = require('./lib/improve.cjs');
 const neatlogs = require('./lib/neatlogs.cjs');
 const entire = require('./lib/entire.cjs');
 const artifacts = require('./lib/artifacts.cjs');
+const game = require('./lib/game/index.cjs');
+const studio = require('./lib/studio/index.cjs');
 
 let win;
 let ctx = null; // { repo, repoPath, intent, harnessStore }
@@ -188,6 +190,9 @@ const handlers = {
   }),
   'open-external': (url) => shell.openExternal(url),
   'open-path': (p) => shell.openPath(p),
+  // Mod Studio: each track registers its channels in its own module (docs/hackathon/PLAN.md).
+  ...game.handlers(emit),
+  ...studio.handlers({ emit, log }),
 };
 
 for (const [channel, fn] of Object.entries(handlers)) {
@@ -215,3 +220,4 @@ function createWindow() {
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => { game.stop().catch(() => {}); });
