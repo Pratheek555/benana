@@ -1,0 +1,4 @@
+name: LaunchSword
+version: 1.0.0
+main: dev.benana.launchsword.LaunchSword
+api-version: '1.21'

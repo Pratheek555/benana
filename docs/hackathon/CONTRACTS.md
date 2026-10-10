@@ -14,7 +14,7 @@ The spec agent (B) writes it and the playtester (A) reads it.
   "setup": [
     "time set day",
     "give @bot golden_sword",
-    "summon zombie ^ ^ ^3 {NoAI:1b}"
+    "summon husk ^ ^ ^3 {PersistenceRequired:1b}"
   ],
   "checks": [
     {
@@ -35,6 +35,8 @@ The spec agent (B) writes it and the playtester (A) reads it.
 
 - `setup` entries are server console commands without a leading `/`. `@bot` is replaced with the bot's username, and the commands run as the bot so that `^`/`~` coordinates are relative to it.
 - `expect` must describe something the playtester tools can observe: entity position or velocity, inventory, chat, server log, health.
+- Don't summon mobs with `NoAI:1b`: they ignore velocity and knockback, so movement checks always fail. Prefer husks to zombies because zombies burn in daylight. Add `PersistenceRequired:1b` so mobs don't despawn.
+- Measured on the `fixtures/launch-sword` plugin: the correct build gives a max upward velocity of **1.6** (the mob rises about 13 blocks). The buggy build, where vanilla knockback overwrites the launch, gives **0.4**. Thresholds around 0.8 separate the two cleanly.
 
 ## Verdict: `verdict.json`
 
@@ -100,6 +102,8 @@ game.mockVerdict(testPlan, attempt)                     // mock only: attempt 1 
 
 ## `minecraft` MCP server: `electron/mcp-minecraft.cjs` (A)
 
+Runtime facts: the bot (`BenanaBot`) and viewer run in a child process under **system Node 22+**, because Mineflayer doesn't run on Electron 33's Node 20. A plugin swap takes about 16 seconds because it restarts the server. The world is a superflat at y=64, and the viewer is at `http://127.0.0.1:3007`.
+
 This stdio MCP server forwards calls to the bot's local control API (`BENANA_GAME_URL`). The bot lives in the Electron main process, so the viewer and connection survive between sessions. Env: `BENANA_GAME_URL`, `BENANA_VERDICT_FILE`, `BENANA_TEST_PLAN`, `BENANA_RUN_ID`.
 
 | Tool | Purpose |
@@ -110,8 +114,8 @@ This stdio MCP server forwards calls to the bot's local control API (`BENANA_GAM
 | `equip(item)` | Put an item in hand |
 | `look_at(entityId \| position)` | Aim the bot |
 | `move_to(entityId \| position, range?)` | Pathfind toward a target |
-| `attack(entityId)` | Left-click an entity |
-| `use_item(entityId?)` | Right-click, optionally on an entity |
+| `attack(entityId, trackTicks?)` | Left-click an entity. Use `trackTicks` to sample it right after the hit |
+| `use_item(entityId?, trackTicks?)` | Right-click, optionally on an entity |
 | `track_entity(entityId, ticks?)` | Per-tick position and velocity samples |
 | `wait_ticks(ticks)` | Let the game advance |
 | `chat(message)` | Speak or run a player command (`/launch`) |

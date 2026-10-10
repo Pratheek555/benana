@@ -19,6 +19,7 @@ export default function GamePane() {
   const [error, setError] = React.useState("");
   const [lines, setLines] = React.useState([]);
   const [actions, setActions] = React.useState([]);
+  const [demo, setDemo] = React.useState(false);
 
   React.useEffect(() => {
     call("game:status").then(setStatus).catch((e) => setError(e.message));
@@ -54,6 +55,18 @@ export default function GamePane() {
         <span className={`game-dot ${status?.bot || "offline"}`} />
         <span>Bot: {LABEL[status?.bot] || "Unknown"}</span>
         {status?.mock && <span className="game-tag">Mock runtime</span>}
+        {status?.bot === "online" && (
+          <button
+            className="game-btn ghost"
+            onClick={() =>
+              call("game:demo", { on: !demo })
+                .then((r) => setDemo(r.demo))
+                .catch((e) => setError(e.message))
+            }
+          >
+            {demo ? "Stop demo" : "Demo hits"}
+          </button>
+        )}
         <button className="game-btn" disabled={busy} onClick={toggle}>
           {busy ? "Working…" : running ? "Stop" : "Start game"}
         </button>

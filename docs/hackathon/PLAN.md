@@ -49,6 +49,13 @@ Rules:
 - **Dependencies**: add them in a separate small commit and merge it to `main` immediately. On a lockfile conflict, take `main`'s version and run `npm install` again.
 - **Contract changes**: discuss them first, then update `CONTRACTS.md` and the mock in one commit.
 
+### Machine setup (both)
+
+- Node 22+ on `PATH` (the bot host runs on system Node), JDK 21, and Maven 3.9.
+- If `npx electron .` crashes with `Cannot read properties of undefined (reading 'handle')`, your shell has `ELECTRON_RUN_AS_NODE` set. Unset it first.
+- `BENANA_GAME_AUTOSTART=1` starts the game when the app opens, and `BENANA_GAME_DEMO=1` turns on attract mode (the bot keeps launching husks; useful for X clips).
+- The game data lives in `~/.benana/game/server`. Paper is downloaded on first start (51 MB).
+
 ### Git workflow
 
 - Branches: `game/<topic>` (A), `studio/<topic>` (B). Keep them short-lived and merge to `main` at least every sync point.

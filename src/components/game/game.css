@@ -48,6 +48,13 @@
   color: #fff;
   cursor: pointer;
 }
+.game-btn.ghost {
+  background: transparent;
+  color: #20211f;
+}
+.game-btn.ghost + .game-btn {
+  margin-left: 0;
+}
 .game-btn:disabled {
   opacity: 0.6;
   cursor: default;
