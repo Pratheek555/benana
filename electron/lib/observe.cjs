@@ -105,13 +105,15 @@ function observe(text, { pack, command, exitCode, label } = {}) {
 }
 
 // Online Context Compact cost gate, applied at our natural boundary: a grader retry.
-// Resuming re-reads the whole session (mostly from cache); a fresh session pays for a short
-// handoff, but loses the warm cache. Compact only if projected savings beat the rewrite cost
-// by a margin.
-function compactGate({ contextTokens = 0, expectedTurns = 4, handoffTokens = 1500, cacheReadPrice = 0.1, cacheWritePrice = 1.25, margin = 1.3 }) {
+// Resuming re-reads the whole session each turn (mostly from cache). A fresh session pays for
+// a handoff plus re-reading part of what it knew (files, errors) at cache-write price, and
+// loses the warm cache. Compact only when projected savings beat that by a margin, and never
+// below a context floor where resuming is always cheap enough.
+function compactGate({ contextTokens = 0, expectedTurns = 8, handoffTokens = 2000, rebuildFraction = 0.3, minContextTokens = 80000, cacheReadPrice = 0.1, cacheWritePrice = 1.25, margin = 1.3 }) {
   const resume = contextTokens * expectedTurns * cacheReadPrice;
-  const fresh = handoffTokens * cacheWritePrice + handoffTokens * (expectedTurns - 1) * cacheReadPrice;
-  return { compact: resume > fresh * margin, resume: Math.round(resume), fresh: Math.round(fresh) };
+  const fresh0 = handoffTokens + contextTokens * rebuildFraction;
+  const fresh = fresh0 * cacheWritePrice + fresh0 * (expectedTurns - 1) * cacheReadPrice;
+  return { compact: contextTokens >= minContextTokens && resume > fresh * margin, resume: Math.round(resume), fresh: Math.round(fresh) };
 }
 
 module.exports = { reduce, verifyReceipt, renderReceipt, extractEvidence, Pack, observe, compactGate, REDUCE_MIN, PACK_MIN };

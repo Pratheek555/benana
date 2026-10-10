@@ -46,5 +46,6 @@ test('observe prefers a receipt over a handle', () => {
 
 test('compact gate only fires when the context is large', () => {
   assert.strictEqual(compactGate({ contextTokens: 3000 }).compact, false);
-  assert.strictEqual(compactGate({ contextTokens: 120000 }).compact, true);
+  assert.strictEqual(compactGate({ contextTokens: 30000 }).compact, false); // a normal retry resumes
+  assert.strictEqual(compactGate({ contextTokens: 150000 }).compact, true);
 });
