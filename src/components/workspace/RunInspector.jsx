@@ -1,18 +1,60 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { call } from "../../api.js";
 import Icon from "../Icon.jsx";
 import { Badge } from "./ui.jsx";
+import ToolGraph from "./ToolGraph.jsx";
+
+import InspectorFlow from "./InspectorFlow.jsx";
+import {
+  mockChangeGraph,
+  mockCheckGraph,
+} from "../../data/mockInspectorData.js";
 
 export function Checks({ run, project, notify = () => {} }) {
   const saved = project.harness?.graders?.testCommand || "";
   const [testCommand, setTestCommand] = useState(saved);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
   useEffect(() => setTestCommand(saved), [saved]);
-  const results = run.verify?.at(-1)?.results || [];
+
+  const results = run?.verify?.at(-1)?.results || [];
+  const isMock = results.length === 0;
+
+  const checkItems = useMemo(() => {
+    if (results.length) {
+      const actualItems = results.map((item, index) => ({
+        id: `real-check-${item.grader || index}`,
+        title: item.grader || `Check ${index + 1}`,
+        type: "verification",
+        status: item.pass ? "success" : "failed",
+        description: item.detail || (item.pass ? "Check passed" : "Check failed"),
+        detail: item.detail || "",
+      }));
+
+      return [
+        {
+          id: "real-verification-start",
+          title: "Verification",
+          type: "run",
+          status: actualItems.every((item) => item.status === "success")
+            ? "success"
+            : actualItems.some((item) => item.status === "failed")
+              ? "failed"
+              : "completed",
+          description: `${actualItems.length} verification checks recorded`,
+        },
+        ...actualItems,
+      ];
+    }
+
+    return mockCheckGraph;
+  }, [results]);
+
   const save = async () => {
     setBusy(true);
     setError("");
+
     try {
       await call("harness:update", {
         graders: { testCommand: testCommand.trim() },
@@ -25,46 +67,52 @@ export function Checks({ run, project, notify = () => {} }) {
       setBusy(false);
     }
   };
+
   return (
-    <>
-      <h3>Repository checks</h3>
-      {results.map((item) => (
-        <div className="check-row" key={item.grader}>
-          <span className={item.pass ? "pass" : "fail"}>
-            <Icon name={item.pass ? "check" : "close"} />
-          </span>
-          <div>
-            <strong>{item.grader}</strong>
-            <small>{item.detail}</small>
+    <div className="checks-workspace">
+      <InspectorFlow
+        title="Verification pipeline"
+        subtitle="Follow the checks from execution through the final result."
+        items={checkItems}
+        mock={isMock}
+      />
+
+      <section className="grader-settings">
+        <h3>Grader settings</h3>
+
+        {isMock && (
+          <div className="notice">
+            Showing sample verification data. Real results will appear after a
+            run has recorded its checks.
           </div>
-        </div>
-      ))}
-      {!results.length && (
-        <div className="plain-card">Checks have not run for this attempt.</div>
-      )}
-      <h3>Grader settings</h3>
-      <label className="setting">
-        <span>Test command</span>
-        <input
-          value={testCommand}
-          onChange={(event) => setTestCommand(event.target.value)}
-          placeholder="Required to verify"
-        />
-      </label>
-      <button
-        className="primary save-setting"
-        disabled={busy || testCommand === saved}
-        onClick={save}
-      >
-        {busy ? "Saving..." : "Save test command"}
-      </button>
-      {error && <div className="notice error">{error}</div>}
-      {!testCommand && (
-        <div className="notice error">
-          A missing test command cannot produce a verified result.
-        </div>
-      )}
-    </>
+        )}
+
+        <label className="setting">
+          <span>Test command</span>
+          <input
+            value={testCommand}
+            onChange={(event) => setTestCommand(event.target.value)}
+            placeholder="e.g. npm test"
+          />
+        </label>
+
+        <button
+          className="primary save-setting"
+          disabled={busy || testCommand === saved}
+          onClick={save}
+        >
+          {busy ? "Saving..." : "Save test command"}
+        </button>
+
+        {error && <div className="notice error">{error}</div>}
+
+        {!testCommand && (
+          <div className="notice error">
+            A missing test command cannot produce a verified result.
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -149,6 +197,39 @@ export default function RunInspector({ run, project, integrations, notify }) {
   const [evidence, setEvidence] = useState(null);
   const [opening, setOpening] = useState(false);
   const refreshKey = `${run?.id || ""}:${run?.status || ""}:${run?.sessionId || ""}:${(run?.filesChanged || run?.files || []).join("|")}`;
+
+  const changeGraphItems = useMemo(() => {
+  const files = diff?.files || [];
+
+  if (files.length) {
+    return [
+      {
+        id: "actual-changes",
+        title: "Changed files",
+        type: "run",
+        status: "completed",
+        description: `${files.length} file${files.length === 1 ? "" : "s"} reported by this run`,
+      },
+      ...files.map((file, index) => ({
+        id: `actual-file-${index}`,
+        title: String(file),
+        type: "file",
+        status: "changed",
+        description: "Changed in this run's worktree",
+      })),
+      {
+        id: "actual-review",
+        title: "Review diff",
+        type: "review",
+        status: "pending",
+        description: "Inspect the patch before accepting the changes",
+      },
+    ];
+  }
+
+  return mockChangeGraph;
+}, [diff]);
+
   useEffect(() => {
     let live = true;
     setDiff(null);
@@ -183,7 +264,7 @@ export default function RunInspector({ run, project, integrations, notify }) {
   return (
     <aside className="inspector">
       <div className="inspector-tabs">
-        {["context", "changes", "checks"].map((item) => (
+        {["context", "tools", "changes", "checks"].map((item) => (
           <button
             key={item}
             className={tab === item ? "active" : ""}
@@ -194,7 +275,7 @@ export default function RunInspector({ run, project, integrations, notify }) {
         ))}
       </div>
       <div className="inspector-body">
-        {!run ? (
+        {!run && tab === "context" ? (
           <div className="empty-state">
             <Icon name="file" size={22} />
             <strong>Run details</strong>
@@ -251,41 +332,68 @@ export default function RunInspector({ run, project, integrations, notify }) {
             <h3>Evidence source</h3>
             <TraceEvidence evidence={evidence} />
           </>
+        ) : tab === "tools" ? (
+          <div style={{ flex: 1, display: 'flex', minHeight: 0, width: '100%', borderRadius: '12px', overflow: 'hidden' }}>
+            <ToolGraph />
+          </div>
         ) : tab === "changes" ? (
-          <>
-            <h3>Changed files</h3>
-            {diff?.error && <div className="notice error">{diff.error}</div>}
-            {diff?.files?.map((file) => (
-              <div className="file-row" key={file}>
-                <Icon name="file" />
-                <span>{file}</span>
-              </div>
-            ))}
-            <pre className="diff">{diff?.diff || "No diff is available."}</pre>
-            {run.worktree && (
-              <div className="plain-card worktree-card">
-                <span>{run.origin === "resumed" ? "These changes are in the resumed session's original checkout." : "Review these changes in the run worktree."}</span>
-                <code>{run.worktree}</code>
-                <button
-                  disabled={opening}
-                  onClick={async () => {
-                    setOpening(true);
-                    try {
-                      const message = await call("open-path", run.worktree);
-                      if (message) throw new Error(message);
-                    } catch (error) {
-                      notify(error.message, "error");
-                    } finally {
-                      setOpening(false);
-                    }
-                  }}
-                >
-                  {opening ? "Opening..." : run.origin === "resumed" ? "Open checkout" : "Open worktree"}
-                </button>
-              </div>
-            )}
-          </>
-        ) : (
+  <>
+    <InspectorFlow
+      title="Change review"
+      subtitle="Files reported by the run and the review step."
+      items={changeGraphItems}
+      mock={!diff?.files?.length}
+    />
+
+    <h3>Changed files</h3>
+    {!diff && (
+      <div className="plain-card">Loading diff information...</div>
+    )}
+    {diff?.error && <div className="notice error">{diff.error}</div>}
+
+    {diff?.files?.map((file) => (
+      <div className="file-row" key={file}>
+        <Icon name="file" />
+        <span>{file}</span>
+      </div>
+    ))}
+
+    <pre className="diff">
+      {diff?.diff || "No diff is available."}
+    </pre>
+
+    {run?.worktree && (
+      <div className="plain-card worktree-card">
+        <span>
+          {run?.origin === "resumed"
+            ? "These changes are in the resumed session's original checkout."
+            : "Review these changes in the run worktree."}
+        </span>
+        <code>{run.worktree}</code>
+        <button
+          disabled={opening}
+          onClick={async () => {
+            setOpening(true);
+            try {
+              const message = await call("open-path", run.worktree);
+              if (message) throw new Error(message);
+            } catch (error) {
+              notify(error.message, "error");
+            } finally {
+              setOpening(false);
+            }
+          }}
+        >
+          {opening
+            ? "Opening..."
+            : run?.origin === "resumed"
+              ? "Open checkout"
+              : "Open worktree"}
+        </button>
+      </div>
+    )}
+  </>
+) : (
           <Checks run={run} project={project} notify={notify} />
         )}
       </div>
