@@ -37,7 +37,7 @@ function agentCommand(run, harness, prompt) {
     "-p", "--output-format", "stream-json", "--verbose", "--mcp-config", mcpFile,
     "--append-system-prompt", harnessLib.systemPrompt(harness),
     "--permission-mode", "acceptEdits", "--allowedTools",
-    "mcp__benana-intent__intent_context,mcp__benana-intent__intent_check,mcp__benana-intent__intent_record,Read,Edit,Write,Glob,Grep,Bash",
+    "mcp__benana-intent__intent_context,mcp__benana-intent__intent_check,mcp__benana-intent__intent_record,mcp__benana-intent__intent_why,Read,Edit,Write,Glob,Grep,Bash",
   ];
   if (run.sessionId) args.push("--resume", run.sessionId);
   return { cmd: "claude", args, stdin: prompt };

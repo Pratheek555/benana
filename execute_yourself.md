@@ -32,7 +32,8 @@ benana reads `.env` at the repo root (copy `.env.example` to start).
 | `CLOUDFLARE_ACCOUNT_ID` | no | Otherwise it is read from the token |
 | `ARTIFACTS_NAMESPACE` | no | Default `benana-dev` |
 | `GITHUB_TOKEN` | no | Falls back to `gh auth token` |
-| `NEATLOGS_API_KEY` + `NEATLOGS_PROJECT_ID` | no | Reads traces linked to the agent session and recent project traces for analysis. Use a service-account token. |
+| `NEATLOGS_API_KEY` | no | SDK project key. Exports a trace for every agent run, extraction and analyst pass |
+| `NEATLOGS_TOKEN` + `NEATLOGS_PROJECT_ID` | no | Service-account token so the L4 analyst can read traces back (the SDK key can't) |
 | `NEATLOGS_REGION=eu` | no | EU Neatlogs host |
 | `BENANA_DATA_DIR` | no | Local data, default `~/.benana` |
 
@@ -71,8 +72,14 @@ The **Benana intent graph** view retains GitHub history extraction, node details
 
 ## 5. Neatlogs and Entire
 
-- Configure Neatlogs' coding-agent instrumentation using its [integration documentation](https://docs.neatlogs.com/integrations). Set `NEATLOGS_API_KEY` and `NEATLOGS_PROJECT_ID` for the read API. The application attributes a trace to a run only when the reported agent session ID matches. An API connection alone does not prove trace ingestion. Local process and grader evidence have separate labels.
-- Enable Entire in your checkout using its [setup documentation](https://docs.entire.io/quickstart). Install the graph plugin for repository relationships. Checkpoint history and session metadata can remain useful without the graph plugin. Missing tooling, unrecognized output, and empty graph exports have explicit unavailable states.
+- **Neatlogs tracing** is built in (`electron/lib/tracing.cjs`, Neatlogs TypeScript SDK). With `NEATLOGS_API_KEY` set, each entry point exports one trace:
+  - `agent-run`: WORKFLOW → one AGENT span per attempt (model and token counts from the agent CLI) → TOOL spans for each tool call → GUARDRAIL spans for each grader
+  - `session-resume` and `agent-brief`: the same, for resumed or steered sessions
+  - `intent-extraction`: GitHub ingest, with an LLM span for deep extraction
+  - `harness-analyst`: the L4 pass, with an LLM span for the proposal
+
+  Check the pipeline with `npm exec --offline --no -- neatlogs doctor --local --json` and `... doctor --probe --json` (with `.env` exported). Add `NEATLOGS_TOKEN` (service account) to let the L4 analyst read traces back.
+- **Entire:** run `entire enable` in your checkout. Benana copies the untracked `.entire/.claude/.codex` hook config into each run's worktree and commits passing runs on `benana/<id>`, so Entire attaches a checkpoint; the id is stored on the run and its AgentRun node. Entire context is also sent to the agent with the task. Install Entire's graph plugin for repository relationships; checkpoint history and session metadata still work without it on the list (see below).
 - The sample-data browser demo at `http://127.0.0.1:5199/?demo=1` is isolated from live agents and partner services. Its evidence is labeled as demo data and does not satisfy the hackathon's partner usage requirement.
 
 ## 6. Use the intent tools without the app

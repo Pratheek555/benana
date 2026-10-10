@@ -4,16 +4,41 @@ const harnessLib = require('./harness.cjs');
 const { askClaude } = require('./llm.cjs');
 const neatlogs = require('./neatlogs.cjs');
 
-function stats(runs) {
-  const done = runs.filter((r) => r.verify?.length);
+// A task is a chain of runs: the first run plus any approved recovery retries (same rootId).
+// Older records kept retries inside one run, as extra verify entries; both shapes count the same.
+function summarize(done) {
   const fails = {};
   for (const r of done) for (const v of r.verify) for (const x of v.results) if (!x.pass) fails[x.grader] = (fails[x.grader] || 0) + 1;
+  const chains = new Map();
+  for (const r of done) chains.set(r.rootId || r.id, [...(chains.get(r.rootId || r.id) || []), r]);
+  let passed = 0, firstAttemptPassed = 0, attempts = 0;
+  for (const chain of chains.values()) {
+    chain.sort((a, b) => (a.attempt || 1) - (b.attempt || 1));
+    if (chain.some((r) => r.status === 'passed')) passed += 1;
+    if (chain[0].verify[0].results.every((x) => x.pass)) firstAttemptPassed += 1;
+    attempts += chain.reduce((t, r) => t + r.verify.length, 0);
+  }
+  const cost = done.reduce((t, r) => t + (r.usage?.costUsd || 0), 0);
   return {
+    tasks: chains.size,
     runs: done.length,
-    passed: done.filter((r) => r.status === 'passed').length,
-    retries: runs.filter((r) => r.retryOf).length,
+    passed,
+    firstAttemptPassed,
+    retries: done.filter((r) => r.retryOf).length + done.filter((r) => r.verify.length > 1).length,
+    avgAttempts: chains.size ? +(attempts / chains.size).toFixed(2) : 0,
+    costUsd: +cost.toFixed(3),
     fails,
   };
+}
+
+// Overall numbers plus the same numbers per harness version, so a change can be judged.
+function stats(runs) {
+  const done = runs.filter((r) => r.verify?.length);
+  const byVersion = {};
+  for (const v of [...new Set(done.map((r) => r.harnessVersion))].sort((a, b) => a - b)) {
+    byVersion[`v${v}`] = summarize(done.filter((r) => r.harnessVersion === v));
+  }
+  return { ...summarize(done), byVersion };
 }
 
 async function analyze({ harnessStore, runs, useLLM = true }) {
@@ -27,7 +52,7 @@ async function analyze({ harnessStore, runs, useLLM = true }) {
       task: r.task.slice(0, 200), status: r.status, attempt: r.attempt,
       failures: r.verify.flatMap((v) => v.results.filter((x) => !x.pass).map((x) => `${x.grader}: ${String(x.detail).slice(0, 160)}`)),
     }));
-    proposal = await askClaude(`You improve a coding-agent harness. Current harness:\n${JSON.stringify(h, null, 2)}\n\nRun stats: ${JSON.stringify(s)}\nRecent runs: ${JSON.stringify(sample, null, 2)}\nNeatlogs traces available: ${traces.length}\n\nPropose ONE small change that would most reduce failures. Reply JSON only:\n{"title": "...", "rationale": "...", "patch": {"addRules": ["..."], "graders": {}}}\nOnly include grader keys you want to change. Never loosen a grader just to make runs pass.`, { json: true }).catch(() => null);
+    proposal = await askClaude(`You improve a coding-agent harness. Current harness:\n${JSON.stringify(h, null, 2)}\n\nRun stats: ${JSON.stringify(s)}\nRecent runs: ${JSON.stringify(sample, null, 2)}\nNeatlogs traces available: ${traces.length}\n\nPropose ONE small change that would most reduce failures. Reply JSON only:\n{"title": "...", "rationale": "...", "patch": {"addRules": ["..."], "graders": {}}}\nOnly include grader keys you want to change. Never loosen a grader just to make runs pass.`, { json: true, name: 'propose-harness-change' }).catch(() => null);
   }
   if (!proposal) proposal = heuristic(h, s);
   if (!proposal) return { stats: s, proposal: null, traces: traces.length };

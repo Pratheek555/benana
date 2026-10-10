@@ -8,6 +8,7 @@ const { RepoStore } = require('./lib/store.cjs');
 const github = require('./lib/github.cjs');
 const { extract } = require('./lib/extract.cjs');
 const graph = require('./lib/graph.cjs');
+const codeGraph = require('./lib/code-graph.cjs');
 const harnessLib = require('./lib/harness.cjs');
 const agents = require('./lib/agents.cjs');
 const sessions = require('./lib/sessions.cjs');
@@ -15,6 +16,7 @@ const improve = require('./lib/improve.cjs');
 const neatlogs = require('./lib/neatlogs.cjs');
 const entire = require('./lib/entire.cjs');
 const artifacts = require('./lib/artifacts.cjs');
+const tracing = require('./lib/tracing.cjs');
 
 let win;
 let ctx = null; // { repo, repoPath, intent, harnessStore }
@@ -63,9 +65,18 @@ function summary() {
   return { repo: ctx.repo, repoPath: ctx.repoPath, nodes: g.nodes.length, edges: g.edges.length, harness: harnessLib.load(ctx.harnessStore), intentDir: ctx.intent.dir, intentRepo: ctx.intent.name };
 }
 
-async function ingest({ deep = false, max = 200 } = {}) {
+// Entry point: GitHub history -> intent graph (one WORKFLOW trace per ingest).
+function ingest(opts = {}) {
   need();
   const owner = ctx;
+  return tracing.workflow('intent-extraction', { input: { repo: owner.repo, ...opts }, entryPoint: opts.deep ? 'deep-extraction' : 'extraction' }, async () => {
+    const s = await ingestGraph(owner, opts);
+    tracing.setOutput({ nodes: s?.nodes, edges: s?.edges });
+    return s;
+  });
+}
+
+async function ingestGraph(owner, { deep = false, max = 200 } = {}) {
   log(`ingesting GitHub history for ${ctx.repo}…`);
   const hist = await github.history(owner.repo, { max });
   if (ctx !== owner) throw new Error('The open project changed during ingestion. Run ingestion again.');
@@ -120,7 +131,7 @@ function scopedRun(id) {
 
 const handlers = {
   'config:get': () => ({ ...readConfig(), autoOpen: process.env.BENANA_AUTOOPEN === '1', env: {
-    cloudflare: artifacts.configured(), github: github.authenticated(), neatlogs: neatlogs.configured(), anthropic: Boolean(env('ANTHROPIC_API_KEY')),
+    cloudflare: artifacts.configured(), github: github.authenticated(), neatlogs: neatlogs.tracing(), anthropic: Boolean(env('ANTHROPIC_API_KEY')),
   } }),
   'project:open': openProject,
   'project:summary': summary,
@@ -128,7 +139,22 @@ const handlers = {
   'graph:ingest': ingest,
   'graph:load': async ({ sha } = {}) => { need(); return sha ? graph.loadGraphAt(ctx.intent, sha) : graph.loadGraph(ctx.intent); },
   'graph:history': async () => { need(); return ctx.intent.log(); },
-  'graph:context': ({ text, files }) => { need(); return graph.context(graph.loadGraph(ctx.intent), { text, files }); },
+  'graph:context': async ({ text, files = [] }) => {
+    need();
+    const code = files.length ? await codeGraph.snapshot(ctx.repoPath) : { links: [] };
+    return graph.context(graph.loadGraph(ctx.intent), { text, files, related: codeGraph.related(code, files) });
+  },
+  'graph:summary': () => { need(); return graph.summary(graph.loadGraph(ctx.intent)); },
+  'graph:node': ({ id }) => { need(); const n = graph.node(graph.loadGraph(ctx.intent), id); if (!n) throw new Error(`no node ${id}`); return n; },
+  'graph:neighborhood': ({ id, depth = 1 }) => { need(); return graph.neighborhood(graph.loadGraph(ctx.intent), id, Math.min(depth, 3)); },
+  'graph:why': async ({ file }) => { need(); return codeGraph.why(graph.loadGraph(ctx.intent), await codeGraph.snapshot(ctx.repoPath), file); },
+  'graph:diff': async ({ from, to }) => {
+    need();
+    const at = (sha) => (sha ? graph.loadGraphAt(ctx.intent, sha) : graph.loadGraph(ctx.intent));
+    return graph.diff(await at(from), await at(to));
+  },
+  // Entire's code map (files + import/call/co-change links) with intent counts on each file.
+  'graph:code': async () => { need(); return codeGraph.overlay(graph.loadGraph(ctx.intent), await codeGraph.snapshot(ctx.repoPath)); },
   'inbox:list': () => [...inbox.values()].sort((a, b) => b.at - a.at),
   'run:start': async ({ task, issueNumber, agent }) => {
     need();
@@ -157,7 +183,17 @@ const handlers = {
     const session = sessions.resolveForRepo(kind, id, ctx.repoPath);
     return agents.resumeExternal({ ctx, kind: session.kind, sessionId: session.id, cwd: session.cwd, brief }, emit);
   },
-  'improve:analyze': async ({ useLLM = true } = {}) => { need(); const owner = ctx; const r = await improve.analyze({ harnessStore: owner.harnessStore, runs: agents.allRuns(owner.repo), useLLM }); if (ctx === owner) emit('proposals', improve.proposals(owner.harnessStore)); return r; },
+  'improve:analyze': async ({ useLLM = true } = {}) => {
+    need();
+    const owner = ctx;
+    const r = await tracing.workflow('harness-analyst', { input: { harnessVersion: harnessLib.load(owner.harnessStore).version }, entryPoint: 'run-analyst' }, async () => {
+      const out = await improve.analyze({ harnessStore: owner.harnessStore, runs: agents.allRuns(owner.repo), useLLM });
+      tracing.setOutput({ stats: out.stats, proposal: out.proposal?.title || null });
+      return out;
+    });
+    if (ctx === owner) emit('proposals', improve.proposals(owner.harnessStore));
+    return r;
+  },
   'improve:list': () => { need(); return improve.proposals(ctx.harnessStore); },
   'improve:decide': async ({ id, approve }) => {
     need();
@@ -213,5 +249,15 @@ function createWindow() {
   else win.loadFile(path.join(appRoot, 'dist', 'index.html'));
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  await tracing.init();
+  createWindow();
+});
+let flushed = false;
+app.on('before-quit', (e) => {
+  if (flushed) return;
+  e.preventDefault();
+  flushed = true;
+  tracing.shutdown().finally(() => app.quit());
+});
 app.on('window-all-closed', () => app.quit());

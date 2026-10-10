@@ -6,9 +6,11 @@ const graph = require("./graph.cjs");
 const harnessLib = require("./harness.cjs");
 const artifacts = require("./artifacts.cjs");
 const entire = require("./entire.cjs");
+const codeGraph = require("./code-graph.cjs");
 const { runCommand, spawnExecutable, terminateProcessTree } = require("./processes.cjs");
 const attemptWorkspace = require("./attempt-workspace.cjs");
 const { agentCommand, handleEvent } = require("./providers.cjs");
+const tracing = require("./tracing.cjs");
 const runs = new Map();
 const retrying = new Map();
 let sequence = 0;
@@ -24,7 +26,7 @@ function runsDir() {
   return dir;
 }
 function saveRun(run) {
-  const { proc, verifyProc, ...saved } = run;
+  const { proc, verifyProc, openTools, ...saved } = run;
   fs.writeFileSync(
     path.join(runsDir(), `${run.id}.json`),
     JSON.stringify(saved, null, 2),
@@ -53,7 +55,7 @@ function allRuns(repo) {
   return savedRuns(repo);
 }
 function publicRun(run) {
-  const { proc, verifyProc, transcript = [], ...rest } = run;
+  const { proc, verifyProc, openTools, transcript = [], ...rest } = run;
   return { ...rest, transcriptLength: transcript.length };
 }
 function get(id, repo) {
@@ -112,11 +114,11 @@ function proposeRecovery(run, failed) {
   };
 }
 
-async function prepareRun({ ctx, task, issue, agent, parent, recovery }, emit) {
+async function prepareRun({ ctx, task, issue, agent, parent, recovery, harness, label, trace }, emit) {
   const { intent, harnessStore, repoPath } = ctx;
   if (!repoPath || !fs.existsSync(path.join(repoPath, ".git")))
     throw new Error("Set a local checkout path for this repo first.");
-  const h = harnessLib.load(harnessStore);
+  const h = harness || parent?.harness || harnessLib.load(harnessStore); // evals pin a version
   const id = newId(parent ? "r" : "a");
   const run = {
     id,
@@ -133,6 +135,10 @@ async function prepareRun({ ctx, task, issue, agent, parent, recovery }, emit) {
     startedAt: Date.now(),
     attempt: parent ? parent.attempt + 1 : 1,
     harnessVersion: h.version,
+    ...(harness || parent?.harness ? { harness: h } : {}),
+    label: label || parent?.label || null,
+    trace,
+    traceIds: trace?.traceId ? [trace.traceId] : [],
     transcript: [],
     verify: [],
     usage: {},
@@ -162,18 +168,23 @@ async function prepareRun({ ctx, task, issue, agent, parent, recovery }, emit) {
     await git(run.intentDir, ["config", "user.name", `agent-${id}`]);
     await git(run.intentDir, ["config", "user.email", `${id}@benana.local`]);
     if (run.status === "stopped") return { run, failed: true };
+    // Entire finds the code the task is about; the intent graph then supplies the decisions and
+    // dead ends on those files and on the files they import or change together with.
+    const entireContext = await entire.context(repoPath, task);
+    if (run.status === "stopped") return { run, failed: true };
+    const files = [...new Set(entireContext.entries.map((entry) => entry.file).filter(Boolean))];
+    const code = files.length ? await codeGraph.snapshot(repoPath) : { links: [] };
+    run.contextFiles = files;
     const intentEntries = graph
-      .context(graph.loadGraph(intent), { text: task })
+      .context(graph.loadGraph(intent), { text: task, files, related: codeGraph.related(code, files) })
       .map((entry) => ({
         id: entry.id,
         title: entry.title,
         summary: `${entry.type}: ${entry.title}`,
-        reason: entry.reason || "",
+        reason: entry.reason || (entry.via === "related-file" ? "touches a file connected to this task's code" : ""),
         source: "benana-intent",
         raw: entry,
       }));
-    const entireContext = await entire.context(repoPath, task);
-    if (run.status === "stopped") return { run, failed: true };
     run.contextBundle = {
       entries: [...intentEntries, ...entireContext.entries],
       ...(entireContext.errors?.length ? { errors: entireContext.errors } : {}),
@@ -217,18 +228,32 @@ async function prepareRun({ ctx, task, issue, agent, parent, recovery }, emit) {
   }
 }
 
-async function start(input, emit) {
-  const prepared = await prepareRun(input, emit);
-  if (!prepared.failed)
-    executeAttempt(
-      prepared.run,
-      prepared.h,
-      buildPrompt(prepared.run, input.issue, input.recovery),
-      prepared.hooks,
-    ).catch((error) =>
-      failExecution(prepared.run, prepared.hooks, error.message),
-    );
-  return publicRun(prepared.run);
+// Entry point: one Neatlogs WORKFLOW trace per run. Returns once the workspace is prepared;
+// the trace stays open until the attempt is verified. Recovery retries of the same task share
+// a Neatlogs session (the root run id), so a failure and its recovery read as one story.
+function start(input, emit) {
+  const { task, issue, agent, parent, label } = input;
+  return new Promise((resolve, reject) => {
+    tracing.workflow("agent-run", {
+      input: { task, issue: issue ? `#${issue.number} ${issue.title}` : null, agent, retryOf: parent?.id, label },
+      sessionId: parent ? parent.rootId || parent.id : undefined,
+      entryPoint: parent ? "recovery-retry" : issue ? "inbox-issue" : "brief",
+    }, async () => {
+      let prepared;
+      try { prepared = await prepareRun({ ...input, trace: tracing.capture() }, emit); }
+      catch (error) { reject(error); return; }
+      resolve(publicRun(prepared.run));
+      if (!prepared.failed)
+        await executeAttempt(
+          prepared.run,
+          prepared.h,
+          buildPrompt(prepared.run, input.issue, input.recovery),
+          prepared.hooks,
+        ).catch((error) => failExecution(prepared.run, prepared.hooks, error.message));
+      const run = prepared.run;
+      tracing.setOutput({ id: run.id, status: run.status, files: run.filesChanged, conflicts: (run.conflicts || []).map((c) => c.node), commit: run.commit || null });
+    }).catch(reject);
+  });
 }
 
 function buildPrompt(run, issue, recovery) {
@@ -254,7 +279,21 @@ function buildPrompt(run, issue, recovery) {
   return lines.join("\n");
 }
 
-function executeAttempt(run, h, prompt, hooks, deps = {}) {
+// One agent process = one AGENT span, closed when the process exits. Verification then runs
+// under the run's WORKFLOW span, so attempts and graders are siblings in the trace.
+async function executeAttempt(run, h, prompt, hooks, deps = {}) {
+  const name = `${run.kind === "codex" ? "codex" : "claude"} attempt ${run.attempt}`;
+  const outcome = await tracing.under(run.trace, () =>
+    tracing.agent(name, prompt, (span) => runAgentProcess(run, h, prompt, hooks, deps, span)));
+  if (outcome !== "verify") return;
+  try {
+    await tracing.under(run.trace, () => verify(run, h, hooks, deps));
+  } catch (error) {
+    if (!terminal.has(run.status)) failVerificationTool(run, hooks, error);
+  }
+}
+
+function runAgentProcess(run, h, prompt, hooks, deps, span) {
   return new Promise((resolve) => {
     const command = agentCommand(run, h, prompt);
     let proc;
@@ -273,9 +312,11 @@ function executeAttempt(run, h, prompt, hooks, deps = {}) {
       );
     } catch (error) {
       failExecution(run, hooks, error.message);
-      return resolve();
+      return resolve("failed");
     }
     run.proc = proc;
+    run.agentSpan = tracing.capture();
+    run.openTools = new Map();
     hooks.update();
     let buffer = "";
     let spawnError = null;
@@ -286,7 +327,10 @@ function executeAttempt(run, h, prompt, hooks, deps = {}) {
       while ((index = buffer.indexOf("\n")) >= 0) {
         const line = buffer.slice(0, index).trim();
         buffer = buffer.slice(index + 1);
-        if (line) handleEvent(run, line, hooks);
+        if (line) {
+          handleEvent(run, line, hooks);
+          traceEvent(run, line);
+        }
       }
     });
     proc.stderr?.on("data", (data) => {
@@ -297,10 +341,18 @@ function executeAttempt(run, h, prompt, hooks, deps = {}) {
       spawnError = error;
     });
     let settled = false;
-    const finish = () => { if (settled) return false; settled = true; resolve(); return true; };
+    const finish = (outcome) => {
+      if (settled) return false;
+      settled = true;
+      for (const end of run.openTools?.values() || []) end();
+      run.openTools = null;
+      tracing.setUsage(span, { model: run.model, provider: run.kind === "codex" ? "openai" : "anthropic", usage: run.usage });
+      resolve(outcome);
+      return true;
+    };
     proc.once("close", async (code) => {
       run.proc = null;
-      if (terminal.has(run.status)) return finish();
+      if (terminal.has(run.status)) return finish("stopped");
       if (spawnError || code !== 0 || run.terminalFailure) {
         failExecution(
           run,
@@ -309,18 +361,40 @@ function executeAttempt(run, h, prompt, hooks, deps = {}) {
             run.terminalFailure ||
             `${command.cmd} exited with code ${code}`,
         );
-        return finish();
+        return finish("failed");
       }
       hooks.say("system", `${command.cmd} exited successfully`);
-      try {
-        await verify(run, h, hooks, deps);
-      } catch (error) {
-        if (!terminal.has(run.status)) failVerificationTool(run, hooks, error);
-      }
-      finish();
+      finish("verify");
     });
     command.stdin != null ? proc.stdin.end(command.stdin) : proc.stdin.end();
   });
+}
+
+// TOOL spans from the agent's event stream. Each opens when the tool is called and closes
+// when its result arrives, so durations are real. Also records the model for the AGENT span.
+const resultText = (content) =>
+  (typeof content === "string" ? content : (content || []).map((x) => x.text || "").join("\n")).slice(0, 2000);
+function traceEvent(run, line) {
+  if (!run.openTools) return;
+  let event;
+  try { event = JSON.parse(line); } catch { return; }
+  if (event.type === "system" && event.model) run.model = event.model;
+  for (const item of event.type === "assistant" ? event.message?.content || [] : [])
+    if (item.type === "tool_use") run.openTools.set(item.id, tracing.openTool(run.agentSpan, item.name, item.input));
+  for (const item of event.type === "user" ? event.message?.content || [] : [])
+    if (item.type === "tool_result") {
+      run.openTools.get(item.tool_use_id)?.(resultText(item.content));
+      run.openTools.delete(item.tool_use_id);
+    }
+  const item = event.item;
+  if (item?.id && /^(command_execution|mcp_tool_call|file_change)$/.test(item.type)) {
+    const input = item.command || item.tool || item.server || item.changes;
+    if (event.type === "item.started") run.openTools.set(item.id, tracing.openTool(run.agentSpan, item.type, input));
+    if (event.type === "item.completed") {
+      (run.openTools.get(item.id) || tracing.openTool(run.agentSpan, item.type, input))(item.aggregated_output);
+      run.openTools.delete(item.id);
+    }
+  }
 }
 
 function failVerificationTool(run, hooks, error) {
@@ -419,6 +493,8 @@ async function verify(run, h, hooks, deps = {}) {
           .join("; ") || "no conflicts",
     });
   }
+  for (const result of results)
+    await tracing.guardrail(result.grader, { files, attempt: run.attempt }, result);
   run.verify.push({ attempt: run.attempt, results });
   const failed = results.filter((item) => !item.pass);
   failed.forEach((item) =>
@@ -481,6 +557,7 @@ function gradeBasics(files, graders, testResult) {
 async function checkpoint(run, passed, hooks) {
   if (terminal.has(run.status)) return;
   const { intent } = hooks.ctx;
+  if (passed && run.origin === "native") await commitAttempt(run, hooks);
   try {
     await git(run.intentDir, ["add", "-A"]);
     if ((await git(run.intentDir, ["status", "--porcelain"])).trim())
@@ -515,11 +592,23 @@ async function checkpoint(run, passed, hooks) {
     sources: [
       `benana:run/${run.id}`,
       run.sessionId ? `${run.kind}:session/${run.sessionId}` : null,
+      ...(run.traceIds || []).map((id) => `neatlogs:trace/${id}`),
+      run.entireCheckpoint ? `entire:checkpoint/${run.entireCheckpoint}` : null,
+      run.commit ? `git:benana/${run.id}@${run.commit}` : null,
+      run.artifactsFork ? `artifacts:${artifacts.namespace()}/${run.artifactsFork}` : null,
     ].filter(Boolean),
     harnessVersion: run.harnessVersion,
+    provenance: {
+      traceIds: run.traceIds || [],
+      entireCheckpoint: run.entireCheckpoint || null,
+      commit: run.commit || null,
+      artifactsFork: run.artifactsFork || null,
+      retryOf: run.retryOf || null,
+    },
   };
   intent.write(graph.nodePath(node), graph.serializeNode(node));
   if (run.issue) intent.write(`edges/e_${node.id}_works_on.json`, { id: `e_${node.id}_works_on`, from: node.id, to: `issue_${run.issue.number}`, type: "works_on", status: "recorded", confidence: 1 });
+  if (run.retryOf) intent.write(`edges/e_${node.id}_retries.json`, { id: `e_${node.id}_retries`, from: node.id, to: `run_${run.retryOf}`, type: "retries", status: "recorded", confidence: 1 });
   for (const conflict of run.conflicts || []) intent.write(`edges/e_${node.id}_flagged_${conflict.node}.json`, { id: `e_${node.id}_flagged_${conflict.node}`, from: node.id, to: conflict.node, type: "flagged_by_intent", status: "recorded", confidence: 1 });
   graph.writeEvent(intent, {
     type: "agent_run",
@@ -543,6 +632,19 @@ async function checkpoint(run, passed, hooks) {
     endedAt: run.endedAt || Date.now(),
   });
   hooks.emit("graph-changed", {});
+}
+
+async function commitAttempt(run, hooks) {
+  const trailers = [`Benana-Run: ${run.id}`, ...(run.traceIds || []).map((id) => `Neatlogs-Trace: ${id}`)];
+  try {
+    const result = await attemptWorkspace.commit(run.worktree, `benana: ${run.task.split("\n")[0].slice(0, 72)}\n\n${trailers.join("\n")}`);
+    if (!result) return;
+    run.commit = result.sha;
+    run.entireCheckpoint = result.entireCheckpoint;
+    hooks.say("system", `committed ${result.sha.slice(0, 7)} on benana/${run.id}${result.entireCheckpoint ? `; Entire checkpoint ${result.entireCheckpoint}` : "; no Entire checkpoint (is Entire enabled in this checkout?)"}`);
+  } catch (error) {
+    hooks.say("system", `commit: ${error.message}`);
+  }
 }
 
 async function retry(id, recoveryId, ctx, emit) {
@@ -651,7 +753,11 @@ async function resumeExternal({ ctx, kind, sessionId, cwd, brief }, emit) {
   run.contextBundle = { entries: [...intentEntries, ...entireContext.entries], ...(entireContext.errors?.length ? { errors: entireContext.errors } : {}) };
   const hooks = hooksFor(run, emit, ctx);
   hooks.say("system", `resumed ${kind} session ${sessionId} in ${cwd}`);
-  executeAttempt(run, h, brief, hooks);
+  tracing.workflow("session-resume", { input: { brief, kind, sessionId }, sessionId, entryPoint: "attached-session" }, () => {
+    run.trace = tracing.capture();
+    run.traceIds = run.trace.traceId ? [run.trace.traceId] : [];
+    return executeAttempt(run, h, brief, hooks);
+  }).catch((error) => failExecution(run, hooks, error.message));
   return publicRun(run);
 }
 
