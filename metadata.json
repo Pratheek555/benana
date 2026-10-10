@@ -3,16 +3,25 @@
   "checkpoint_id": "01M4KY8NPEXWCMWHB5EDMBZ3X2",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 4,
+  "checkpoints_count": 5,
   "files_touched": [
     "electron/lib/studio/index.cjs",
     "electron/lib/studio/repo.cjs",
     "electron/main.cjs",
     "src/App.jsx",
     "src/components/game/game.css",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/CodeView.jsx",
+    "src/components/studio/EntirePage.jsx",
+    "src/components/studio/InsightsPage.jsx",
     "src/components/studio/ModStudio.jsx",
+    "src/components/studio/ModsPage.jsx",
+    "src/components/studio/NeatlogsPage.jsx",
+    "src/components/studio/shared.jsx",
     "src/components/studio/studio.css",
-    "src/demo/bridge.js"
+    "src/demo/bridge.js",
+    "src/demo/studioSample.js",
+    "tests/studio-repo.test.cjs"
   ],
   "sessions": [
     {
@@ -21,13 +30,20 @@
       "compact_transcript": "/0/transcript.jsonl",
       "content_hash": "/0/content_hash.txt",
       "prompt": "/0/prompt.txt"
+    },
+    {
+      "metadata": "/1/metadata.json",
+      "transcript": "/1/full.jsonl",
+      "compact_transcript": "/1/transcript.jsonl",
+      "content_hash": "/1/content_hash.txt",
+      "prompt": "/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 322,
-    "cache_creation_tokens": 529623,
-    "cache_read_tokens": 28081293,
-    "output_tokens": 178115,
-    "api_call_count": 162
+    "input_tokens": 414,
+    "cache_creation_tokens": 824425,
+    "cache_read_tokens": 32903784,
+    "output_tokens": 296451,
+    "api_call_count": 208
   }
 }

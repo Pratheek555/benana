@@ -1,0 +1,17 @@
+https://www.ui-skills.com/skills/anthropics/frontend-design
+
+
+with the help of this design I want you to revamp the whole UI for a beautiful demo where users can have good UI flow on the mods code and also the agent testing it in action [Image: image.png; ref=image_c40528c4-bbb3-4d50-a237-538869f083fc] 
+
+would be great to have insights and also respective pages of neatlogs and entire built in, if possible giving user's critical info about necessary information
+
+<t3_context version="1">
+<context kind="image" id="image_c40528c4-bbb3-4d50-a237-538869f083fc">
+name: image.png
+mimeType: image/png
+sizeBytes: 200916
+attachmentId: 7a34f124-5ce9-4903-927e-80ef4a13fd98-5b2e5e94-551d-4c4e-9076-147b02b6cd8c
+</context>
+</t3_context>
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\7a34f124-5ce9-4903-927e-80ef4a13fd98-5b2e5e94-551d-4c4e-9076-147b02b6cd8c.png]
