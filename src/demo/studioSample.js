@@ -357,14 +357,35 @@ const MODS = [
           ],
         }),
         lesson: "Set the launch velocity after the damage event resolves, or the server overwrites it.",
-        context: { entireCheckpoints: 2, neatlogsTrace: true },
+        context: {
+          from: 1,
+          entireCheckpoints: 2,
+          neatlogsTrace: true,
+          neatlogs: { state: "read", summary: { traceId: "tr_ss-a-pt1", status: "ERROR", finalized: true, spans: 9, toolCalls: 7, llmCalls: 2, tokens: 100200, costUsd: 0.61, durationMs: 540000, errors: [{ name: "measure_entity_height", type: "TOOL", durationMs: 48000 }], sequence: [{ name: "equip_item", n: 1, error: false }, { name: "attack_entity", n: 1, error: false }, { name: "measure_entity_height", n: 1, error: true }, { name: "report_check", n: 4, error: false }] } },
+          checkpoints: [{ id: "3f9a1c0be712", message: "Attempt 1 seeded implementation" }, { id: "8b2e6d10c4a7", message: "Attempt 1 playtest evidence" }],
+        },
         summary: "Moved the velocity change into a scheduled task after the damage event.",
       }),
     ],
     feed: [
       { at: at(2862), attempt: 1, role: "benana", kind: "phase", phase: "playtest", text: "Attempt 1: the AI player is testing LaunchSword in-game" },
+      { at: at(2860), attempt: 1, role: "playtester", kind: "text", text: "I am measuring the launch height against the 6 block requirement." },
+      { at: at(2859), attempt: 1, role: "playtester", kind: "tool", name: "attack_entity", summary: '{"id":"test-zombie"}' },
+      { at: at(2858), attempt: 1, role: "playtester", kind: "tool", name: "measure_entity_height", summary: '{"id":"test-zombie"}' },
+      { at: at(2857), attempt: 1, role: "playtester", kind: "result", isError: true, text: "Observed 0.4 blocks of vertical movement. Expected at least 6 blocks." },
       { at: at(2852), attempt: 1, role: "benana", kind: "failure", text: "Attempt 1 failed (playtest): launch: Mob rose 0.4 blocks, needs 6+" },
+      { at: at(2851), attempt: 2, role: "benana", kind: "handoff", text: "Recorded playtest evidence handed to the fixer" },
       { at: at(2849), attempt: 2, role: "benana", kind: "phase", phase: "fix", text: "Attempt 2: fixing what the playtester found" },
+      { at: at(2848), attempt: 2, role: "fixer", kind: "text", text: "The damage event restores the mob's velocity after the handler returns. I will schedule the launch for the next server tick, after damage resolution." },
+      { at: at(2847), attempt: 2, role: "fixer", kind: "tool", name: "Read", summary: '{"file_path":"src/main/java/dev/benana/mod/LaunchSword.java"}' },
+      { at: at(2846), attempt: 2, role: "fixer", kind: "result", text: "Found target.setVelocity inside EntityDamageByEntityEvent." },
+      { at: at(2845), attempt: 2, role: "fixer", kind: "tool", name: "Edit", summary: '{"file_path":"src/main/java/dev/benana/mod/LaunchSword.java"}' },
+      { at: at(2844), attempt: 2, role: "fixer", kind: "result", text: "Wrapped velocity and particle effects in Bukkit.getScheduler().runTask." },
+      { at: at(2843), attempt: 2, role: "fixer", kind: "tool", name: "Bash", summary: '{"command":"mvn -q package"}' },
+      { at: at(2842), attempt: 2, role: "fixer", kind: "result", text: "BUILD SUCCESS" },
+      { at: at(2839), attempt: 2, role: "playtester", kind: "text", text: "Retesting the repaired launch behavior in-game." },
+      { at: at(2838), attempt: 2, role: "playtester", kind: "tool", name: "measure_entity_height", summary: '{"id":"test-zombie"}' },
+      { at: at(2837), attempt: 2, role: "playtester", kind: "result", text: "Observed 6.8 blocks of vertical movement. Cooldown, particles, and console checks also passed." },
       { at: at(2800), attempt: 2, role: "benana", kind: "phase", phase: "done", text: "LaunchSword passed after 2 attempts" },
     ],
   }),
@@ -479,30 +500,88 @@ function fileText(m, rel) {
   return "";
 }
 
+// LaunchSword's sessions tell the recovery story: the failed measurement, the fix, then the passing retest.
+// The handoff summary on its attempt 2 mirrors what this builds for sess-a-pt1.
+const playtestSteps = (height) => [
+  ["LLM", "agent turn"],
+  ["TOOL", "equip_item"],
+  ["TOOL", "attack_entity"],
+  ["TOOL", "measure_entity_height", height < 6 ? `Observed ${height} blocks of vertical movement. Expected at least 6 blocks.` : null],
+  ["TOOL", "report_check"],
+  ["TOOL", "report_check"],
+  ["TOOL", "report_check"],
+  ["TOOL", "report_check"],
+  ["LLM", "agent turn"],
+];
+const TRACE_STEPS = {
+  "sess-a-pt1": playtestSteps(0.4),
+  "sess-a-fix2": [["LLM", "agent turn"], ["TOOL", "Read"], ["TOOL", "Edit"], ["TOOL", "Bash"], ["LLM", "agent turn"]],
+  "sess-a-pt2": playtestSteps(6.8),
+};
+const genericSteps = (sessionId) => [
+  ["LLM", "agent turn"],
+  ["TOOL", "Edit"],
+  ...(sessionId.includes("pt") ? [["TOOL", "track_entity", "Entity not found in the test world"]] : []),
+];
+
+function sampleTrace(sessionId) {
+  const s = MODS.flatMap((m) => [...m.sessions, ...m.attempts.flatMap((a) => a.sessions)]).find((x) => x.sessionId === sessionId);
+  const story = TRACE_STEPS[sessionId];
+  const steps = story || genericSteps(sessionId);
+  const start = s?.startedAt ?? NOW - 540000;
+  const durationMs = story && s?.endedAt ? s.endedAt - start : 4200;
+  const slot = durationMs / steps.length;
+  const spans = steps.map(([spanType, spanName, failure], i) => ({
+    spanId: `sp_${sessionId}_${i + 1}`,
+    spanName,
+    spanType,
+    status: failure ? "ERROR" : "OK",
+    startedAt: new Date(start + i * slot).toISOString(),
+    endedAt: new Date(start + (i + 0.8) * slot).toISOString(),
+    durationMs: Math.round(slot * 0.8),
+    ...(failure ? { failure } : {}),
+  }));
+  const tools = spans.filter((sp) => sp.spanType === "TOOL");
+  const sequence = [];
+  for (const sp of tools) {
+    const error = sp.status === "ERROR";
+    const last = sequence.at(-1);
+    if (last?.name === sp.spanName && last.error === error) last.n++;
+    else sequence.push({ name: sp.spanName, n: 1, error });
+  }
+  const errors = tools.filter((sp) => sp.status === "ERROR").map((sp) => ({ name: sp.spanName, type: "TOOL", durationMs: sp.durationMs }));
+  const traceId = `tr_${sessionId.slice(-8)}`;
+  return {
+    traceId,
+    traceName: "agent.session",
+    durationMs,
+    startedAt: new Date(start).toISOString(),
+    completedAt: new Date(start + durationMs).toISOString(),
+    spans,
+    summary: {
+      traceId,
+      status: errors.length ? "ERROR" : "OK",
+      finalized: true,
+      spans: spans.length,
+      toolCalls: tools.length,
+      llmCalls: spans.length - tools.length,
+      tokens: story && s ? s.usage.inputTokens + s.usage.outputTokens : 12400,
+      costUsd: story && s ? s.usage.costUsd : 0.14,
+      durationMs,
+      errors,
+      sequence,
+    },
+  };
+}
+
 function evidenceFor({ sessionId = "" }) {
-  const matched = /[02468ace]$/.test(sessionId);
-  const traces = matched
-    ? [
-        {
-          traceId: `tr_${sessionId.slice(-8)}`,
-          traceName: "agent.session",
-          durationMs: 4200,
-          spans: [
-            { spanName: "agent turn", status: "success" },
-            { spanName: "tool: Edit", status: "success" },
-            ...(sessionId.includes("pt")
-              ? [{ spanName: "mcp: track_entity", status: "error", failure: "Entity not found in the test world" }]
-              : []),
-          ],
-        },
-      ]
-    : [];
+  const matched = Boolean(TRACE_STEPS[sessionId]) || /[02468ace]$/.test(sessionId);
   return {
     source: "neatlogs",
     configured: true,
     matched,
     matchReason: matched ? `Linked by session ${sessionId}` : "No trace yet for this session.",
-    traces,
+    traces: matched ? [sampleTrace(sessionId)] : [],
   };
 }
 

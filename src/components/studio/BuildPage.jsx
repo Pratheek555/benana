@@ -568,15 +568,33 @@ function WorkLog({ entries, mod, live }) {
   const rows = entries.filter((e) => e.kind !== "result" || e.isError || e.name !== "report_check");
   const [open, setOpen] = React.useState(false);
   const LIMIT = 4;
-  const hidden = !open && rows.length > LIMIT + 1 ? rows.length - LIMIT : 0;
-  const shown = hidden ? rows.slice(-LIMIT) : rows;
+  const canCollapse = rows.length > LIMIT;
+  const preview = rows.reduceRight((selected, row) => {
+    if (selected.length >= LIMIT && !row.isError) return selected;
+    if (row.isError || selected.length < LIMIT) selected.unshift(row);
+    return selected;
+  }, []);
+  const shown = canCollapse && !open ? preview : rows;
+  const hidden = rows.length - shown.length;
   const titles = new Map((mod.testPlan?.checks || []).map((c) => [c.id, c.title]));
 
   return (
     <div className={`worklog ${live ? "live" : ""}`}>
+      {canCollapse ? (
+        <button className="worklog-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+          <span>Tool activity</span>
+          <span>{rows.length} action{rows.length === 1 ? "" : "s"}</span>
+          <span className={`worklog-caret ${open ? "open" : ""}`} />
+        </button>
+      ) : (
+        <div className="worklog-head static">
+          <span>Tool activity</span>
+          <span>{rows.length} action{rows.length === 1 ? "" : "s"}</span>
+        </div>
+      )}
       {hidden > 0 && (
         <button className="worklog-more" onClick={() => setOpen(true)}>
-          {hidden} earlier action{hidden === 1 ? "" : "s"}
+          Show {hidden} more action{hidden === 1 ? "" : "s"}
         </button>
       )}
       {shown.map((e, i) => {
@@ -601,10 +619,21 @@ function WorkLog({ entries, mod, live }) {
           );
         }
         if (e.kind === "result") {
+          const expandable = e.text.length > 120 || e.text.includes("\n");
           return (
             <div key={i} className={`work-row result ${e.isError ? "error" : ""}`}>
               <span className="work-arrow">↳</span>
-              <span className="work-out">{e.text.slice(0, 220)}</span>
+              {expandable ? (
+                <details className="work-result-detail">
+                  <summary>
+                    <span className="work-out">{e.text}</span>
+                    <span className="work-result-more">Full output</span>
+                  </summary>
+                  <pre>{e.text}</pre>
+                </details>
+              ) : (
+                <span className="work-out">{e.text}</span>
+              )}
             </div>
           );
         }
