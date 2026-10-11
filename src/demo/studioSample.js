@@ -1,3 +1,4 @@
+import stormGolem from "../../bench/storm-golem/task.json";
 const NOW = Date.now();
 const MIN = 60_000;
 const OPUS = "claude-opus-5-5";
@@ -505,7 +506,36 @@ function evidenceFor({ sessionId = "" }) {
   };
 }
 
+// Bench preview: the real task, with two sample runs (a baseline, then a run after the coach's lessons).
+const BENCH_CHECKS = stormGolem.gold.checks.map(({ id, title, capability }) => ({ id, title, capability }));
+const benchRun = (n, failing, lessonsBefore, minutesAgo) => {
+  const checks = [...BENCH_CHECKS, { id: "assets", title: "Ships at least 1 generated item texture wired into the code", capability: "asset" }].map((c) => ({
+    ...c,
+    status: failing[c.id] ? "fail" : "pass",
+    observed: failing[c.id] || "[sample] matched",
+    by: c.id === "assets" ? "benana" : "grader",
+  }));
+  const passed = checks.filter((c) => c.status === "pass").length;
+  return {
+    id: `sample_bench_${n}`, taskId: stormGolem.id, modId: MODS[0].id, modName: "StormGolem", at: NOW - minutesAgo * 60000,
+    durationMs: 14 * 60000, attempts: n === 1 ? 3 : 1, selfPassed: n !== 1, lessonsBefore, costUsd: n === 1 ? 4.1 : 2.3,
+    checks, passed, total: checks.length, score: passed / checks.length, lessonsLearned: [],
+  };
+};
+const BENCH_RESULTS = [
+  benchRun(1, {
+    "slam-range": "[sample] launched at 9.8 blocks: the slam used a 10-block radius",
+    "phase-two-faster": "[sample] launches 100 ticks apart; the slam timer never changed in phase two",
+    "core-drop": "[sample] Storm Core had no itemModel",
+    assets: "[sample] no textures in pack/",
+  }, 3, 90),
+  benchRun(2, {}, 6, 20),
+];
+
 export const studioSample = {
+  "studio:bench-tasks": () => [{ ...stormGolem, gold: undefined, checks: BENCH_CHECKS }],
+  "studio:bench-results": () => BENCH_RESULTS,
+  "studio:bench-run": () => { throw new Error("Benchmarks run in the desktop app. This preview shows sample runs."); },
   "studio:list": () => MODS.map(brief),
   "studio:get": ({ id }) => ({ ...brief(byId(id)), feed: byId(id).feed }),
   "studio:stop": () => false,

@@ -3,6 +3,7 @@ import Split from "./Split.jsx";
 import { call, on } from "../../api.js";
 import TestPanel, { useNow, useStickyScroll } from "./TestPanel.jsx";
 import { HandoffCard, TraceChip, TraceDrawer } from "./traces.jsx";
+import "./bench.css";
 import {
   CheckIcon,
   Icon,
@@ -23,6 +24,7 @@ const EXAMPLES = [
   "A golden sword that launches any mob it hits into the sky with particles, with a 3 second cooldown.",
   "Arrows that explode on impact without breaking blocks, with a 5 second cooldown per player.",
   "Right-clicking with a blaze rod shoots a fireball where you look.",
+  "A Skyhook item with its own texture: right-click a block up to 24 blocks away to get pulled to it, no fall damage for 4 seconds after.",
 ];
 
 const STEP_DETAIL = {
@@ -311,6 +313,8 @@ function buildThread(mod, feed) {
         handoffs.add(f.attempt);
         items.push({ type: "handoff", key, n: f.attempt });
       } else if (f.kind === "failure" || f.kind === "error") items.push({ type: "alert", key, f });
+      else if (f.kind === "assets") items.push({ type: "assets", key, f });
+      else if (f.kind === "bench") items.push({ type: "bench", key, f });
       else items.push({ type: "note", key, f });
       return;
     }
@@ -387,6 +391,10 @@ function Thread({ mod, onOpenCode }) {
               );
             case "handoff":
               return <HandoffCard key={it.key} mod={mod} n={it.n} />;
+            case "assets":
+              return <AssetCard key={it.key} f={it.f} />;
+            case "bench":
+              return <BenchCard key={it.key} result={it.f.result} />;
             case "turn":
               return <AgentTurn key={it.key} turn={it} mod={mod} live={mod.running && it === lastTurn} />;
             case "result":
@@ -405,7 +413,58 @@ function Thread({ mod, onOpenCode }) {
   );
 }
 
-const AVATAR = { benana: "B", spec: "S", builder: "Bu", playtester: "P", fixer: "F" };
+const AVATAR = { benana: "B", spec: "S", builder: "Bu", playtester: "P", fixer: "F", grader: "G", coach: "C" };
+
+// The textures the builder drew this attempt, as the resource pack ships them.
+function AssetCard({ f }) {
+  return (
+    <div className="asset-card">
+      <header>
+        <Icon name="spark" size={13} />
+        <strong>Assets</strong>
+        <span>attempt {f.attempt} · {f.items.length} texture{f.items.length === 1 ? "" : "s"} in the resource pack</span>
+      </header>
+      <div className="asset-tiles">
+        {f.items.map((a) => (
+          <figure key={a.id} className="asset-tile">
+            {a.texture ? <img src={a.texture} alt={a.id} /> : <Icon name="file" size={20} />}
+            <span title={a.id}>{a.id}</span>
+          </figure>
+        ))}
+      </div>
+      {f.errors?.length > 0 && (
+        <ul className="asset-problems">
+          {f.errors.map((e) => <li key={e}>{e}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function BenchCard({ result }) {
+  const pct = Math.round((result.passed / Math.max(1, result.total)) * 100);
+  return (
+    <div className="bench-card">
+      <header>
+        <Icon name="spark" size={13} />
+        <strong>Benchmark score {result.passed}/{result.total}</strong>
+        <span>hidden checks the builder never saw</span>
+      </header>
+      <div className="quality-track"><i style={{ width: `${pct}%` }} /></div>
+      <ul className="bench-checks">
+        {result.checks.map((c) => (
+          <li key={c.id} className={c.status}>
+            <CheckIcon status={c.status} />
+            <div>
+              <strong>{c.title}</strong>
+              {c.status !== "pass" && <p>{c.observed}</p>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function Turn({ role, title, meta, aside, children }) {
   return (
@@ -423,6 +482,8 @@ function Turn({ role, title, meta, aside, children }) {
 
 function sessionFor(mod, role, attemptN, k) {
   if (role === "spec") return mod.sessions.find((s) => s.role === "spec" && (s.turn ?? 0) === k);
+  // The benchmark grader and coach run after the attempts, outside any of them.
+  if (!attemptN) return mod.sessions.filter((s) => s.role === role && (s.turn ?? 0) === k).at(-1);
   const a = mod.attempts.find((x) => x.n === attemptN);
   return a?.sessions.filter((s) => s.role === role).at(-1);
 }

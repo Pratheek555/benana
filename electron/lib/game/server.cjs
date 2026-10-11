@@ -40,7 +40,8 @@ function localJar() {
   return jar ? path.join(dir, jar) : null;
 }
 
-function configure(rconPassword) {
+// pack: { url, sha1 } of the deployed mod's resource pack, offered to every player who joins (not required).
+function configure(rconPassword, pack) {
   fs.writeFileSync(path.join(dir, 'eula.txt'), 'eula=true\n');
   const props = {
     'server-port': PORT,
@@ -68,6 +69,11 @@ function configure(rconPassword) {
     'simulation-distance': 6,
     'max-players': 4,
     motd: 'Benana Mod Studio',
+    'resource-pack': pack ? pack.url.replace(/:/g, '\\:') : '',
+    'resource-pack-sha1': pack ? pack.sha1 : '',
+    // A new id per pack version makes clients download the new art instead of reusing a cached pack.
+    'resource-pack-id': pack ? pack.sha1.slice(0, 32).replace(/^(.{8})(.{4})(.{4})(.{4})/, '$1-$2-$3-$4-') : '',
+    'require-resource-pack': false,
   };
   fs.writeFileSync(path.join(dir, 'server.properties'), Object.entries(props).map(([k, v]) => `${k}=${v}`).join('\n') + '\n');
   fs.mkdirSync(path.join(dir, 'plugins'), { recursive: true });
@@ -89,11 +95,11 @@ class Server {
     for (const suffix of ['', '_nether', '_the_end']) fs.rmSync(path.join(dir, `${LEVEL}${suffix}`), { recursive: true, force: true });
   }
 
-  async start({ onLine = () => {}, log = () => {} } = {}) {
+  async start({ onLine = () => {}, log = () => {}, pack = null } = {}) {
     if (this.child) return;
     this.onLine = onLine;
     const jar = localJar() || (await ensureJar(log));
-    configure(this.rconPassword);
+    configure(this.rconPassword, pack);
     const child = spawnExecutable('java', ['-Xms1G', '-Xmx2G', '-jar', jar, '--nogui'], { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
     let resolveReady, rejectReady;

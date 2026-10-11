@@ -8,10 +8,11 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { appRoot } = require('../env.cjs');
 const { resolveExecutable, spawnExecutable, terminateProcessTree } = require('../processes.cjs');
-const { Server, VERSION, PORT } = require('./server.cjs');
+const { Server, VERSION, PORT, dir: serverDir } = require('./server.cjs');
 
 const BOT = 'BenanaBot';
 // The bot is kept near this spot so it stays inside the viewer's fixed camera orbit.
@@ -21,7 +22,10 @@ const HOST = path.join(__dirname, 'host.cjs');
 const MCP = path.join(appRoot, 'electron', 'mcp-minecraft.cjs');
 const mock = () => process.env.BENANA_GAME_MOCK === '1';
 
-const BOT_TOOLS = new Set(['bot_state', 'nearby_entities', 'equip', 'look_at', 'move_to', 'attack', 'attack_sequence', 'use_item', 'shoot', 'track_entity', 'wait_ticks', 'chat', 'read_chat']);
+const BOT_TOOLS = new Set([
+  'bot_state', 'nearby_entities', 'equip', 'look_at', 'move_to', 'move', 'attack', 'attack_sequence', 'use_item', 'shoot',
+  'place_block', 'dig_block', 'track_entity', 'track_self', 'boss_bars', 'wait_ticks', 'chat', 'read_chat',
+]);
 const TOOLS = ['game_setup', 'reset_arena', ...BOT_TOOLS, 'server_log', 'report_check', 'finish'];
 const playtesterTools = TOOLS.map((t) => `mcp__minecraft__${t}`);
 
@@ -47,6 +51,15 @@ function deployedOnDisk() {
   } catch { return null; }
 }
 state.deployed = deployedOnDisk();
+
+// The deployed mod's resource pack (its generated textures and models). Paper offers it to every player who
+// joins, from the control server, so a real Minecraft client sees the mod's own art.
+const PACK_FILE = path.join(serverDir, 'studio-pack.zip');
+function packOffer() {
+  if (!state.controlUrl || !fs.existsSync(PACK_FILE)) return null;
+  const sha1 = crypto.createHash('sha1').update(fs.readFileSync(PACK_FILE)).digest('hex');
+  return { url: `${state.controlUrl}/pack.zip?v=${sha1.slice(0, 10)}`, sha1 };
+}
 let host = null;
 let control = null;
 const pending = new Map();
@@ -146,7 +159,7 @@ async function prepareWorld() {
 }
 
 async function prepareBot() {
-  for (const cmd of [`tp ${BOT} ${ARENA.join(' ')} 0 0`, `gamemode survival ${BOT}`, `effect give ${BOT} resistance infinite 4 true`, `effect give ${BOT} saturation infinite 0 true`, `clear ${BOT}`])
+  for (const cmd of [`tp ${BOT} ${ARENA.join(' ')} 0 0`, `gamemode survival ${BOT}`, `effect clear ${BOT}`, `effect give ${BOT} resistance infinite 4 true`, `effect give ${BOT} saturation infinite 0 true`, `clear ${BOT}`])
     await server.command(cmd);
 }
 
@@ -181,6 +194,12 @@ function startControl() {
   if (control) return Promise.resolve();
   return new Promise((resolve) => {
     control = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url.startsWith('/pack.zip')) {
+        if (!fs.existsSync(PACK_FILE)) { res.writeHead(404).end(); return; }
+        res.writeHead(200, { 'Content-Type': 'application/zip' });
+        fs.createReadStream(PACK_FILE).pipe(res);
+        return;
+      }
       const match = req.method === 'POST' && req.url.match(/^\/tool\/(\w+)$/);
       if (!match) { res.writeHead(404).end(); return; }
       let body = '';
@@ -213,6 +232,7 @@ async function bootGame() {
   await server.start({
     onLine: (l) => emitter('game:log', l),
     log: (text) => emitter('game:log', { line: `[benana] ${text}`, level: 'info', at: Date.now() }),
+    pack: packOffer(),
   });
   setState({ server: 'running' });
   await prepareWorld();
@@ -258,12 +278,12 @@ function deployPlugin(args) {
   return run;
 }
 
-async function deployNow({ jarPath, emit }) {
+async function deployNow({ jarPath, packPath, emit }) {
   if (emit) emitter = emit;
   setState({ deploying: path.basename(jarPath, '.jar') });
   try {
-    const out = await swapPlugin(jarPath);
-    setState({ deployed: out.loaded ? { plugin: out.plugin, jar: jarPath, at: Date.now() } : deployedOnDisk() });
+    const out = await swapPlugin(jarPath, packPath);
+    setState({ deployed: out.loaded ? { plugin: out.plugin, jar: jarPath, pack: Boolean(out.pack), at: Date.now() } : deployedOnDisk() });
     return out;
   } finally {
     setState({ deploying: null });
@@ -290,15 +310,15 @@ async function resetNow({ emit } = {}) {
   }
 }
 
-async function swapPlugin(jarPath) {
+async function swapPlugin(jarPath, packPath) {
   if (!fs.existsSync(jarPath)) return { loaded: false, plugin: null, errors: [`Jar not found: ${jarPath}`], logTail: [] };
-  if (mock()) return { loaded: true, plugin: path.basename(jarPath, '.jar'), errors: [], logTail: ['[mock] plugin enabled'] };
-  return rebootFresh(jarPath);
+  if (mock()) return { loaded: true, plugin: path.basename(jarPath, '.jar'), pack: Boolean(packPath), errors: [], logTail: ['[mock] plugin enabled'] };
+  return rebootFresh(jarPath, packPath);
 }
 
 // Stops the game, wipes the saved world so each mod starts on untouched terrain (earlier mods leave craters
 // that arena resets never reach), optionally installs a studio jar, and boots a fresh server.
-async function rebootFresh(jarPath) {
+async function rebootFresh(jarPath, packPath) {
   systemNode();
   await startControl();
   await stopHost();
@@ -310,13 +330,16 @@ async function rebootFresh(jarPath) {
     fs.mkdirSync(dir, { recursive: true });
     for (const f of fs.readdirSync(dir)) if (/^studio-.*\.jar$/.test(f)) fs.rmSync(path.join(dir, f));
     fs.copyFileSync(jarPath, path.join(dir, `studio-${path.basename(jarPath)}`));
+    // A mod without assets must not inherit the previous mod's pack.
+    fs.rmSync(PACK_FILE, { force: true });
+    if (packPath && fs.existsSync(packPath)) fs.copyFileSync(packPath, PACK_FILE);
   }
   const since = Date.now();
   await bootGame();
   const lines = server.logSince(since);
   const enabled = lines.map((l) => l.line.match(/\[([^\]]+)\] Enabling (\S+) v/)).find(Boolean);
   const errors = lines.filter((l) => l.level === 'error').map((l) => l.line);
-  return { loaded: Boolean(enabled), plugin: enabled ? enabled[2] : null, errors, logTail: lines.slice(-40).map((l) => l.line) };
+  return { loaded: Boolean(enabled), plugin: enabled ? enabled[2] : null, pack: fs.existsSync(PACK_FILE), errors, logTail: lines.slice(-40).map((l) => l.line) };
 }
 
 async function runCommand(command) {
@@ -349,6 +372,10 @@ function playtestPrompt(testPlan) {
     '`attack` and `use_item` accept `trackTicks` to record the target right after the action; use it whenever the expected effect is movement.',
     'For bows, crossbows, tridents and throwables, use `shoot` (never `use_item` on a mob: that only right-clicks it). It aims, fires, and reports the projectile, explosions, ammo used, and the health/deaths/knockback of every living entity nearby.',
     'Each tool call takes 1-8 real seconds. For anything timing-sensitive (cooldowns, combos), summon all targets first and do it in ONE call: `attack_sequence` for melee, `shoot` with `entityIds` for ranged.',
+    'When the mod moves, boosts, launches or hurts the PLAYER, the bot is the test subject: measure it with `track_self` (just watch for N ticks), `use_item` with `trackSelf` (right-click and record the bot), or `move` (hold forward/jump/sprint/sneak and record the bot). They report max upward velocity, height gain, launches with their ticks, horizontal distance, health and effects. Never guess the bot\'s entity id; `nearby_entities` does not list the bot.',
+    'Right-click a block (or aim at a far block) with `use_item` and `position`. Place and break blocks as a player with `place_block` and `dig_block`; they fire the plugin\'s block events, which console `setblock` does not. Boss bars: `boss_bars`. Action bar and title text show up in `read_chat` and in tool `chat` fields.',
+    '`bot_state` lists effects and, for each item, its customName, lore and itemModel (the mod\'s own resource-pack model, e.g. "benana:storm_core").',
+    'The bot has Resistance V so it survives; for a fall-damage or health check, run `effect clear @bot resistance` first and give it back afterwards with `effect give @bot resistance infinite 4 true`. To stop a target mob walking around without breaking knockback, give it `effect give @e[type=husk] slowness infinite 255 true`.',
     'Start each check from a known state. If an earlier check left mobs, craters, or a cooldown behind, call `reset_arena` and rerun the setup.',
     'Judge each check on direct evidence: shot/explosion/health numbers from the tools, chat lines, and the plugin log lines from `server_log`. A mob disappearing is not proof of anything by itself; find out why (died in an explosion? suffocated? left range?) before you pass a check on it.',
     'If an action did not happen (no projectile, no ammo used, no plugin log line), the check cannot pass. Fix your setup and retry, or report it as blocked with the reason.',
@@ -373,6 +400,7 @@ function demoPrompt({ testPlan, spec }) {
     '1. `reset_arena`, then `game_setup` with the commands that give the bot what it needs and put targets in view (see the setup commands and checks below; reuse the ones from the most illustrative check).',
     '2. `equip` the mod item, then show the main behavior working 2 or 3 times: `attack` for melee, `shoot` for bows and throwables, `use_item` or `chat` for right-click items and commands. Include a limit the mod has (like a cooldown) only if it is quick to show.',
     '3. Between actions call `wait_ticks` with 30 to 40 so the viewer can follow what happened. Summon targets 3 blocks in front of the bot for melee and 8-10 blocks away for ranged.',
+    '4. Play like a person, not a turret: walk up to targets with `move_to`, strafe or jump with `move`, and if the mod moves the player (launch, pull, boost, jump), show it with `use_item` + `trackSelf` or `move` so the camera follows the bot through the air. Pick up drops with `move_to` on the item.',
     'Never use NoAI mobs, and summon mobs with {PersistenceRequired:1b}. Stay under 20 tool calls. Do not call report_check or finish and do not edit files.',
     'Finish with ONE plain sentence for the user describing what they just saw.',
     '',
