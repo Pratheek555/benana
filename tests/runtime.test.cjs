@@ -489,6 +489,30 @@ test("a playtest that skips test plan checks never passes", () => {
   assert.deepEqual(verdict.checks.map((c) => `${c.id}=${c.status}`), ["explodes=pass", "cooldown=blocked"]);
 });
 
+test("the demo walks through every spec feature with captions only it can set", async () => {
+  const game = require("../electron/lib/game/index.cjs");
+  const events = [];
+  game.handlers((channel, data) => events.push([channel, data]));
+  assert.ok(game.demoTools.includes("mcp__minecraft__showcase"));
+  assert.ok(!game.playtesterTools.includes("mcp__minecraft__showcase"));
+  assert.ok(game.playtesterTools.includes("mcp__minecraft__particles_and_sounds"));
+  await assert.rejects(game.runTool("showcase", { step: 1 }), /steps/);
+  await game.runTool("showcase", { steps: ["Summon the boss", "Slam", "Phase two"] });
+  const out = await game.runTool("showcase", { step: 2, note: "Watch the bot get thrown" });
+  assert.equal(out.showing, "2/3: Slam");
+  assert.deepEqual(events.at(-1), ["game:showcase", { steps: ["Summon the boss", "Slam", "Phase two"], step: 2, note: "Watch the bot get thrown" }]);
+  game.clearShowcase();
+  assert.deepEqual(events.at(-1), ["game:showcase", null]);
+  const prompt = game.demoPrompt({
+    testPlan: { modName: "StormGolem", summary: "A boss", setup: [], checks: [] },
+    spec: { behavior: ["Slams every 5 seconds", "Below half health the bar turns red"], assets: [{ name: "storm_core", look: "a crackling orb" }] },
+  });
+  assert.match(prompt, /show EVERY feature/);
+  assert.match(prompt, /- Below half health the bar turns red/);
+  assert.match(prompt, /storm_core: a crackling orb/);
+  assert.match(prompt, /Health:<n>f/);
+});
+
 test("Neatlogs evidence pages through spans and summarizes failed tool calls", async () => {
   process.env.NEATLOGS_API_KEY = "test";
   process.env.NEATLOGS_PROJECT_ID = "project";

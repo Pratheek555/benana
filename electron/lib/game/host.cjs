@@ -37,6 +37,7 @@ const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const { mineflayer: viewer } = require('prismarine-viewer');
 const { Vec3 } = require('vec3');
+const nbt = require('prismarine-nbt');
 
 const { MC_PORT, MC_VERSION, BOT_NAME, VIEWER_PORT, VIEWER_FIRST_PERSON } = process.env;
 
@@ -60,18 +61,85 @@ bot.once('spawn', () => {
   viewer(bot, { port: Number(VIEWER_PORT), firstPerson: VIEWER_FIRST_PERSON === '1', viewDistance: 4 });
   // The viewer places its camera on the bot's first `move` event; a bot standing still never sends one.
   setInterval(() => bot.entity && bot.emit('move', bot.entity.position.clone()), 1000);
-  bot._client.on('explosion', (p) => record({ kind: 'explosion', position: [round(p.x), round(p.y), round(p.z)] }));
+  bot._client.on('explosion', (p) => {
+    record({ kind: 'explosion', position: [round(p.x), round(p.y), round(p.z)] });
+    sense('explosion', 'explosion', [p.x, p.y, p.z]);
+  });
+  bot.on('particle', (p) => !NOISY_PARTICLES.has(p.name) && sense('particle', p.name || String(p.id), [p.position.x, p.position.y, p.position.z], p.count || 1));
+  // Mineflayer names sounds one off (minecraft-data's sound ids start at 1), so decode the packets here.
+  const heardSound = (holder, at) => {
+    const name = String(holder?.data?.soundName ?? bot.registry.sounds[(holder?.soundId ?? -2) + 1]?.name ?? '').replace(/^minecraft:/, '');
+    if (name && !NOISY_SOUNDS.test(name)) sense('sound', name, at);
+  };
+  bot._client.on('sound_effect', (p) => heardSound(p.sound, [p.x / 8, p.y / 8, p.z / 8]));
+  bot._client.on('entity_sound_effect', (p) => {
+    const e = bot.entities[p.entityId];
+    if (e) heardSound(p.sound, [e.position.x, e.position.y, e.position.z]);
+  });
+  // The server setting the bot's velocity (a plugin's setVelocity, knockback) arrives as entity_velocity.
+  bot._client.on('entity_velocity', (p) => {
+    if (p.entityId !== bot.entity?.id) return;
+    const vy = (p.velocity?.y ?? p.velocityY ?? 0) / 8000;
+    if (vy > 0.6) followLaunch(vy);
+  });
+  bot.on('entityHurt', (e) => e === bot.entity && setTimeout(() => fx({ kind: 'hurt', health: bot.health }), 150));
   send({ event: 'status', bot: 'online' });
 });
+
+// Particles, sounds, launches and hurts near the bot: what a player would see and hear but the 3D viewer
+// does not draw. Kept for the `particles_and_sounds` tool and streamed to the live view in short batches.
+const NOISY_PARTICLES = new Set(['block', 'damage_indicator', 'entity_effect', 'ambient_entity_effect']);
+const NOISY_SOUNDS = /\.step$|\.ambient$|\.swim$|\.splash$|_fall$|entity\.item\.pickup|entity\.player\.attack\.(nodamage|weak)/;
+const sensed = [];
+const fxBatch = new Map();
+function sense(kind, name, at, count = 1) {
+  if (!bot.entity) return;
+  const distance = bot.entity.position.distanceTo(new Vec3(at[0], at[1], at[2]));
+  if (distance > 32) return;
+  sensed.push({ at: Date.now(), kind, name, count, position: at.map(round), distance: round(distance) });
+  if (sensed.length > 1000) sensed.shift();
+  const key = `${kind}:${name}`;
+  const prev = fxBatch.get(key);
+  fxBatch.set(key, { kind, name, count: (prev?.count || 0) + count, distance: Math.min(prev?.distance ?? Infinity, round(distance)) });
+}
+function fx(item) { fxBatch.set(`${item.kind}:${Date.now()}:${Math.random()}`, item); }
+setInterval(() => {
+  if (!fxBatch.size) return;
+  send({ event: 'fx', fx: [...fxBatch.values()] });
+  fxBatch.clear();
+}, 250);
+
+// After the server throws the bot, follow it until it lands to report how high it went.
+let launchWatch = null;
+function followLaunch(vy) {
+  if (launchWatch) return;
+  const startY = bot.entity.position.y;
+  let peak = startY;
+  let ticks = 0;
+  launchWatch = () => {
+    peak = Math.max(peak, bot.entity.position.y);
+    if (++ticks > 3 && (bot.entity.onGround || ticks > 120)) {
+      bot.off('physicsTick', launchWatch);
+      launchWatch = null;
+      fx({ kind: 'launch', velocity: round(vy), height: round(peak - startY) });
+    }
+  };
+  bot.on('physicsTick', launchWatch);
+}
 bot.on('entityDead', (e) => { dead.add(e.id); record({ kind: 'death', entityId: e.id, name: e.name, position: vec(e.position) }); });
 bot.on('entityHurt', (e) => e && record({ kind: 'hurt', entityId: e.id, name: e.name || e.username, position: vec(e.position) }));
 bot.on('entityGone', (e) => dead.delete(e.id));
-bot.on('messagestr', (text, position) => {
-  if (position === 'game_info') return;
-  chat.push({ text, at: Date.now() });
+// Action bar and title text count as chat too: plugins often show cooldowns and status there.
+function heard(text, kind) {
+  if (!String(text).trim()) return;
+  chat.push({ text, at: Date.now(), ...(kind ? { kind } : {}) });
   if (chat.length > 500) chat.shift();
-  send({ event: 'chat', text });
-});
+  send({ event: 'chat', text: kind ? `[${kind}] ${text}` : text });
+}
+bot.on('messagestr', (text, position) => heard(text, position === 'game_info' ? 'actionbar' : null));
+bot.on('title', (text, type) => heard(plain(text), type === 'subtitle' ? 'subtitle' : 'title'));
+// Paper's sendActionBar and /title actionbar use their own packet, which Mineflayer does not surface.
+bot._client.on('action_bar', (p) => heard(plain(p.text), 'actionbar'));
 bot.on('kicked', (reason) => send({ event: 'status', bot: 'offline', error: `Kicked: ${typeof reason === 'string' ? reason : JSON.stringify(reason)}` }));
 bot.on('error', (e) => send({ event: 'status', bot: 'offline', error: e.message }));
 bot.on('end', () => {
@@ -89,8 +157,42 @@ function entity(id) {
 // Living entities sync their health as metadata entry 9 (1.21.4).
 const health = (e) => (e === bot.entity ? bot.health : typeof e.metadata?.[9] === 'number' ? round(e.metadata[9]) : undefined);
 
+// Text components arrive as strings, JSON chat, or NBT (item names in 1.21); flatten any of them to plain text.
+function plain(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return v.map(plain).join('');
+  if (typeof v !== 'object') return String(v);
+  if (typeof v.toString === 'function' && v.toString !== Object.prototype.toString) return v.toString();
+  if (v.type && 'value' in v) { try { return plain(nbt.simplify(v)); } catch { return plain(v.value); } }
+  return `${v.text ?? v[''] ?? v.translate ?? ''}${plain(v.extra)}`;
+}
+
+// An item with the details a mod changes: custom name, lore, and the resource-pack model it renders with.
+function describeItem(i) {
+  if (!i) return null;
+  const c = (k) => i.componentMap?.get(k)?.data;
+  const out = { name: i.name, count: i.count };
+  if (i.slot != null) out.slot = i.slot;
+  const custom = c('custom_name') ?? c('item_name');
+  if (custom != null) out.customName = plain(custom);
+  if (c('item_model') != null) out.itemModel = String(c('item_model'));
+  if (c('lore') != null) out.lore = [].concat(c('lore')).map(plain);
+  if (c('custom_model_data') != null) out.customModelData = c('custom_model_data');
+  if (c('enchantments') != null || i.enchants?.length) out.enchantments = (i.enchants || []).map((e) => `${e.name} ${e.lvl}`);
+  return out;
+}
+
+function effects(e) {
+  return Object.values(e.effects || {}).map((x) => ({
+    name: bot.registry.effects[x.id]?.name || String(x.id),
+    level: x.amplifier + 1,
+    seconds: x.duration < 0 ? 'infinite' : round(x.duration / 20),
+  }));
+}
+
 function describe(e) {
-  return {
+  const out = {
     id: e.id,
     type: e.type,
     name: e.name || e.username || e.displayName,
@@ -100,6 +202,69 @@ function describe(e) {
     onGround: e.onGround,
     health: health(e),
   };
+  const label = plain(e.metadata?.[2]);
+  if (label) out.customName = label;
+  if (e.name === 'item') { try { out.item = describeItem(e.getDroppedItem()); } catch {} }
+  return out;
+}
+
+// Samples the bot itself every tick while `during` runs (or for `ticks`): the bot is the test subject for
+// mods that launch, pull, push or boost the player. A launch is a tick where upward velocity jumps above 0.6.
+async function trackSelf(ticks = 40, during = null) {
+  const me = bot.entity;
+  const start = me.position.clone();
+  const healthBefore = bot.health;
+  const samples = [];
+  let minHealth = bot.health;
+  let launches = 0;
+  let prevVy = me.velocity.y;
+  const startedAt = Date.now();
+  const onTick = () => {
+    const vy = me.velocity.y;
+    if (vy > 0.6 && prevVy <= 0.6) launches++;
+    prevVy = vy;
+    minHealth = Math.min(minHealth, bot.health);
+    samples.push({ tick: samples.length, ms: Date.now() - startedAt, pos: vec(me.position), vel: vec(me.velocity), onGround: me.onGround });
+  };
+  bot.on('physicsTick', onTick);
+  try {
+    if (during) await during();
+    const limit = Math.min(Math.max(Number(ticks) || 40, 1), 400);
+    while (samples.length < limit) await bot.waitForTicks(1);
+  } finally {
+    bot.off('physicsTick', onTick);
+  }
+  const end = me.position;
+  const ys = samples.map((s) => s.pos[1]);
+  const launchTicks = [];
+  for (let i = 1; i < samples.length; i++) if (samples[i].vel[1] > 0.6 && samples[i - 1].vel[1] <= 0.6) launchTicks.push(i);
+  return {
+    subject: 'bot',
+    start: vec(start),
+    end: vec(end),
+    maxUpwardVelocity: round(Math.max(0, ...samples.map((s) => s.vel[1]))),
+    maxHorizontalSpeed: round(Math.max(0, ...samples.map((s) => Math.hypot(s.vel[0], s.vel[2])))),
+    maxHeightGain: round(Math.max(0, ...ys.map((y) => y - start.y))),
+    horizontalDistance: round(Math.hypot(end.x - start.x, end.z - start.z)),
+    launches,
+    launchTicks,
+    landed: me.onGround,
+    health: { before: healthBefore, min: minHealth, after: bot.health },
+    effects: effects(me),
+    // Every other tick keeps the shape of a launch without flooding the context.
+    samples: samples.filter((_, i) => i % 2 === 0).slice(0, 80),
+  };
+}
+
+function blockAt(p) {
+  const pos = new Vec3(Math.floor(p[0]), Math.floor(p[1]), Math.floor(p[2]));
+  return { pos, block: bot.blockAt(pos) };
+}
+
+async function within(pos, reach = 4.2) {
+  if (bot.entity.position.offset(0, 1.6, 0).distanceTo(pos.offset(0.5, 0.5, 0.5)) > reach) {
+    await tools.move_to({ position: [pos.x + 0.5, pos.y, pos.z + 0.5], range: 3 });
+  }
 }
 
 function target(args) {
@@ -344,13 +509,75 @@ const tools = {
   async bot_state() {
     return {
       username: bot.username,
+      entityId: bot.entity.id,
       position: vec(bot.entity.position),
+      velocity: vec(bot.entity.velocity),
+      onGround: bot.entity.onGround,
       health: bot.health,
       food: bot.food,
       gameMode: bot.game.gameMode,
-      heldItem: bot.heldItem ? { name: bot.heldItem.name, count: bot.heldItem.count } : null,
-      inventory: bot.inventory.items().map((i) => ({ name: i.name, count: i.count, slot: i.slot })),
+      effects: effects(bot.entity),
+      heldItem: describeItem(bot.heldItem),
+      inventory: bot.inventory.items().map(describeItem),
     };
+  },
+  async track_self({ ticks = 40 } = {}) {
+    return trackSelf(ticks);
+  },
+  // Holds movement keys for a number of ticks and records how the bot moved, e.g. jumping with a boost,
+  // sprinting onto a pad, or sneaking. yaw is in degrees (0 = south/+z, 90 = west/-x).
+  async move({ forward, back, left, right, jump, sprint, sneak, ticks = 20, yaw, lookAt } = {}) {
+    if (Array.isArray(lookAt)) await bot.lookAt(new Vec3(...lookAt), true);
+    else if (yaw != null) await bot.look((-Number(yaw) * Math.PI) / 180 + Math.PI, 0, true);
+    const keys = { forward, back, left, right, jump, sprint, sneak };
+    const held = Object.entries(keys).filter(([, on]) => on).map(([k]) => k);
+    const hold = Math.min(Math.max(Number(ticks) || 20, 1), 200);
+    const out = await trackSelf(hold + 20, async () => {
+      for (const k of held) bot.setControlState(k, true);
+      await bot.waitForTicks(hold);
+      bot.clearControlStates();
+    });
+    return { held, ticks: hold, ...out };
+  },
+  async place_block({ item, position }) {
+    if (item) await tools.equip({ item });
+    if (!bot.heldItem) throw new Error('Hold a block to place (pass item).');
+    const { pos, block } = blockAt(position);
+    if (block && block.name !== 'air' && block.name !== 'cave_air') throw new Error(`${vec(pos)} already holds ${block.name}.`);
+    const faces = [[0, -1, 0], [0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+    const ref = faces.map((f) => ({ face: new Vec3(-f[0], -f[1], -f[2]), block: bot.blockAt(pos.offset(...f)) }))
+      .find((r) => r.block && r.block.boundingBox === 'block');
+    if (!ref) throw new Error(`Nothing solid next to ${vec(pos)} to place against.`);
+    await within(pos);
+    const started = Date.now();
+    await bot.placeBlock(ref.block, ref.face);
+    await bot.waitForTicks(4);
+    return { placed: bot.blockAt(pos)?.name, at: vec(pos), chat: chat.filter((c) => c.at >= started).map((c) => c.text) };
+  },
+  async dig_block({ position }) {
+    const { pos, block } = blockAt(position);
+    if (!block || block.name === 'air') throw new Error(`No block at ${vec(pos)}.`);
+    await within(pos);
+    const before = new Map(bot.inventory.items().map((i) => [i.name, 0]));
+    for (const i of bot.inventory.items()) before.set(i.name, before.get(i.name) + i.count);
+    const started = Date.now();
+    await bot.dig(block, true);
+    // Drops can't be picked up for 10 ticks.
+    await bot.waitForTicks(20);
+    const gained = {};
+    for (const i of bot.inventory.items()) gained[i.name] = (gained[i.name] || 0) + i.count;
+    for (const [k, n] of before) gained[k] = (gained[k] || 0) - n;
+    return {
+      dug: block.name,
+      at: vec(pos),
+      nowThere: bot.blockAt(pos)?.name,
+      inventoryGained: Object.fromEntries(Object.entries(gained).filter(([, n]) => n)),
+      drops: Object.values(bot.entities).filter((e) => e.name === 'item' && e.position.distanceTo(pos) < 3).map(describe),
+      chat: chat.filter((c) => c.at >= started).map((c) => c.text),
+    };
+  },
+  async boss_bars() {
+    return Object.values(bot.bossBars || {}).map((b) => ({ title: plain(b.title), health: round(b.health), color: b.color, dividers: b.dividers }));
   },
   async nearby_entities({ radius = 16 } = {}) {
     return Object.values(bot.entities)
@@ -404,22 +631,43 @@ const tools = {
     return { hits: await Promise.all(tracks) };
   },
   shoot,
-  async use_item({ entityId, trackTicks = 0, holdTicks = 5 } = {}) {
+  async use_item({ entityId, position, trackTicks = 0, trackSelf: selfTicks = 0, holdTicks = 5 } = {}) {
     // Right-clicking a mob with a bow only interacts with it; aim and fire instead.
-    if (rangedSpec(bot.heldItem?.name)) {
-      const out = await shoot({ entityId, trackTicks: trackTicks || 60 });
+    if (rangedSpec(bot.heldItem?.name) && !selfTicks) {
+      const out = await shoot({ entityId, position, trackTicks: trackTicks || 60 });
       return { note: `${bot.heldItem?.name} is a ranged item, so use_item fired it with shoot.`, ...out };
     }
+    const started = Date.now();
+    const used = describeItem(bot.heldItem);
+    const heard = () => chat.filter((c) => c.at >= started).map((c) => (c.kind ? `[${c.kind}] ${c.text}` : c.text));
+    let action;
+    let on = null;
+    let e = null;
     if (entityId != null) {
-      const e = entity(entityId);
+      e = entity(entityId);
+      on = e.id;
       await bot.lookAt(e.position.offset(0, (e.height || 1.6) * 0.8, 0), true);
-      await bot.activateEntity(e);
-      return trackTicks ? { used: bot.heldItem?.name, on: e.id, after: await track(e, trackTicks) } : { used: bot.heldItem?.name, on: e.id };
+      action = () => bot.activateEntity(e);
+    } else if (Array.isArray(position)) {
+      // Right-click a block in reach; past reach the client sends a plain right-click while looking at it,
+      // which is what a player aiming a grapple or wand at a far block does.
+      const { pos, block } = blockAt(position);
+      on = { position: vec(pos), block: block?.name || 'unloaded' };
+      await bot.lookAt(pos.offset(0.5, 0.5, 0.5), true);
+      const reach = bot.entity.position.offset(0, 1.62, 0).distanceTo(pos.offset(0.5, 0.5, 0.5));
+      action = block && block.boundingBox === 'block' && reach <= 4.5
+        ? () => bot.activateBlock(block)
+        : async () => { bot.activateItem(); await bot.waitForTicks(Math.max(1, Number(holdTicks) || 5)); bot.deactivateItem(); };
+    } else {
+      action = async () => { bot.activateItem(); await bot.waitForTicks(Math.max(1, Number(holdTicks) || 5)); bot.deactivateItem(); };
     }
-    bot.activateItem();
-    await bot.waitForTicks(Math.max(1, Number(holdTicks) || 5));
-    bot.deactivateItem();
-    return { used: bot.heldItem?.name };
+    if (selfTicks) {
+      const self = await trackSelf(selfTicks, action);
+      return { used, on, self, chat: heard() };
+    }
+    await action();
+    const after = e && trackTicks ? await track(e, trackTicks) : await bot.waitForTicks(2);
+    return { used, on, ...(after ? { after } : {}), effects: effects(bot.entity), chat: heard() };
   },
   async track_entity({ entityId, ticks = 20 }) {
     return track(entity(entityId), ticks);
@@ -436,7 +684,47 @@ const tools = {
   async read_chat({ sinceMs = 0 } = {}) {
     return chat.filter((c) => c.at >= sinceMs);
   },
+  // Grouped by kind and name: how many, when first and last, and the nearest position.
+  async particles_and_sounds({ sinceMs = 0, radius = 32 } = {}) {
+    const groups = new Map();
+    for (const e of sensed) {
+      if (e.at < sinceMs || e.distance > radius) continue;
+      const key = `${e.kind}:${e.name}`;
+      const g = groups.get(key) || { kind: e.kind, name: e.name, count: 0, events: 0, firstAt: e.at, lastAt: e.at, nearest: e.position, distance: e.distance };
+      g.count += e.count;
+      g.events += 1;
+      g.lastAt = e.at;
+      if (e.distance < g.distance) { g.distance = e.distance; g.nearest = e.position; }
+      groups.set(key, g);
+    }
+    return [...groups.values()].sort((a, b) => a.firstAt - b.firstAt);
+  },
 };
+
+// What a player's screen would show that the 3D viewer cannot: the hotbar (with each item's resource-pack
+// model), boss bars, health, effects, the action bar, and mod items lying nearby. Sent only when it changes.
+let lastHud = '';
+setInterval(() => {
+  if (!bot.entity || !bot.inventory) return;
+  const recent = chat.filter((c) => c.kind === 'actionbar' && Date.now() - c.at < 3000).pop();
+  const hud = {
+    selected: bot.quickBarSlot,
+    hotbar: Array.from({ length: 9 }, (_, i) => describeItem(bot.inventory.slots[36 + i])),
+    bossBars: Object.values(bot.bossBars || {}).map((b) => ({ title: plain(b.title), health: round(b.health), color: b.color })),
+    health: bot.health,
+    effects: effects(bot.entity),
+    actionbar: recent?.text || null,
+    ground: Object.values(bot.entities)
+      .filter((e) => e.name === 'item' && !dead.has(e.id) && e.position.distanceTo(bot.entity.position) <= 16)
+      .map((e) => { try { return { id: e.id, distance: round(e.position.distanceTo(bot.entity.position)), item: describeItem(e.getDroppedItem()) }; } catch { return null; } })
+      .filter((g) => g?.item && (g.item.itemModel || g.item.customName))
+      .slice(0, 4),
+  };
+  const key = JSON.stringify({ ...hud, ground: hud.ground.map((g) => [g.id, Math.round(g.distance)]) });
+  if (key === lastHud) return;
+  lastHud = key;
+  send({ event: 'hud', hud });
+}, 300);
 
 process.on('message', async ({ id, tool, args }) => {
   try {

@@ -17,6 +17,8 @@ export const ROLE = {
   builder: "Builder",
   fixer: "Fixer",
   playtester: "Playtester",
+  grader: "Grader",
+  coach: "Coach",
   benana: "Benana",
   seeded: "Seeded fixture",
 };
@@ -35,7 +37,7 @@ const STATUS = {
 
 export function phaseIndex(mod) {
   if (!mod) return -1;
-  if (mod.phase === "fix") return 6;
+  if (mod.phase === "fix" || mod.phase === "bench") return 6;
   return PHASES.findIndex(([key]) => key === mod.phase);
 }
 

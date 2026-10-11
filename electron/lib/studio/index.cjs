@@ -7,6 +7,7 @@ const game = require('../game/index.cjs');
 const neatlogs = require('../neatlogs.cjs');
 const repo = require('./repo.cjs');
 const prompts = require('./prompts.cjs');
+const bench = require('./bench.cjs');
 const { runClaude, MODELS } = require('./claude.cjs');
 
 const MAX_ATTEMPTS = 3;
@@ -22,12 +23,20 @@ let log = () => {};
 const now = () => Date.now();
 const modFile = (id) => path.join(studioDir, id, 'mod.json');
 
+const latestBuild = (mod) => [...mod.attempts].reverse().find((a) => a.build?.ok && a.build.jar && fs.existsSync(a.build.jar))?.build || null;
+
 // The newest jar this mod built (Maven overwrites target/<Name>.jar on every attempt).
 function jarOf(mod) {
-  const built = [...mod.attempts].reverse().find((a) => a.build?.ok && a.build.jar && fs.existsSync(a.build.jar));
-  if (built) return built.build.jar;
+  const built = latestBuild(mod);
+  if (built) return built.jar;
   const fallback = mod.repoDir && path.join(mod.repoDir, 'target', `${mod.name}.jar`);
   return fallback && fs.existsSync(fallback) ? fallback : null;
+}
+
+// The resource pack that goes with the newest jar, if that build drew any assets.
+function packOf(mod) {
+  const zip = latestBuild(mod)?.assets?.zip;
+  return zip && fs.existsSync(zip) ? zip : null;
 }
 
 function publicMod(mod) {
@@ -87,11 +96,22 @@ function lessons() {
   try { return JSON.parse(fs.readFileSync(lessonsFile, 'utf8')); } catch { return []; }
 }
 
-function addLesson(lesson, mod) {
+// Lessons that share most of their words are the same lesson; keep the first one.
+const words = (s) => new Set(String(s).toLowerCase().match(/[a-z0-9]{3,}/g) || []);
+function similar(a, b) {
+  const x = words(a);
+  const y = words(b);
+  const shared = [...x].filter((w) => y.has(w)).length;
+  return shared / Math.max(1, Math.min(x.size, y.size)) > 0.7;
+}
+
+function addLesson(lesson, mod, source = 'fixer') {
   const all = lessons();
-  all.push({ lesson, mod: mod.name, at: now() });
+  if (all.some((l) => similar(l.lesson, lesson))) return false;
+  all.push({ lesson, mod: mod.name, source, at: now() });
   fs.mkdirSync(studioDir, { recursive: true });
-  fs.writeFileSync(lessonsFile, JSON.stringify(all.slice(-20), null, 2));
+  fs.writeFileSync(lessonsFile, JSON.stringify(all.slice(-30), null, 2));
+  return true;
 }
 
 function parseJson(text) {
@@ -218,38 +238,46 @@ async function codePhase(mod, attempt, previous) {
 
 async function playtestPhase(mod, attempt) {
   const dir = path.join(mod.repoDir, 'playtest', `attempt-${attempt.n}`);
-  fs.mkdirSync(dir, { recursive: true });
-  const verdictFile = path.join(dir, 'verdict.json');
-  const testPlanFile = path.join(mod.repoDir, 'playtest', 'test-plan.json');
+  return playtestRun(mod, attempt, {
+    plan: mod.testPlan, role: 'playtester', cwd: mod.repoDir, runId: `${mod.id}_${attempt.n}`,
+    verdictFile: path.join(dir, 'verdict.json'),
+    testPlanFile: path.join(mod.repoDir, 'playtest', 'test-plan.json'),
+    mcpFile: path.join(studioDir, mod.id, `mcp-attempt-${attempt.n}.json`),
+    onLive: (v) => { attempt.verdict = v; },
+  });
+}
+
+// One in-game test session against a plan: the pipeline's playtester, or the benchmark grader with the hidden plan.
+async function playtestRun(mod, attempt, { plan, role, cwd, runId, verdictFile, testPlanFile, mcpFile, onLive = () => {} }) {
+  fs.mkdirSync(path.dirname(verdictFile), { recursive: true });
   fs.rmSync(verdictFile, { force: true });
+  const n = attempt?.n ?? 0;
 
   if (game.status().mock) {
-    const v = game.mockVerdict(mod.testPlan, attempt.n);
+    const v = game.mockVerdict(plan, role === 'grader' ? 2 : n);
     fs.writeFileSync(verdictFile, JSON.stringify(v, null, 2));
-    feed(mod, { attempt: attempt.n, role: 'playtester', kind: 'note', text: '[mock runtime] canned verdict' });
-    return game.readVerdict(verdictFile, mod.testPlan);
+    feed(mod, { attempt: n, role, kind: 'note', text: '[mock runtime] canned verdict' });
+    return game.readVerdict(verdictFile, plan);
   }
 
   for (let run = 1; run <= 2; run++) {
-    const mcpFile = path.join(studioDir, mod.id, `mcp-attempt-${attempt.n}.json`);
     fs.mkdirSync(path.dirname(mcpFile), { recursive: true });
-    fs.writeFileSync(mcpFile, JSON.stringify(game.mcpConfig({ runId: `${mod.id}_${attempt.n}`, verdictFile, testPlanFile })));
+    fs.writeFileSync(mcpFile, JSON.stringify(game.mcpConfig({ runId, verdictFile, testPlanFile })));
     const poll = setInterval(() => {
       if (!fs.existsSync(verdictFile)) return;
-      const live = game.readVerdict(verdictFile, mod.testPlan);
-      attempt.verdict = { ...live, live: true };
+      onLive({ ...game.readVerdict(verdictFile, plan), live: true });
       save(mod);
     }, 1000);
     try {
-      await agent(mod, attempt, 'playtester', { cwd: mod.repoDir, prompt: game.playtestPrompt(mod.testPlan), model: MODELS.playtest, tools: [], allowedTools: game.playtesterTools, mcpConfigFile: mcpFile });
+      await agent(mod, attempt, role, { cwd, prompt: game.playtestPrompt(plan), model: MODELS.playtest, tools: [], allowedTools: game.playtesterTools, mcpConfigFile: mcpFile });
     } finally {
       clearInterval(poll);
     }
-    const verdict = game.readVerdict(verdictFile, mod.testPlan);
+    const verdict = game.readVerdict(verdictFile, plan);
     if (verdict.finished) return verdict;
-    feed(mod, { attempt: attempt.n, role: 'benana', kind: 'note', text: run === 1 ? 'The playtester stopped before finishing; running it again.' : 'The playtester did not finish the test plan.' });
+    feed(mod, { attempt: n, role: 'benana', kind: 'note', text: run === 1 ? `The ${role} stopped before finishing; running it again.` : `The ${role} did not finish the test plan.` });
   }
-  return game.readVerdict(verdictFile, mod.testPlan);
+  return game.readVerdict(verdictFile, plan);
 }
 
 // Attempt numbers run across the whole chat (playtest folders and the UI key on them); `previous` is null for a turn's first attempt.
@@ -267,11 +295,20 @@ async function runAttempt(mod, turnIndex, n, previous) {
   setPhase(mod, first ? 'build' : 'fix', !first ? `Attempt ${n}: fixing what the playtester found` : `Attempt ${n}: ${attempt.revision ? 'changing' : 'writing'} ${mod.name}`);
   await codePhase(mod, attempt, previous);
 
-  setPhase(mod, 'compile', `Attempt ${n}: compiling with Maven`);
+  setPhase(mod, 'compile', `Attempt ${n}: compiling with Maven and packing assets`);
   attempt.build = await repo.build(mod.repoDir, mod.name);
+  const assets = attempt.build.assets;
+  if (assets?.items?.length || assets?.errors?.length) {
+    feed(mod, { attempt: n, role: 'benana', kind: 'assets', items: assets.items, errors: assets.errors, warnings: assets.warnings, text: `${assets.items.length} asset(s) drawn${assets.errors.length ? `, ${assets.errors.length} problem(s)` : ''}` });
+  }
   if (!attempt.build.ok) {
     attempt.failure = { kind: 'build', summary: 'The plugin did not compile.' };
     attempt.commit = await repo.commit(mod.repoDir, `Attempt ${n} (${attempt.role}): build failed`);
+    return attempt;
+  }
+  if (assets && !assets.ok) {
+    attempt.failure = { kind: 'assets', summary: `The resource pack is broken: ${assets.errors[0]}${assets.errors.length > 1 ? ` (+${assets.errors.length - 1} more)` : ''}` };
+    attempt.commit = await repo.commit(mod.repoDir, `Attempt ${n} (${attempt.role}): broken assets`);
     return attempt;
   }
   const did = attempt.role === 'fixer' ? `fix ${mod.name} from playtest evidence` : attempt.revision ? `change ${mod.name}: ${turn.prompt.replace(/\s+/g, ' ').slice(0, 72)}` : `implement ${mod.name}`;
@@ -279,7 +316,7 @@ async function runAttempt(mod, turnIndex, n, previous) {
   feed(mod, { attempt: n, role: 'benana', kind: 'note', text: `Committed ${attempt.commit.sha.slice(0, 7)}${attempt.commit.checkpoint ? `, Entire checkpoint ${attempt.commit.checkpoint}` : ''}` });
 
   setPhase(mod, 'deploy', `Attempt ${n}: deploying to the Paper server`);
-  attempt.deploy = await game.deployPlugin({ jarPath: attempt.build.jar, emit });
+  attempt.deploy = await game.deployPlugin({ jarPath: attempt.build.jar, packPath: assets?.zip || null, emit });
   if (!attempt.deploy.loaded) {
     attempt.failure = { kind: 'load', summary: 'The plugin did not load on the server.' };
     return attempt;
@@ -296,6 +333,61 @@ async function runAttempt(mod, turnIndex, n, previous) {
       : { kind: 'playtest', summary: attempt.verdict.error || 'The playtester did not finish.' };
   }
   return attempt;
+}
+
+// Benchmark grading: redeploy the final build on a fresh world, run the task's hidden checks with a grader session outside the
+// mod repo (so no building agent can read them), score it, and have a coach turn the failures into lessons for future builders.
+async function benchPhase(mod) {
+  const task = bench.task(mod.bench.taskId);
+  const started = now();
+  const dir = path.join(studioDir, mod.id, 'bench');
+  fs.mkdirSync(dir, { recursive: true });
+  const build = latestBuild(mod);
+  const plan = bench.goldPlan(task, mod);
+  let verdict = null;
+  if (build) {
+    setPhase(mod, 'bench', `Benchmark: grading ${mod.name} with ${task.gold.checks.length} hidden checks`);
+    const deploy = await game.deployPlugin({ jarPath: build.jar, packPath: packOf(mod), emit });
+    if (deploy.loaded) {
+      const testPlanFile = path.join(dir, 'test-plan.json');
+      fs.writeFileSync(testPlanFile, JSON.stringify(plan, null, 2));
+      verdict = await playtestRun(mod, null, {
+        plan, role: 'grader', cwd: dir, runId: `${mod.id}_bench`,
+        verdictFile: path.join(dir, 'verdict.json'), testPlanFile, mcpFile: path.join(dir, 'mcp.json'),
+      });
+    }
+  }
+  const scored = bench.score(task, verdict, build);
+  const turnSessions = [...mod.sessions, ...mod.attempts.flatMap((a) => a.sessions)];
+  const result = {
+    id: `${mod.id}_bench`, taskId: task.id, modId: mod.id, modName: mod.name, at: now(), durationMs: now() - mod.createdAt,
+    gradeMs: now() - started, attempts: mod.attempts.length, selfPassed: mod.attempts.some((a) => a.status === 'passed'),
+    lessonsBefore: mod.bench.lessonsBefore, costUsd: turnSessions.reduce((n, s) => n + (s.usage?.costUsd || 0), 0),
+    ...scored, lessonsLearned: [],
+  };
+  mod.bench.result = result;
+  feed(mod, { role: 'benana', kind: 'bench', text: `Benchmark ${task.title}: ${scored.passed}/${scored.total} hidden checks passed`, result });
+  save(mod);
+
+  const failed = scored.checks.filter((c) => c.status !== 'pass' && c.by === 'grader' && c.status !== 'blocked');
+  if (failed.length && build && !game.status().mock) {
+    setPhase(mod, 'bench', 'Benchmark: the coach is turning failed checks into lessons');
+    const res = await agent(mod, null, 'coach', {
+      cwd: mod.repoDir, prompt: prompts.coach({ task, mod, gold: scored, lessons: lessons().map((l) => l.lesson) }),
+      model: MODELS.build, tools: ['Read', 'Glob', 'Grep'], allowedTools: ['Read', 'Glob', 'Grep'],
+    }).catch((e) => ({ ok: false, error: e.message }));
+    if (res.ok) {
+      for (const m of res.final.matchAll(/^LESSON:\s*(.+)$/gm)) {
+        const lesson = m[1].trim();
+        if (addLesson(lesson, mod, 'coach')) result.lessonsLearned.push(lesson);
+      }
+      if (result.lessonsLearned.length) feed(mod, { role: 'benana', kind: 'note', text: `Coach added ${result.lessonsLearned.length} lesson(s) for future builders` });
+    }
+  }
+  bench.record(result);
+  emit('studio:bench', result);
+  save(mod);
+  return result;
 }
 
 // Runs the mod's latest turn. The first turn builds the plugin from scratch; a revision turn (the repository already exists)
@@ -321,7 +413,7 @@ async function run(mod) {
     setPhase(mod, 'spec', turn.revision ? 'Updating the spec and test plan for your change' : 'Writing the spec and an in-game test plan');
     const spec = await specPhase(mod, turn);
     mod.name = spec.modName;
-    mod.spec = { summary: spec.summary, behavior: spec.behavior || [] };
+    mod.spec = { summary: spec.summary, behavior: spec.behavior || [], assets: Array.isArray(spec.assets) ? spec.assets.filter((a) => a?.name) : [] };
     mod.testPlan = spec.testPlan;
     Object.assign(turn, { summary: spec.summary, checks: spec.testPlan.checks });
     feed(mod, { role: 'spec', kind: 'plan', text: `${mod.testPlan.checks.length} checks: ${mod.testPlan.checks.map((c) => c.title).join(' · ')}` });
@@ -342,6 +434,7 @@ async function run(mod) {
     save(mod);
 
     let previous = null;
+    let used = 0;
     const firstN = (mod.attempts.at(-1)?.n ?? 0) + 1;
     for (let n = firstN; n < firstN + MAX_ATTEMPTS; n++) {
       const attempt = await runAttempt(mod, turnIndex, n, previous);
@@ -350,14 +443,17 @@ async function run(mod) {
       save(mod);
       if (!attempt.failure) {
         if (attempt.lesson) addLesson(attempt.lesson, mod);
-        const used = n - firstN + 1;
-        settle('passed', used === 1 ? `${mod.name} passed every check on the first attempt` : `${mod.name} passed after ${used} attempts`);
-        return;
+        used = n - firstN + 1;
+        break;
       }
       feed(mod, { attempt: n, role: 'benana', kind: 'failure', text: `Attempt ${n} failed (${attempt.failure.kind}): ${attempt.failure.summary}` });
       previous = attempt;
     }
-    settle('failed', `${mod.name} still fails after ${MAX_ATTEMPTS} attempts`);
+    // A benchmark run is graded on the final build whether or not it passed its own test plan.
+    const graded = mod.bench && turnIndex === 0 ? await benchPhase(mod) : null;
+    const tail = graded ? ` · benchmark ${graded.passed}/${graded.total}` : '';
+    if (used) settle('passed', `${used === 1 ? `${mod.name} passed every check on the first attempt` : `${mod.name} passed after ${used} attempts`}${tail}`);
+    else settle('failed', `${mod.name} still fails after ${MAX_ATTEMPTS} attempts${tail}`);
   } catch (e) {
     settle(active?.stopped ? 'stopped' : 'failed');
     mod.error = e.message;
@@ -398,19 +494,20 @@ async function runDemo({ id }) {
   let error = null;
   try {
     if (!isLoaded(mod)) {
-      const out = await game.deployPlugin({ jarPath: jar, emit });
+      const out = await game.deployPlugin({ jarPath: jar, packPath: packOf(mod), emit });
       if (!out.loaded) throw new Error(`${mod.name} did not load: ${out.errors[0] || 'see the server log'}`);
     } else if (game.status().bot !== 'online' && !game.status().mock) {
       await game.start(emit);
     }
     if (run.stopped) return { stopped: true };
     if (game.status().mock) return { summary: '[mock runtime] no demo' };
+    game.clearShowcase();
     const dir = path.join(studioDir, mod.id, 'demo');
     fs.mkdirSync(dir, { recursive: true });
     const mcpFile = path.join(dir, 'mcp.json');
     fs.writeFileSync(mcpFile, JSON.stringify(game.mcpConfig({ runId: `${mod.id}_demo`, verdictFile: path.join(dir, 'verdict.json'), testPlanFile: path.join(dir, 'test-plan.json') })));
     // Runs outside the mod repo so a demo is never traced or checkpointed as part of the mod's history.
-    const handle = runClaude({ cwd: dir, prompt: game.demoPrompt(mod), model: MODELS.playtest, tools: [], allowedTools: game.demoTools, mcpConfigFile: mcpFile, timeoutMs: 5 * 60 * 1000 });
+    const handle = runClaude({ cwd: dir, prompt: game.demoPrompt(mod), model: MODELS.playtest, tools: [], allowedTools: game.demoTools, mcpConfigFile: mcpFile, timeoutMs: 9 * 60 * 1000 });
     run.stop = handle.stop;
     if (run.stopped) handle.stop();
     const res = await handle.done;
@@ -433,7 +530,7 @@ function assertIdle() {
   stopDemo();
 }
 
-function create({ prompt, seed = false }) {
+function create({ prompt, seed = false, bench: benchRun = null }) {
   assertIdle();
   const text = String(prompt || '').trim();
   if (!seed && text.length < 8) throw new Error('Describe the mod in a sentence.');
@@ -441,7 +538,7 @@ function create({ prompt, seed = false }) {
   const request = seed ? text || 'A golden sword that launches any mob it hits into the sky with particles, with a 3 second cooldown.' : text;
   const mod = {
     id, prompt: request, turns: [{ prompt: request, at: now() }],
-    seed: Boolean(seed), name: 'New mod', status: 'queued', phase: 'queued', createdAt: now(), updatedAt: now(),
+    seed: Boolean(seed), bench: benchRun, name: 'New mod', status: 'queued', phase: 'queued', createdAt: now(), updatedAt: now(),
     spec: null, testPlan: null, repoDir: null, partners: null, sessions: [], attempts: [], feed: [], error: null,
   };
   mods.set(id, mod);
@@ -496,7 +593,7 @@ function handlers(deps) {
       const jar = jarOf(mod);
       if (!jar) throw new Error(`${mod.name} has no built jar yet.`);
       stopDemo();
-      const out = await game.deployPlugin({ jarPath: jar, emit });
+      const out = await game.deployPlugin({ jarPath: jar, packPath: packOf(mod), emit });
       if (!out.loaded) throw new Error(`${mod.name} did not load: ${out.errors[0] || 'see the server log'}`);
       return out;
     },
@@ -524,6 +621,10 @@ function handlers(deps) {
     'studio:file': ({ id, path: rel }) => repo.readFile(repoOf(id), rel),
     'studio:diff': ({ id, sha }) => repo.diff(repoOf(id), sha),
     'studio:lessons': () => lessons(),
+    'studio:bench-tasks': () => bench.tasks().map(({ gold, ...t }) => ({ ...t, checks: gold.checks.map(({ id, title, capability }) => ({ id, title, capability })) })),
+    'studio:bench-results': () => bench.results(),
+    // Builds the task's request through the normal pipeline, then grades the result with the hidden checks.
+    'studio:bench-run': ({ taskId }) => create({ prompt: bench.task(taskId).prompt, bench: { taskId, lessonsBefore: lessons().length } }),
     'studio:partners': async () => ({ neatlogs: await neatlogs.status() }),
   };
 }

@@ -1,0 +1,257 @@
+/* Bench page and the benchmark and asset cards in the build chat. */
+
+.studio .bench {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+.studio .bench-top {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 0.82fr);
+  gap: 16px;
+}
+.studio .bench-score {
+  display: flex;
+  flex-direction: column;
+}
+.studio .bench-task blockquote {
+  margin: 8px 0 14px;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.studio .bench-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.studio .bench-caps span {
+  padding: 3px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.studio .bench-hidden {
+  display: grid;
+  gap: 5px;
+  margin: 2px 0 0;
+  padding-left: 20px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+/* Score per run: one column per run, height = share of hidden checks passed. */
+.studio .bench-history {
+  display: flex;
+  gap: 10px;
+  min-height: 170px;
+  padding-top: 6px;
+  overflow-x: auto;
+}
+.studio .bench-col {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  justify-items: center;
+  gap: 5px;
+  width: 64px;
+  flex: none;
+  padding: 6px 4px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.studio .bench-col:hover {
+  border-color: var(--line);
+  background: var(--raised);
+}
+.studio .bench-col-value {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.studio .bench-col-track {
+  position: relative;
+  width: 22px;
+  min-height: 100px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.studio .bench-col-track i {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 6px;
+  background: var(--accent);
+}
+.studio .bench-col-track i.full {
+  background: var(--good);
+}
+.studio .bench-col-label {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.studio .bench-col small {
+  color: var(--text-3);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.studio .bench-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.studio .bench-grid-wrap {
+  overflow-x: auto;
+}
+.studio .bench-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.studio .bench-grid th {
+  padding: 0 6px 8px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-align: center;
+  vertical-align: bottom;
+}
+.studio .bench-grid th:first-child {
+  text-align: left;
+}
+.studio .bench-grid td {
+  padding: 7px 6px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+.studio .bench-grid td:first-child {
+  text-align: left;
+  white-space: nowrap;
+}
+.studio .bench-grid td small {
+  margin-left: 8px;
+  color: var(--text-3);
+  font-family: var(--sans);
+}
+.studio .bench-grid td.cap .check-icon {
+  margin: 0 auto;
+}
+.studio .bench-grid .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.studio .bench-checks {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.studio .bench-checks li {
+  display: flex;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.studio .bench-checks li:first-child {
+  border-top: 0;
+}
+.studio .bench-checks strong {
+  display: block;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+.studio .bench-checks p {
+  margin: 3px 0 0;
+  color: var(--bad-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.studio .bench-checks li.blocked p {
+  color: var(--warn);
+}
+.studio .bench-checks small {
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+
+/* Build chat: the textures the builder drew, and the benchmark score. */
+.studio .asset-card,
+.studio .bench-card {
+  margin: 4px 0 4px 34px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.studio .asset-card header,
+.studio .bench-card header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.studio .asset-card header strong,
+.studio .bench-card header strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.studio .asset-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.studio .asset-tile {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 92px;
+}
+.studio .asset-tile img {
+  width: 64px;
+  height: 64px;
+  padding: 6px;
+  border-radius: 8px;
+  background:
+    repeating-conic-gradient(rgba(255, 255, 255, 0.07) 0 25%, transparent 0 50%) 0 0 / 12px 12px,
+    var(--raised);
+  image-rendering: pixelated;
+}
+.studio .asset-tile span {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio .asset-problems {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--bad-text);
+  font-size: 12px;
+}
+.studio .bench-card .quality-track {
+  margin: 0 0 10px;
+}
+
+@media (max-width: 1100px) {
+  .studio .bench-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
