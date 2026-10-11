@@ -2,7 +2,7 @@
 // The camera orbits continuously; scrolling only changes the orbit's radius and height.
 import * as THREE from 'three';
 import { buildTextureArray, loadPack, lavaTexture, waterNormal } from './textures.js';
-import { mesh, blockMaterial, BLOCKS } from './voxels.js';
+import { mesh, geometryFrom, blockMaterial, BLOCKS, Voxels } from './voxels.js';
 import { generateOverworld, overworldScene } from './overworld.js';
 import { generateNether, netherScene } from './nether.js';
 import { createPost } from './post.js';
@@ -41,7 +41,7 @@ function lavaMesh(level) {
   return { mesh: l, update: (t) => { tex.offset.set(t * 0.0016, Math.sin(t * 0.1) * 0.003); m.emissiveIntensity = 1.2 + Math.sin(t * 0.8) * 0.12; } };
 }
 
-export function createWorld(canvas, { theme = 'light', reducedMotion = false, preview = false, onPack } = {}) {
+export function createWorld(canvas, { theme = 'light', reducedMotion = false, preview = false, onPack, onReady } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -49,26 +49,51 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const nether = theme === 'dark';
-  const world = nether ? generateNether(200) : generateOverworld(200);
+  const SIZE = 200;
   const env = nether ? netherScene() : overworldScene();
   const { scene } = env;
   renderer.toneMappingExposure = env.exposure;
 
   const tex = buildTextureArray();
   const uniforms = { uTime: { value: 0 }, uWind: { value: reducedMotion ? 0 : 1 }, uBlocks: { value: tex } };
-  const geo = mesh(world.vox);
-  const solid = new THREE.Mesh(geo.solid, blockMaterial({ uniforms }));
-  const cutout = new THREE.Mesh(geo.cutout, blockMaterial({ cutout: true, uniforms }));
-  for (const m of [solid, cutout]) { m.castShadow = true; m.receiveShadow = true; scene.add(m); }
-
+  const solidMat = blockMaterial({ uniforms });
+  const cutoutMat = blockMaterial({ cutout: true, uniforms });
   const envMap = environment(renderer, scene);
-  solid.material.envMap = envMap; cutout.material.envMap = envMap;
+  solidMat.envMap = envMap; cutoutMat.envMap = envMap;
+
+  // Terrain is built in a worker; sky, water and lighting render meanwhile.
+  let vox = null;
+  let disposed = false;
+  const attach = (m, v) => {
+    if (disposed) return;
+    vox = v;
+    for (const [arrays, mat] of [[m.solid, solidMat], [m.cutout, cutoutMat]]) {
+      const obj = new THREE.Mesh(geometryFrom(arrays), mat);
+      obj.castShadow = true; obj.receiveShadow = true;
+      scene.add(obj);
+    }
+    onReady?.();
+  };
+  const buildHere = () => {
+    const w = nether ? generateNether(SIZE) : generateOverworld(SIZE);
+    attach(mesh(w.vox), w.vox);
+  };
+  let worker = null;
+  try {
+    worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    worker.onmessage = ({ data }) => {
+      const v = Object.assign(Object.create(Voxels.prototype), data.vox);
+      attach(data.mesh, v);
+      worker.terminate(); worker = null;
+    };
+    worker.onerror = () => { worker?.terminate(); worker = null; setTimeout(buildHere, 0); };
+    worker.postMessage({ theme, size: SIZE });
+  } catch { setTimeout(buildHere, 0); }
   const liquid = nether ? lavaMesh(env.lava.level) : waterMesh(env.water.level, env.water.color, envMap);
   scene.add(liquid.mesh);
   if (preview) env.sun.shadow.mapSize.set(1024, 1024);
 
   // A resource pack in /textures/block/ replaces the built-in tiles once it has loaded.
-  let disposed = false;
   loadPack().then((pack) => {
     if (!pack || disposed) { pack?.texture.dispose(); return; }
     uniforms.uBlocks.value = pack.texture;
@@ -89,7 +114,8 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
   function resize() {
     const w = window.innerWidth; const h = window.innerHeight;
     const native = window.devicePixelRatio || 1;
-    const wanted = Math.max(native, 2560 / w, 1440 / h);
+    const small = Math.min(w, h) < 700 || matchMedia('(pointer: coarse)').matches;
+    const wanted = small ? Math.min(native, 2) : Math.max(native, 2560 / w, 1440 / h);
     pixelRatio = preview ? 0.5 : Math.min(wanted, 2.5, 4096 / Math.max(w, h)) * (quality >= 3 ? 0.75 : 1);
     if (quality >= 1) pixelRatio = Math.min(pixelRatio, native);
     renderer.setPixelRatio(pixelRatio);
@@ -112,9 +138,9 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
   }
 
   // Highest non-plant block at or below `y + 8` around (x, z), scanning a 5×5 footprint.
-  const vox = world.vox;
   function groundBelow(x, z, y) {
     let best = 0;
+    if (!vox) return best;
     for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
       const bx = Math.floor(x) + dx; const bz = Math.floor(z) + dz;
       for (let yy = Math.min(vox.sy - 1, Math.floor(y) + 8); yy > best; yy--) {
@@ -163,6 +189,7 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
     get quality() { return quality; },
     dispose() {
       disposed = true;
+      worker?.terminate();
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
       scene.traverse((obj) => {
@@ -170,7 +197,7 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
         const mats = Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : [];
         for (const m of mats) { for (const v of Object.values(m)) if (v?.isTexture) v.dispose(); m.dispose(); }
       });
-      tex.dispose(); if (uniforms.uBlocks.value !== tex) uniforms.uBlocks.value.dispose(); envMap.dispose(); post.dispose(); renderer.dispose();
+      solidMat.dispose(); cutoutMat.dispose(); tex.dispose(); if (uniforms.uBlocks.value !== tex) uniforms.uBlocks.value.dispose(); envMap.dispose(); post.dispose(); renderer.dispose();
     },
   };
 }

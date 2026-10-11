@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>benana</title>
   <meta name="description" content="benana — your claude or codex, plugged straight into minecraft. ship mods that actually boot." />
+  <meta property="og:title" content="benana" />
+  <meta property="og:description" content="your claude or codex, plugged straight into minecraft. ship mods that actually boot." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
   <meta name="theme-color" content="#0b0b0b" />
   <meta name="color-scheme" content="light dark" />
   <script>try{var t=localStorage.getItem("benana-theme");document.documentElement.dataset.theme=t==="dark"?"dark":"light"}catch(e){document.documentElement.dataset.theme="light"}</script>
@@ -14,10 +18,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
-<body>
+<body class="loading">
   <canvas id="world" aria-hidden="true"></canvas>
   <video id="footage" muted loop playsinline preload="auto" disablepictureinpicture disableremoteplayback aria-hidden="true" tabindex="-1"></video>
   <div class="veil" aria-hidden="true"></div>
+  <div class="loader" aria-hidden="true"><i></i><span>generating world</span></div>
   <div class="grain" aria-hidden="true"></div>
 
   <header class="nav">

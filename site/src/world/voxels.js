@@ -92,20 +92,25 @@ class Buf {
     else this.i.push(v + 1, v + 2, v + 3, v + 1, v + 3, v);
     this.v += 4;
   }
-  geometry() {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
-    g.setAttribute('layer', new THREE.Float32BufferAttribute(this.l, 1));
-    g.setAttribute('emit', new THREE.Float32BufferAttribute(this.e, 1));
-    g.setAttribute('wave', new THREE.Float32BufferAttribute(this.w, 1));
-    g.setIndex(this.v > 65535 ? new THREE.Uint32BufferAttribute(this.i, 1) : new THREE.Uint16BufferAttribute(this.i, 1));
-    g.computeBoundingSphere();
-    return g;
+  // Typed arrays, so a worker can hand them to the page without copying.
+  arrays() {
+    return {
+      position: new Float32Array(this.p), normal: new Float32Array(this.n), uv: new Float32Array(this.uv), color: new Float32Array(this.c),
+      layer: new Float32Array(this.l), emit: new Float32Array(this.e), wave: new Float32Array(this.w),
+      index: this.v > 65535 ? new Uint32Array(this.i) : new Uint16Array(this.i),
+    };
   }
 }
+
+const SIZES = { position: 3, normal: 3, uv: 2, color: 3, layer: 1, emit: 1, wave: 1 };
+export function geometryFrom(a) {
+  const g = new THREE.BufferGeometry();
+  for (const [k, n] of Object.entries(SIZES)) g.setAttribute(k, new THREE.BufferAttribute(a[k], n));
+  g.setIndex(new THREE.BufferAttribute(a.index, 1));
+  g.computeBoundingSphere();
+  return g;
+}
+export const transferables = (a) => Object.values(a).map((x) => x.buffer);
 
 export function mesh(vox) {
   const solid = new Buf();
@@ -153,7 +158,7 @@ export function mesh(vox) {
       }
     }
   }
-  return { solid: solid.geometry(), cutout: cutout.geometry() };
+  return { solid: solid.arrays(), cutout: cutout.arrays() };
 }
 
 // Patches a MeshStandardMaterial to sample the block texture array, add per-vertex emission,

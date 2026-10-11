@@ -72,7 +72,7 @@ async function mountBackground(theme) {
     usingVideo = true;
     video.src = url;
     video.hidden = false;
-    const ready = () => document.body.classList.add('video-ready');
+    const ready = () => { document.body.classList.add('video-ready'); revealWorld(); };
     video.addEventListener('playing', ready, { once: true });
     if (reducedMotion) { video.addEventListener('loadeddata', ready, { once: true }); video.load(); }
     else video.play().catch(() => { ready(); }); // autoplay blocked: show the first frame
@@ -83,6 +83,16 @@ async function mountBackground(theme) {
   video.pause(); video.removeAttribute('src'); video.load(); video.hidden = true;
   document.body.classList.remove('video-ready');
   mountWorld(theme);
+}
+
+// The intro (and a dimension switch) stays dark until the new world is ready to be seen.
+let revealed = false;
+function revealWorld() {
+  document.body.classList.remove('loading', 'switching');
+  if (revealed) return;
+  revealed = true;
+  document.body.classList.add('ready');
+  setTimeout(onScroll, reducedMotion ? 0 : 450);
 }
 
 // Footage can't change camera shots, so each scene eases in a little closer instead.
@@ -100,11 +110,12 @@ function mountWorld(theme) {
   canvas.setAttribute('aria-hidden', 'true');
   old.replaceWith(canvas);
   try {
-    world = createWorld(canvas, { theme, reducedMotion, preview, onPack: showCredit });
+    world = createWorld(canvas, { theme, reducedMotion, preview, onPack: showCredit, onReady: revealWorld });
     world.setShot(Math.max(0, active));
   } catch (e) {
     world = null; // No WebGL: the copy still works on the dark background.
     console.warn('WebGL unavailable', e);
+    revealWorld();
   }
 }
 
@@ -126,7 +137,7 @@ themeBtn.addEventListener('click', () => {
   if (switching) return;
   switching = true;
   const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
-  document.body.classList.add('switching');
+  document.body.classList.add('switching', 'loading');
   setTimeout(() => {
     world?.dispose();
     root.dataset.theme = next;
@@ -135,8 +146,8 @@ themeBtn.addEventListener('click', () => {
     // Let the fade paint before the (synchronous) world build.
     requestAnimationFrame(() => setTimeout(async () => {
       await mountBackground(next);
-      document.body.classList.remove('switching');
       switching = false;
+      setTimeout(() => document.body.classList.remove('switching', 'loading'), 8000); // never stay dark
     }, 30));
   }, 480);
 });
@@ -180,8 +191,5 @@ let active = -1;
 labelTheme(root.dataset.theme);
 mountBackground(root.dataset.theme);
 
-// Fade the world in from black, then reveal the wordmark.
-requestAnimationFrame(() => {
-  document.body.classList.add('ready');
-  setTimeout(onScroll, reducedMotion ? 0 : 450);
-});
+// Safety net: reveal the page even if the world never reports ready.
+setTimeout(revealWorld, 8000);
