@@ -128,6 +128,8 @@ This stdio MCP server forwards calls to the bot's local control API (`BENANA_GAM
 | `track_self(ticks)` | Record the bot itself without acting, for mods that launch, pull or buff the player |
 | `place_block(item?, position)` / `dig_block(position)` | Place or break a block as a player, firing the plugin's block events |
 | `boss_bars()` | Boss bars the bot sees: title, health (0-1), color |
+| `particles_and_sounds({sinceMs?, radius?})` | Particles and sounds the server sent near the bot, grouped by name with counts, times and nearest position |
+| `showcase({steps?, step?, note?})` | Demo only: the walkthrough outline and the step on screen, captioned over the live view |
 | `attack(entityId, trackTicks?)` | Left-click an entity. Use `trackTicks` to sample it right after the hit |
 | `attack_sequence(entityIds[], intervalTicks?, trackTicks?)` | Hit several entities a few ticks apart in one call, for cooldown and combo checks |
 | `use_item(entityId? \| position?, trackTicks?, trackSelf?, holdTicks?)` | Right-click on an entity, at a block or far point, or in the air. `trackSelf` records the bot. With a ranged item in hand it fires through `shoot` |

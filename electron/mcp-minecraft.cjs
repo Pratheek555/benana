@@ -47,6 +47,12 @@ const tools = [
   { name: 'place_block', description: 'Place a block as a player (fires BlockPlaceEvent, unlike setblock). Needs a solid block next to the position.', inputSchema: obj({ item: { type: 'string', description: 'Block item to equip first' }, position }, ['position']) },
   { name: 'dig_block', description: 'Break a block as a player (fires BlockBreakEvent). Returns what dropped and what the inventory gained.', inputSchema: obj({ position }, ['position']) },
   { name: 'boss_bars', description: 'Boss bars the bot sees: title, health (0-1), color.', inputSchema: obj({}) },
+  { name: 'particles_and_sounds', description: 'Particles and sounds the server sent within `radius` blocks of the bot (default 32) since a unix ms timestamp, grouped by name with count, first/last time and nearest position, e.g. particle "explosion" or sound "entity.iron_golem.attack". Evidence for visual and audio effects.', inputSchema: obj({ sinceMs: { type: 'number' }, radius: { type: 'number' } }) },
+  {
+    name: 'showcase',
+    description: 'Demo captions over the live view. Call once with `steps` (3-7 short titles, the outline), then with `step` (1-based) and a `note` (what to watch for) as each one starts.',
+    inputSchema: obj({ steps: { type: 'array', items: { type: 'string' } }, step: { type: 'number' }, note: { type: 'string' } }),
+  },
   {
     name: 'shoot',
     description: 'Fire the held bow, crossbow, trident or throwable (snowball, egg, ender_pearl, wind_charge, splash_potion) at a target, aiming for the arc. Draws the bow fully (chargeTicks, default 22) and releases. Pass entityIds to fire several shots back to back in ONE call (for cooldowns). Returns each projectile (spawned or not, where it was last seen, whether it was removed), every explosion the bot saw with its position, the bot ammo before/after, chat during the shots, and for EVERY living entity within radius: health before/after, died, times hurt, max upward/horizontal velocity, and distance to the nearest explosion. Keep targets 5-15 blocks away.',

@@ -61,9 +61,71 @@ bot.once('spawn', () => {
   viewer(bot, { port: Number(VIEWER_PORT), firstPerson: VIEWER_FIRST_PERSON === '1', viewDistance: 4 });
   // The viewer places its camera on the bot's first `move` event; a bot standing still never sends one.
   setInterval(() => bot.entity && bot.emit('move', bot.entity.position.clone()), 1000);
-  bot._client.on('explosion', (p) => record({ kind: 'explosion', position: [round(p.x), round(p.y), round(p.z)] }));
+  bot._client.on('explosion', (p) => {
+    record({ kind: 'explosion', position: [round(p.x), round(p.y), round(p.z)] });
+    sense('explosion', 'explosion', [p.x, p.y, p.z]);
+  });
+  bot.on('particle', (p) => !NOISY_PARTICLES.has(p.name) && sense('particle', p.name || String(p.id), [p.position.x, p.position.y, p.position.z], p.count || 1));
+  // Mineflayer names sounds one off (minecraft-data's sound ids start at 1), so decode the packets here.
+  const heardSound = (holder, at) => {
+    const name = String(holder?.data?.soundName ?? bot.registry.sounds[(holder?.soundId ?? -2) + 1]?.name ?? '').replace(/^minecraft:/, '');
+    if (name && !NOISY_SOUNDS.test(name)) sense('sound', name, at);
+  };
+  bot._client.on('sound_effect', (p) => heardSound(p.sound, [p.x / 8, p.y / 8, p.z / 8]));
+  bot._client.on('entity_sound_effect', (p) => {
+    const e = bot.entities[p.entityId];
+    if (e) heardSound(p.sound, [e.position.x, e.position.y, e.position.z]);
+  });
+  // The server setting the bot's velocity (a plugin's setVelocity, knockback) arrives as entity_velocity.
+  bot._client.on('entity_velocity', (p) => {
+    if (p.entityId !== bot.entity?.id) return;
+    const vy = (p.velocity?.y ?? p.velocityY ?? 0) / 8000;
+    if (vy > 0.6) followLaunch(vy);
+  });
+  bot.on('entityHurt', (e) => e === bot.entity && setTimeout(() => fx({ kind: 'hurt', health: bot.health }), 150));
   send({ event: 'status', bot: 'online' });
 });
+
+// Particles, sounds, launches and hurts near the bot: what a player would see and hear but the 3D viewer
+// does not draw. Kept for the `particles_and_sounds` tool and streamed to the live view in short batches.
+const NOISY_PARTICLES = new Set(['block', 'damage_indicator', 'entity_effect', 'ambient_entity_effect']);
+const NOISY_SOUNDS = /\.step$|\.ambient$|\.swim$|\.splash$|_fall$|entity\.item\.pickup|entity\.player\.attack\.(nodamage|weak)/;
+const sensed = [];
+const fxBatch = new Map();
+function sense(kind, name, at, count = 1) {
+  if (!bot.entity) return;
+  const distance = bot.entity.position.distanceTo(new Vec3(at[0], at[1], at[2]));
+  if (distance > 32) return;
+  sensed.push({ at: Date.now(), kind, name, count, position: at.map(round), distance: round(distance) });
+  if (sensed.length > 1000) sensed.shift();
+  const key = `${kind}:${name}`;
+  const prev = fxBatch.get(key);
+  fxBatch.set(key, { kind, name, count: (prev?.count || 0) + count, distance: Math.min(prev?.distance ?? Infinity, round(distance)) });
+}
+function fx(item) { fxBatch.set(`${item.kind}:${Date.now()}:${Math.random()}`, item); }
+setInterval(() => {
+  if (!fxBatch.size) return;
+  send({ event: 'fx', fx: [...fxBatch.values()] });
+  fxBatch.clear();
+}, 250);
+
+// After the server throws the bot, follow it until it lands to report how high it went.
+let launchWatch = null;
+function followLaunch(vy) {
+  if (launchWatch) return;
+  const startY = bot.entity.position.y;
+  let peak = startY;
+  let ticks = 0;
+  launchWatch = () => {
+    peak = Math.max(peak, bot.entity.position.y);
+    if (++ticks > 3 && (bot.entity.onGround || ticks > 120)) {
+      bot.off('physicsTick', launchWatch);
+      launchWatch = null;
+      fx({ kind: 'launch', velocity: round(vy), height: round(peak - startY) });
+    }
+  };
+  bot.on('physicsTick', launchWatch);
+}
 bot.on('entityDead', (e) => { dead.add(e.id); record({ kind: 'death', entityId: e.id, name: e.name, position: vec(e.position) }); });
 bot.on('entityHurt', (e) => e && record({ kind: 'hurt', entityId: e.id, name: e.name || e.username, position: vec(e.position) }));
 bot.on('entityGone', (e) => dead.delete(e.id));
@@ -621,6 +683,21 @@ const tools = {
   },
   async read_chat({ sinceMs = 0 } = {}) {
     return chat.filter((c) => c.at >= sinceMs);
+  },
+  // Grouped by kind and name: how many, when first and last, and the nearest position.
+  async particles_and_sounds({ sinceMs = 0, radius = 32 } = {}) {
+    const groups = new Map();
+    for (const e of sensed) {
+      if (e.at < sinceMs || e.distance > radius) continue;
+      const key = `${e.kind}:${e.name}`;
+      const g = groups.get(key) || { kind: e.kind, name: e.name, count: 0, events: 0, firstAt: e.at, lastAt: e.at, nearest: e.position, distance: e.distance };
+      g.count += e.count;
+      g.events += 1;
+      g.lastAt = e.at;
+      if (e.distance < g.distance) { g.distance = e.distance; g.nearest = e.position; }
+      groups.set(key, g);
+    }
+    return [...groups.values()].sort((a, b) => a.firstAt - b.firstAt);
   },
 };
 

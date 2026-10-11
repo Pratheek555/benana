@@ -62,10 +62,62 @@ const tally = (hotbar) => {
   return out;
 };
 
-export default function Hud({ hud, viewerUrl }) {
+// "entity.iron_golem.attack" -> "iron golem attack"
+const soundLabel = (name) => String(name).replace(/^(entity|block|item|ambient|event)\./, "").replace(/[._]/g, " ");
+
+// Short-lived lines for what the server sent but the viewer cannot draw: particles, sounds and explosions.
+function FxFeed({ fx }) {
+  const shown = fx.filter((f) => ["particle", "sound", "explosion"].includes(f.kind)).slice(-5);
+  if (!shown.length) return null;
+  return (
+    <div className="hud-fx">
+      {shown.map((f) => (
+        <div key={f.id} className={`hud-fx-item ${f.kind}`}>
+          <i>{f.kind === "sound" ? "♪" : f.kind === "explosion" ? "✸" : "✦"}</i>
+          <span>{f.kind === "sound" ? soundLabel(f.name) : `${f.name.replace(/_/g, " ")} particles`}</span>
+          {f.count > 1 && <em>×{f.count}</em>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function Hud({ hud, viewerUrl, fx = [] }) {
   const base = `${viewerUrl}/textures/1.21.4/`;
   const [toast, setToast] = React.useState(null);
+  const [flash, setFlash] = React.useState(null);
   const prev = React.useRef(null);
+  const prevBars = React.useRef(null);
+
+  const show = React.useCallback((f) => setFlash({ ...f, at: Date.now() }), []);
+  React.useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 2600);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  // The bot thrown by the mod, or hit: flash it, since the viewer shows neither the cause nor the impact.
+  const seen = React.useRef(0);
+  const lastId = fx[fx.length - 1]?.id || 0;
+  React.useEffect(() => {
+    const fresh = fx.filter((f) => f.id > seen.current);
+    seen.current = lastId;
+    const launch = fresh.filter((f) => f.kind === "launch").pop();
+    if (launch) show({ tone: "launch", title: `Launched ${Number(launch.height).toFixed(1)} blocks up`, sub: `${launch.velocity} blocks/tick upward` });
+  }, [lastId]);
+  const hurtAt = [...fx].reverse().find((f) => f.kind === "hurt")?.id;
+
+  // A boss bar changing color is usually a phase change.
+  React.useEffect(() => {
+    const bars = hud?.bossBars || [];
+    const before = prevBars.current;
+    prevBars.current = bars;
+    if (!before) return;
+    for (const b of bars) {
+      const old = before.find((x) => x.title === b.title);
+      if (old && old.color !== b.color) show({ tone: b.color, title: `${b.title}: bar turned ${b.color}`, sub: "New phase" });
+    }
+  }, [hud?.bossBars?.map((b) => `${b.title}:${b.color}`).join("|")]);
 
   React.useEffect(() => {
     const now = tally(hud?.hotbar);
@@ -90,6 +142,14 @@ export default function Hud({ hud, viewerUrl }) {
           {hud.bossBars.slice(0, 3).map((b, i) => (
             <BossBar key={i} bar={b} base={base} />
           ))}
+        </div>
+      )}
+      {hurtAt && <div key={hurtAt} className="hud-hurt" />}
+      <FxFeed fx={fx} />
+      {flash && (
+        <div key={flash.at} className={`hud-flash ${flash.tone}`}>
+          <strong>{flash.title}</strong>
+          {flash.sub && <small>{flash.sub}</small>}
         </div>
       )}
       {toast && (

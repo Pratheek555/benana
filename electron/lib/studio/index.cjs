@@ -501,12 +501,13 @@ async function runDemo({ id }) {
     }
     if (run.stopped) return { stopped: true };
     if (game.status().mock) return { summary: '[mock runtime] no demo' };
+    game.clearShowcase();
     const dir = path.join(studioDir, mod.id, 'demo');
     fs.mkdirSync(dir, { recursive: true });
     const mcpFile = path.join(dir, 'mcp.json');
     fs.writeFileSync(mcpFile, JSON.stringify(game.mcpConfig({ runId: `${mod.id}_demo`, verdictFile: path.join(dir, 'verdict.json'), testPlanFile: path.join(dir, 'test-plan.json') })));
     // Runs outside the mod repo so a demo is never traced or checkpointed as part of the mod's history.
-    const handle = runClaude({ cwd: dir, prompt: game.demoPrompt(mod), model: MODELS.playtest, tools: [], allowedTools: game.demoTools, mcpConfigFile: mcpFile, timeoutMs: 5 * 60 * 1000 });
+    const handle = runClaude({ cwd: dir, prompt: game.demoPrompt(mod), model: MODELS.playtest, tools: [], allowedTools: game.demoTools, mcpConfigFile: mcpFile, timeoutMs: 9 * 60 * 1000 });
     run.stop = handle.stop;
     if (run.stopped) handle.stop();
     const res = await handle.done;
