@@ -1,6 +1,7 @@
 import React from "react";
 import { call, ago } from "../../api.js";
 import { Empty, Icon, PageHead, ROLE, Status, shortSha, shortModel } from "./shared.jsx";
+import GraphWindow from "./GraphWindow.jsx";
 
 // Every agent commit of a mod, grouped by attempt, each linked to its Entire checkpoint.
 function commitsOf(mod) {
@@ -57,6 +58,7 @@ export default function EntirePage({ mods, onOpenMod }) {
   const mod = repos.find((m) => m.id === selectedId) || repos[0] || null;
   const [filter, setFilter] = React.useState("all");
   const [rowKey, setRowKey] = React.useState(null);
+  const [graphOpen, setGraphOpen] = React.useState(false);
 
   const groups = commitsOf(mod);
   const rows = groups.flatMap((g) => g.rows);
@@ -116,6 +118,7 @@ export default function EntirePage({ mods, onOpenMod }) {
                 </div>
               </div>
               <div className="page-actions">
+                <button className="btn solid" onClick={() => setGraphOpen(true)}><Icon name="spark" size={14} />View graph</button>
                 <button className="btn" onClick={() => onOpenMod(mod.id)}><Icon name="code" size={14} />Open mod</button>
                 <button className="btn" onClick={() => call("open-path", mod.repoDir)}><Icon name="folder" size={14} />Repository</button>
               </div>
@@ -161,6 +164,8 @@ export default function EntirePage({ mods, onOpenMod }) {
               {!shown.length && <Empty>{total ? "Nothing matches this filter." : "Commits appear here as each attempt finishes."}</Empty>}
             </ol>
           </section>
+
+          {graphOpen && <GraphWindow mod={mod} onClose={() => setGraphOpen(false)} />}
 
           {/* Detail */}
           <aside className="ent-detail">

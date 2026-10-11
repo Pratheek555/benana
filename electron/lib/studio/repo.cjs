@@ -81,6 +81,7 @@ async function create({ slug, name, summary }) {
 
   partners.neatlogs = await enableNeatlogs(dir);
 
+  if (partners.entire.enabled) partners.graph = await graphGuide(dir);
   await commit(dir, `Scaffold ${name} from the Benana Paper template`);
   return { dir, partners };
 }
@@ -105,6 +106,15 @@ async function checkpoint(dir, id) {
   const res = await exec('entire', ['checkpoint', 'explain', id, '--json'], dir, { timeoutMs: 30000 });
   if (!res.ok) return { ok: false, error: (res.err || res.out).trim().slice(0, 400) || 'Entire could not read this checkpoint.' };
   try { return { ok: true, ...JSON.parse(res.out) }; } catch { return { ok: false, error: 'Unrecognized checkpoint output.' }; }
+}
+
+// entire-graph: the agent guide in CLAUDE.md/AGENTS.md teaches builder and fixer agents to query
+// the code graph (search, neighbors, impact) before reading files. Safe to run more than once.
+async function graphGuide(dir) {
+  const claude = path.join(dir, 'CLAUDE.md');
+  if (fs.existsSync(claude) && /graph-agent\.md|entire graph/.test(fs.readFileSync(claude, "utf8"))) return { ok: true, already: true };
+  const res = await exec('entire', ['graph', 'init-agents', '--repo', dir], dir, { timeoutMs: 60000 });
+  return { ok: res.ok, error: res.ok ? null : (res.err || res.out).trim().slice(0, 300) };
 }
 
 async function history(dir) {
@@ -138,4 +148,4 @@ async function build(dir, name) {
   return { ok, jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000), assets };
 }
 
-module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, history, files, readFile, diff, build };
+module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, graphGuide, history, files, readFile, diff, build };

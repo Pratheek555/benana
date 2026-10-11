@@ -6,6 +6,7 @@ const { appRoot, dataDir } = require('../env.cjs');
 const game = require('../game/index.cjs');
 const neatlogs = require('../neatlogs.cjs');
 const repo = require('./repo.cjs');
+const entire = require('../entire.cjs');
 const prompts = require('./prompts.cjs');
 const bench = require('./bench.cjs');
 const { runClaude, MODELS } = require('./claude.cjs');
@@ -194,6 +195,7 @@ async function codePhase(mod, attempt, previous) {
     feed(mod, { attempt: attempt.n, role: 'benana', kind: 'note', text: 'Seeded bug fallback: attempt 1 uses the labeled fixture source (velocity set inside the damage event).' });
     return;
   }
+  await Promise.resolve(repo.graphGuide?.(mod.repoDir)).catch(() => {});
   const lessonList = lessons().map((l) => l.lesson);
   if (attempt.role === 'builder') {
     const prompt = attempt.revision
@@ -619,6 +621,8 @@ function handlers(deps) {
     },
     'studio:files': ({ id }) => repo.files(repoOf(id)),
     'studio:checkpoint': ({ id, checkpointId }) => repo.checkpoint(repoOf(id), checkpointId),
+    // The mod's code graph from entire-graph (files, symbols, relations), for the graph window.
+    'studio:graph': ({ id }) => entire.graph(repoOf(id)),
     'studio:file': ({ id, path: rel }) => repo.readFile(repoOf(id), rel),
     'studio:diff': ({ id, sha }) => repo.diff(repoOf(id), sha),
     'studio:lessons': () => lessons(),
