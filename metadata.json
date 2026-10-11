@@ -1,0 +1,51 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4NMP15ZT1Q505KNF1NGT175",
+  "strategy": "manual-commit",
+  "branch": "studio/bench-assets-movement",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "bench/storm-golem/task.json",
+    "docs/hackathon/BENCH.md",
+    "docs/hackathon/CONTRACTS.md",
+    "electron/lib/game/host.cjs",
+    "electron/lib/game/index.cjs",
+    "electron/lib/game/server.cjs",
+    "electron/lib/studio/bench.cjs",
+    "electron/lib/studio/index.cjs",
+    "electron/lib/studio/pack.cjs",
+    "electron/lib/studio/prompts.cjs",
+    "electron/lib/studio/repo.cjs",
+    "electron/main.cjs",
+    "electron/mcp-minecraft.cjs",
+    "src/components/studio/BenchPage.jsx",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/InsightsPage.jsx",
+    "src/components/studio/ModStudio.jsx",
+    "src/components/studio/bench.css",
+    "src/components/studio/shared.jsx",
+    "src/demo/studioSample.js",
+    "templates/paper-plugin/CLAUDE.md",
+    "templates/paper-plugin/gitignore",
+    "templates/paper-plugin/pack/pack.mcmeta",
+    "templates/paper-plugin/tools/texture.cjs",
+    "tests/studio-assets.test.cjs",
+    "tests/studio-bench.test.cjs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 210,
+    "cache_creation_tokens": 281682,
+    "cache_read_tokens": 20484157,
+    "output_tokens": 125539,
+    "api_call_count": 105
+  }
+}
