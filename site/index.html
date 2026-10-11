@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>benana</title>
+  <meta name="description" content="benana — your claude or codex, plugged straight into minecraft. ship mods that actually boot." />
+  <meta name="theme-color" content="#0b0b0b" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ffd60a'/%3E%3Crect x='4' y='4' width='8' height='8' fill='%230b0b0b'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="world" aria-hidden="true"></canvas>
+  <div class="veil" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand glow" href="/" aria-label="benana home">benana</a>
+    <nav class="links" aria-label="primary">
+      <span class="link glow" aria-disabled="true" data-soon>pricing</span>
+      <span class="link glow" aria-disabled="true" data-soon>download</span>
+      <span class="link glow" aria-disabled="true" data-soon>marketplace</span>
+    </nav>
+    <a class="login glow" href="#" aria-label="log in">login</a>
+  </header>
+
+  <main class="stage" aria-live="polite">
+    <section class="scene" data-scene="0">
+      <h1 class="wordmark glow" data-split>benana</h1>
+      <p class="kicker glow" data-fade>your agent's favourite minecraft server</p>
+    </section>
+
+    <section class="scene" data-scene="1">
+      <h2 class="headline glow" data-split>ship mods while you sleep.</h2>
+      <p class="sub glow" data-fade>plug your claude or codex straight into minecraft. describe the mod, wake up to a jar.</p>
+    </section>
+
+    <section class="scene" data-scene="2">
+      <h2 class="headline glow" data-split>"works on my machine" is dead.</h2>
+      <p class="sub glow" data-fade>every mod boots in a sandbox, gets playtested by a bot, and passes its checks before it ever touches your world.</p>
+    </section>
+
+    <section class="scene" data-scene="3">
+      <h2 class="headline glow" data-split>fork someone's genius.</h2>
+      <p class="sub glow" data-fade>the marketplace is stacked with checkpoints. find one that's close, hit continue, keep cooking from there.</p>
+    </section>
+
+    <section class="scene" data-scene="4">
+      <h2 class="headline glow" data-split>receipts for every block.</h2>
+      <p class="sub glow" data-fade><b>neatlogs</b> traces every move your agent makes. <b>entire</b> proves where every line came from. no mystery jars.</p>
+    </section>
+
+    <section class="scene" data-scene="5">
+      <h2 class="headline glow" data-split>your agent won't speedrun your card.</h2>
+      <p class="sub glow" data-fade><b>cfo.ai</b> keeps the books: cost per mod, budgets per run, and whether that port is even worth it.</p>
+    </section>
+
+    <section class="scene" data-scene="6">
+      <h2 class="headline glow" data-split>gg. go build.</h2>
+      <p class="sub glow" data-fade>desktop app dropping soon.</p>
+      <span class="cta glow" aria-disabled="true" data-fade>download &nbsp;·&nbsp; soon</span>
+    </section>
+  </main>
+
+  <div class="rail" aria-hidden="true"></div>
+  <div class="hint" aria-hidden="true"><span>scroll</span><i></i></div>
+
+  <div class="spacer" aria-hidden="true"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
