@@ -47,6 +47,14 @@ function copyTemplate(dir, vars) {
 }
 
 // Creates the repo and installs partner hooks. Returns which integrations are active.
+// Installs Neatlogs' Claude Code hooks in a directory, so every agent session started there is traced.
+async function enableNeatlogs(dir) {
+  const key = env('NEATLOGS_INGEST_KEY') || env('NEATLOGS_API_KEY');
+  if (!key) return { enabled: false, error: 'Set NEATLOGS_INGEST_KEY (or NEATLOGS_API_KEY) in .env to trace agent sessions.' };
+  const nl = await exec('neatlogs-claude-code', ['setup', '--project', '--api-key', key], dir, { timeoutMs: 60000 });
+  return nl.ok ? { enabled: true } : { enabled: false, error: (nl.missing ? 'neatlogs-claude-code is not installed.' : nl.err || nl.out).trim().slice(0, 400) };
+}
+
 async function create({ slug, name, summary }) {
   const dir = path.join(modsDir, slug);
   fs.rmSync(dir, { recursive: true, force: true });
@@ -70,13 +78,7 @@ async function create({ slug, name, summary }) {
     partners.entire = { enabled: false, error: ent.missing ? 'Entire CLI is not installed.' : (ent.err || ent.out).trim().slice(0, 400) };
   }
 
-  const key = env('NEATLOGS_INGEST_KEY') || env('NEATLOGS_API_KEY');
-  if (key) {
-    const nl = await exec('neatlogs-claude-code', ['setup', '--project', '--api-key', key], dir, { timeoutMs: 60000 });
-    partners.neatlogs = nl.ok ? { enabled: true } : { enabled: false, error: (nl.missing ? 'neatlogs-claude-code is not installed.' : nl.err || nl.out).trim().slice(0, 400) };
-  } else {
-    partners.neatlogs = { enabled: false, error: 'Set NEATLOGS_INGEST_KEY (or NEATLOGS_API_KEY) in .env to trace agent sessions.' };
-  }
+  partners.neatlogs = await enableNeatlogs(dir);
 
   await commit(dir, `Scaffold ${name} from the Benana Paper template`);
   return { dir, partners };
@@ -123,4 +125,4 @@ async function build(dir, name) {
   return { ok: res.ok && fs.existsSync(jar), jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000) };
 }
 
-module.exports = { modsDir, create, commit, checkpoints, history, files, readFile, diff, build };
+module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, history, files, readFile, diff, build };

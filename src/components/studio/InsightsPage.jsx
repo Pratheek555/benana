@@ -1,6 +1,6 @@
 import React from "react";
 import { fmtTokens } from "../../api.js";
-import { Empty, PageHead, ROLE, SectionHead, allSessions, fmtDuration, fmtMoney, sessionMs, shortModel } from "./shared.jsx";
+import { Empty, PageHead, ROLE, SectionHead, allSessions, fmtDuration, fmtMoney, sessionMs, shortModel, turnAttempts } from "./shared.jsx";
 
 const FAILURE = {
   build: "Did not compile",
@@ -32,8 +32,10 @@ function summarize(mods) {
   );
   const failureKinds = {};
   for (const a of attempts) if (a.failure) failureKinds[a.failure.kind] = (failureKinds[a.failure.kind] || 0) + 1;
+  // A mod's status is its latest turn's result, so count that turn's attempts, not the whole chat's.
+  const latestAttempts = (m) => turnAttempts(m).length;
   const attemptsToPass = {};
-  for (const m of passed) attemptsToPass[m.attempts.length] = (attemptsToPass[m.attempts.length] || 0) + 1;
+  for (const m of passed) attemptsToPass[latestAttempts(m)] = (attemptsToPass[latestAttempts(m)] || 0) + 1;
 
   const byRole = {};
   const byModel = {};
@@ -69,10 +71,12 @@ function summarize(mods) {
     sessions,
     mods: mods.length,
     passed: passed.length,
+    failed: mods.filter((m) => m.status === "failed").length,
+    running: mods.filter((m) => m.running).length,
     finished: finished.length,
     passRate: finished.length ? passed.length / finished.length : null,
-    firstTry: passed.filter((m) => m.attempts.length === 1).length,
-    avgAttempts: finished.length ? finished.reduce((n, m) => n + m.attempts.length, 0) / finished.length : null,
+    firstTry: passed.filter((m) => latestAttempts(m) === 1).length,
+    avgAttempts: finished.length ? finished.reduce((n, m) => n + latestAttempts(m), 0) / finished.length : null,
     spend: sessions.reduce((n, s) => n + (s.usage?.costUsd || 0), 0),
     tokens,
     checkpointCommits,
@@ -90,10 +94,13 @@ function summarize(mods) {
 export default function InsightsPage({ mods, lessons }) {
   const s = React.useMemo(() => summarize(mods), [mods]);
   const totalRoleCost = Object.values(s.byRole).reduce((n, r) => n + r.cost, 0) || 1;
+  const range = `${label(s.days[0].key)} to ${label(s.days.at(-1).key)}`;
 
   return (
     <div className="view">
-      <PageHead title="Insights" sub="Pass rates, spend, and what the agents learned across every mod." />
+      <PageHead eyebrow="Performance report" title="Insights" sub="Build outcomes, agent usage, and lessons across the workspace.">
+        <span className="range-label"><span>Activity window</span>{range}</span>
+      </PageHead>
 
       <section className="kpis">
         <Stat label="Mods built" value={s.mods} sub={`${s.passed} passed`} />
@@ -102,30 +109,42 @@ export default function InsightsPage({ mods, lessons }) {
           value={s.passRate == null ? "—" : `${Math.round(s.passRate * 100)}%`}
           sub={`of ${s.finished} finished`}
         />
-        <Stat
-          label="First-try passes"
-          value={s.firstTry}
-          sub={s.passed ? `${Math.round((s.firstTry / s.passed) * 100)}% of passes` : "No passes yet"}
-        />
-        <Stat label="Avg attempts" value={s.avgAttempts == null ? "—" : s.avgAttempts.toFixed(1)} sub="per finished mod" />
         <Stat label="Agent sessions" value={s.sessions.length} sub={`${s.linkedSessions} with a session ID`} />
         <Stat label="Total spend" value={fmtMoney(s.spend)} sub={`${fmtTokens(s.tokens.in + s.tokens.out)} tokens`} />
       </section>
 
-      <section className="panel pad">
-        <SectionHead title="Mods per day">
-          <div className="legend">
-            <span className="lg passed">Passed</span>
-            <span className="lg failed">Failed</span>
-            <span className="lg running">Running</span>
+      <div className="insight-hero">
+        <section className="panel pad activity-panel">
+          <SectionHead title="Build activity">
+            <div className="legend">
+              <span className="lg passed">Passed</span>
+              <span className="lg failed">Failed</span>
+              <span className="lg running">Running</span>
+            </div>
+          </SectionHead>
+          <p className="meta">14 days, grouped by the mod's current outcome</p>
+          <DailyBars days={s.days} />
+        </section>
+        <section className="panel pad quality-panel">
+          <span className="panel-eyebrow">All-time quality</span>
+          <div className="quality-score">
+            <strong>{s.passRate == null ? "—" : `${Math.round(s.passRate * 100)}%`}</strong>
+            <span>pass rate</span>
           </div>
-        </SectionHead>
-        <p className="meta">Last 14 days, by outcome</p>
-        <DailyBars days={s.days} />
-      </section>
+          <div className="quality-track"><i style={{ width: `${Math.round((s.passRate || 0) * 100)}%` }} /></div>
+          <div className="outcome-ledger">
+            <div><span>Passed</span><strong>{s.passed}</strong></div>
+            <div><span>Failed</span><strong>{s.failed}</strong></div>
+            <div><span>Running</span><strong>{s.running}</strong></div>
+            <div><span>Finished</span><strong>{s.finished}</strong></div>
+            <div><span>First try</span><strong>{s.firstTry}</strong></div>
+            <div><span>Avg attempts</span><strong>{s.avgAttempts == null ? "—" : s.avgAttempts.toFixed(1)}</strong></div>
+          </div>
+        </section>
+      </div>
 
       <div className="insight-grid">
-        <section className="panel pad">
+        <section className="panel pad role-spend">
           <SectionHead title="Spend by agent role" />
           <table className="table">
             <thead>
@@ -210,10 +229,11 @@ export default function InsightsPage({ mods, lessons }) {
               {lessons
                 .slice()
                 .reverse()
-                .map((l) => (
+                .map((l, i) => (
                   <li key={l.at}>
+                    <span className="lesson-number">{String(lessons.length - i).padStart(2, "0")}</span>
                     <p>{l.lesson}</p>
-                    <small>{l.mod}</small>
+                    <small>{l.mod}{l.at ? ` / ${new Date(l.at).toLocaleDateString([], { month: "short", day: "numeric" })}` : ""}</small>
                   </li>
                 ))}
             </ul>
@@ -283,7 +303,16 @@ function DailyBars({ days }) {
           const segs = SERIES.map(([k]) => [k, d[k]]).filter(([, n]) => n);
           let y = TOP + H;
           return (
-            <g key={d.key} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+            <g
+              key={d.key}
+              tabIndex="0"
+              role="img"
+              aria-label={`${fullLabel(d.key)}: ${d.passed} passed, ${d.failed} failed, ${d.running} running`}
+              onFocus={() => setHover(i)}
+              onBlur={() => setHover(null)}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+            >
               <rect className="hit" x={x0} y="0" width={slot} height={TOP + H + 26} />
               {hover === i && <rect className="hover-band" x={x0 + 2} y={TOP} width={slot - 4} height={H} rx="4" />}
               {segs.map(([kind, n], j) => {
@@ -295,6 +324,7 @@ function DailyBars({ days }) {
                   <rect key={kind} className={kind} x={x} y={y} width={bar} height={h} />
                 );
               })}
+              {!segs.length && <line className="zero" x1={x + 2} x2={x + bar - 2} y1={TOP + H - 1} y2={TOP + H - 1} />}
               {(i % 2 === 1 || i === days.length - 1) && (
                 <text x={x + bar / 2} y={TOP + H + 18} textAnchor="middle" className="tick">
                   {label(d.key)}
@@ -305,8 +335,8 @@ function DailyBars({ days }) {
         })}
       </svg>
       {hovered && (
-        <div className="tooltip" style={{ left: LEFT + (hover + 0.5) * slot }}>
-          <strong>{label(hovered.key)}</strong>
+        <div className="tooltip" style={{ left: Math.max(76, Math.min(W - 76, LEFT + (hover + 0.5) * slot)) }}>
+          <strong>{fullLabel(hovered.key)}</strong>
           {SERIES.map(([k, name]) => (
             <span key={k}>
               <i className={k} />
@@ -324,6 +354,8 @@ const label = (key) => {
   const [, m, d] = key.split("-");
   return new Date(2000, Number(m) - 1, Number(d)).toLocaleDateString([], { month: "short", day: "numeric" });
 };
+
+const fullLabel = (key) => new Date(`${key}T12:00:00`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 
 function roundedTop(x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h);

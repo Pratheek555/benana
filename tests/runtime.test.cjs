@@ -478,3 +478,39 @@ test("run diff includes tracked edits and untracked text without changing the ch
     "after\n",
   );
 });
+
+test("a playtest that skips test plan checks never passes", () => {
+  const game = require("../electron/lib/game/index.cjs");
+  const file = path.join(sandbox, "verdict-partial.json");
+  const plan = { checks: [{ id: "explodes", expect: "boom" }, { id: "cooldown", expect: "no boom" }] };
+  fs.writeFileSync(file, JSON.stringify({ version: 1, finished: true, checks: [{ id: "explodes", status: "pass" }], serverErrors: [] }));
+  const verdict = game.readVerdict(file, plan);
+  assert.equal(verdict.passed, false);
+  assert.deepEqual(verdict.checks.map((c) => `${c.id}=${c.status}`), ["explodes=pass", "cooldown=blocked"]);
+});
+
+test("Neatlogs evidence pages through spans and summarizes failed tool calls", async () => {
+  process.env.NEATLOGS_API_KEY = "test";
+  process.env.NEATLOGS_PROJECT_ID = "project";
+  const span = (spanName, startedAt, status = "OK", spanType = "TOOL") => ({ spanId: `${spanName}-${startedAt}`, spanName, spanType, status, startedAt: `2026-10-11T00:00:0${startedAt}Z` });
+  const result = await neatlogs.evidence(
+    { sessionId: "s1" },
+    {
+      api: async (resource) => {
+        if (resource.startsWith("/traces?"))
+          return { traces: [{ traceId: "t1", sessionId: "s1", spansCount: 5, toolCallsCount: 4, finalizationStatus: "finalized" }] };
+        if (!resource.includes("cursor="))
+          return { spans: [span("mcp__minecraft__use_item", 3, "ERROR"), span("mcp__minecraft__equip", 1)], page: { hasMore: true, nextCursor: "c2" } };
+        return { spans: [span("mcp__minecraft__use_item", 4, "ERROR"), span("mcp__minecraft__equip", 2), span("claude-sonnet", 5, "OK", "LLM")], page: { hasMore: false } };
+      },
+    },
+  );
+  const summary = result.traces[0].summary;
+  assert.equal(result.traces[0].spans.length, 5);
+  assert.equal(summary.finalized, true);
+  assert.deepEqual(summary.errors.map((e) => e.name), ["use_item", "use_item"]);
+  assert.deepEqual(summary.sequence, [
+    { name: "equip", n: 2, error: false },
+    { name: "use_item", n: 2, error: true },
+  ]);
+});

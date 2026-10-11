@@ -1,5 +1,6 @@
 import React from "react";
-import { call, on, ago } from "../../api.js";
+import { beginDrag } from "./Split.jsx";
+import { call, on, ago, isDemo } from "../../api.js";
 import BuildPage from "./BuildPage.jsx";
 import ModsPage from "./ModsPage.jsx";
 import InsightsPage from "./InsightsPage.jsx";
@@ -11,11 +12,11 @@ import "@fontsource-variable/geist-mono";
 import "./studio.css";
 
 const PAGES = [
-  ["build", "Build"],
-  ["mods", "Mods"],
-  ["insights", "Insights"],
-  ["neatlogs", "Neatlogs"],
-  ["entire", "Entire"],
+  { id: "build", label: "Build" },
+  { id: "mods", label: "Mods" },
+  { id: "insights", label: "Insights" },
+  { id: "neatlogs", label: "Neatlogs" },
+  { id: "entire", label: "Entire" },
 ];
 
 const ICONS = {
@@ -41,16 +42,105 @@ const ICONS = {
   workspace: <path d="M3.5 5h13M3.5 10h9M3.5 15h6" />,
 };
 
+// Shown when Benana's main-process code changed after launch; builds are refused until a restart loads it.
+function CodeBanner({ building }) {
+  const [code, setCode] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    call("app:code").then(setCode).catch(() => {});
+    return on("app:code", (next) => setCode((prev) => ({ ...prev, ...next })));
+  }, []);
+
+  if (!code?.stale) return null;
+  const files = code.changed.slice(0, 3).join(", ") + (code.changed.length > 3 ? ` +${code.changed.length - 3} more` : "");
+  const restart = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await call("app:restart");
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="code-banner">
+      <span>
+        <strong>Benana's code changed.</strong> {files} won't take effect until a restart, so new builds are paused.
+        {error && <em> {error}</em>}
+      </span>
+      {code.restartable ? (
+        <button disabled={busy || building} title={building ? "A mod is building. Restart after it finishes." : undefined} onClick={restart}>
+          {busy ? "Restarting…" : "Restart Benana"}
+        </button>
+      ) : (
+        <small>Stop and rerun npm run dev to load it.</small>
+      )}
+    </div>
+  );
+}
+
+const saved = (key, fallback) => {
+  try {
+    const v = localStorage.getItem(key);
+    return v == null ? fallback : JSON.parse(v);
+  } catch {
+    return fallback;
+  }
+};
+
+const SIDE_DEFAULT = 236;
+const readSide = () => {
+  try { return Number(localStorage.getItem("benana-side-width")) || SIDE_DEFAULT; } catch { return SIDE_DEFAULT; }
+};
+
 export default function ModStudio({ onOpenWorkspace }) {
+  const [sideWidth, setSideWidth] = React.useState(readSide);
+  const [collapsed, setCollapsedState] = React.useState(() => {
+    try { return localStorage.getItem("benana-side-collapsed") === "1"; } catch { return false; }
+  });
+  const setCollapsed = (v) => {
+    setCollapsedState(v);
+    try { localStorage.setItem("benana-side-collapsed", v ? "1" : "0"); } catch {}
+  };
+  const setSide = (w) => {
+    setSideWidth(w);
+    try { localStorage.setItem("benana-side-width", String(w)); } catch {}
+  };
+  const resizeSide = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sideWidth;
+    const end = beginDrag("col-resize");
+    let w = startW;
+    const move = (ev) => { w = Math.min(Math.max(startW + ev.clientX - startX, 180), 420); setSideWidth(w); };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      end();
+      setSide(w);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const [page, setPage] = React.useState("build");
   const [mods, setMods] = React.useState([]);
-  const [selectedId, setSelectedId] = React.useState(null);
-  const [composing, setComposing] = React.useState(true);
+  // The open chat survives restarts.
+  const [selectedId, setSelectedId] = React.useState(() => saved("benana.studio.selected", null));
+  const [composing, setComposing] = React.useState(() => saved("benana.studio.composing", true));
   const [lessons, setLessons] = React.useState([]);
   const [game, setGame] = React.useState(null);
   const [error, setError] = React.useState("");
   const mod = mods.find((m) => m.id === selectedId) || null;
   const running = mods.find((m) => m.running) || null;
+
+  React.useEffect(() => {
+    localStorage.setItem("benana.studio.selected", JSON.stringify(selectedId));
+    localStorage.setItem("benana.studio.composing", JSON.stringify(composing));
+  }, [selectedId, composing]);
 
   const watchMod = (id) => {
     setSelectedId(id);
@@ -71,7 +161,7 @@ export default function ModStudio({ onOpenWorkspace }) {
       .then((list) => {
         setMods(list);
         const live = list.find((m) => m.running);
-        setSelectedId((id) => id || live?.id || list[0]?.id || null);
+        setSelectedId((id) => (id && list.some((m) => m.id === id) ? id : live?.id || list[0]?.id || null));
         if (live) setComposing(false);
       })
       .catch((e) => setError(e.message));
@@ -89,34 +179,58 @@ export default function ModStudio({ onOpenWorkspace }) {
 
   const server = game?.server || "stopped";
   const bot = game?.bot === "online" ? "online" : "offline";
+  const currentPage = PAGES.find((item) => item.id === page);
 
   return (
-    <div className="studio">
+    <div className={`studio ${collapsed ? "side-collapsed" : ""}`} style={{ "--side-w": `${collapsed ? 64 : sideWidth}px` }}>
       <nav className="side" aria-label="Mod Studio">
+        <div
+          className="side-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize · double-click to reset"
+          onPointerDown={collapsed ? undefined : resizeSide}
+          onDoubleClick={() => setSide(SIDE_DEFAULT)}
+        />
         <div className="logo">
           <span className="brand-mark">B</span>
-          <span>
+          <span className="logo-text">
             <strong>Benana</strong>
             <small>Mod Studio</small>
           </span>
+          <button
+            className="side-toggle"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expand" : "Collapse"}
+            aria-expanded={!collapsed}
+            data-tip={collapsed ? "Expand" : "Collapse"}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <rect x="3" y="3.5" width="14" height="13" rx="2.5" />
+              <path d="M8 3.5v13" />
+              {collapsed ? <path d="M11.5 8.2 13.5 10l-2 1.8" /> : <path d="M13.5 8.2 11.5 10l2 1.8" />}
+            </svg>
+          </button>
         </div>
 
-        <button className="new-mod" onClick={newMod}>
+        <button className="new-mod" onClick={newMod} title="New mod">
           <Icon name="plus" size={14} />
-          New mod
+          <span className="nav-text">New mod</span>
         </button>
 
         <div className="nav">
-          {PAGES.map(([key, label]) => (
+          <span className="side-label nav-label">Workspace</span>
+          {PAGES.map(({ id, label }) => (
             <button
-              key={key}
-              className={`nav-item ${page === key ? "active" : ""}`}
-              onClick={() => setPage(key)}
-              aria-current={page === key ? "page" : undefined}
+              key={id}
+              className={`nav-item ${page === id ? "active" : ""}`}
+              onClick={() => setPage(id)}
+              aria-current={page === id ? "page" : undefined}
+              title={label}
             >
-              <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS[key]}</svg>
-              {label}
-              {key === "build" && running && <span className="live-dot" title="A mod is building" />}
+              <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS[id]}</svg>
+              <span className="nav-text">{label}</span>
+              {id === "build" && running && <span className="live-dot" title="A mod is building" />}
             </button>
           ))}
         </div>
@@ -153,12 +267,25 @@ export default function ModStudio({ onOpenWorkspace }) {
           </div>
           <button className="nav-item" onClick={onOpenWorkspace} title="Open the repository workspace">
             <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS.workspace}</svg>
-            Repository workspace
+            <span className="nav-text">Repository workspace</span>
           </button>
         </div>
       </nav>
 
       <main className="studio-main">
+        <header className="context-bar">
+          <div className="breadcrumb"><span>Benana</span><i>/</i><strong>{currentPage?.label}</strong></div>
+          <div className="context-state">
+            {isDemo && <span className="sample-badge">Sample data</span>}
+            <span className={`context-runtime ${server === "running" && bot === "online" ? "ok" : ""}`}>
+              <i />{server === "running" ? (bot === "online" ? "Runtime ready" : "Runtime online") : "Runtime stopped"}
+            </span>
+            <button className="context-workspace" onClick={onOpenWorkspace} title="Open the repository workspace" aria-label="Open the repository workspace">
+              <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS.workspace}</svg>
+            </button>
+          </div>
+        </header>
+        <CodeBanner building={Boolean(running)} />
         {error && <div className="alert page-alert">{error}</div>}
         {page === "build" && (
           <BuildPage

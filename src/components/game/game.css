@@ -10,7 +10,7 @@
 .game-bar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   height: 44px;
   padding: 0 8px 0 14px;
   border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
@@ -34,13 +34,33 @@
 .game-spacer {
   flex: 1;
 }
+.game-mod {
+  flex: none;
+  overflow: hidden;
+  max-width: 180px;
+  padding: 1px 8px;
+  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.14));
+  border-radius: 99px;
+  color: var(--text-2, #a0a3ab);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+.game-mod.match {
+  border-color: rgba(76, 195, 138, 0.35);
+  color: var(--good, #4cc38a);
+}
 .game-bar button {
   flex: none;
 }
-@media (max-width: 1440px) {
+@media (max-width: 1680px) {
   .game-meta {
     display: none;
   }
+}
+.game-btn.load {
+  overflow: hidden;
+  max-width: 190px;
+  text-overflow: ellipsis;
 }
 .game-dot {
   width: 6px;
@@ -78,6 +98,13 @@
   font-weight: 600;
   cursor: pointer;
 }
+/* Beats the studio's `button { color: inherit }`, which left dark-on-light buttons with light text. */
+.game-pane .game-btn {
+  color: #0c0d0f;
+}
+.game-pane .game-btn.ghost {
+  color: var(--text, #ececee);
+}
 .game-btn.ghost {
   border-color: var(--line-strong, rgba(255, 255, 255, 0.14));
   background: transparent;
@@ -95,7 +122,7 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  background: #08090a;
+  background: #000;
 }
 .game-view iframe {
   display: block;
@@ -149,6 +176,35 @@
   color: #c9ccd2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.game-demo {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(8, 9, 10, 0.82);
+  backdrop-filter: blur(6px);
+  color: #ececee;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.game-demo.error {
+  color: #ff9a9d;
+}
+.game-demo button {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
 }
 .game-error {
   padding: 8px 14px;

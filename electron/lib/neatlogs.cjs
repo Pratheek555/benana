@@ -48,6 +48,49 @@ function traceItems(value) {
     : value?.traces || value?.spans || value?.items || value?.results || [];
 }
 
+// Spans come 50 to a page; a playtest can run past one page.
+async function allSpans(request, id, pages = 4) {
+  const spans = [];
+  let cursor = "";
+  for (let i = 0; i < pages; i++) {
+    const value = await request(
+      `/traces/${encodeURIComponent(id)}/spans?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    );
+    spans.push(...traceItems(value));
+    cursor = value?.page?.hasMore ? value.page.nextCursor : "";
+    if (!cursor) break;
+  }
+  return spans;
+}
+
+const failed = (span) => String(span.status || span.status_code || "").toUpperCase() === "ERROR";
+const spanName = (span) => String(span.spanName || span.name || span.span_name || "span").replace(/^mcp__\w+?__/, "");
+
+// What the chat shows for one trace, and what the fixer is told it read.
+function summarize(trace, spans) {
+  const ordered = [...spans].sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
+  const sequence = [];
+  for (const span of ordered.filter((s) => s.spanType === "TOOL")) {
+    const name = spanName(span);
+    const last = sequence.at(-1);
+    if (last?.name === name && last.error === failed(span)) last.n++;
+    else sequence.push({ name, n: 1, error: failed(span) });
+  }
+  return {
+    traceId: trace.traceId || trace.trace_id || trace.id,
+    status: trace.status,
+    finalized: trace.finalizationStatus === "finalized",
+    spans: trace.spansCount ?? spans.length,
+    toolCalls: trace.toolCallsCount ?? ordered.filter((s) => s.spanType === "TOOL").length,
+    llmCalls: trace.llmCallsCount ?? ordered.filter((s) => s.spanType === "LLM").length,
+    tokens: trace.totalTokens ?? null,
+    costUsd: trace.totalCostUsd ?? null,
+    durationMs: trace.durationMs ?? null,
+    errors: ordered.filter(failed).map((s) => ({ name: spanName(s), type: s.spanType, durationMs: s.durationMs })),
+    sequence: sequence.slice(0, 40),
+  };
+}
+
 async function evidence(run, deps = {}) {
   if (!configured())
     return {
@@ -85,14 +128,12 @@ async function evidence(run, deps = {}) {
       let spansError;
       if (id) {
         try {
-          spans = traceItems(
-            await request(`/traces/${encodeURIComponent(id)}/spans?limit=50`),
-          );
+          spans = await allSpans(request, id);
         } catch (error) {
           spansError = error.message;
         }
       }
-      traces.push({ ...trace, spans, ...(spansError ? { spansError } : {}), raw: { trace, spans } });
+      traces.push({ ...trace, spans, summary: summarize(trace, spans), ...(spansError ? { spansError } : {}), raw: { trace, spans } });
     }
     return {
       source: "neatlogs",
@@ -130,5 +171,6 @@ module.exports = {
   recentTraces,
   searchTraces,
   status,
+  summarize,
   traceItems,
 };

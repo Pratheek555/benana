@@ -9,8 +9,9 @@ const { spawnExecutable, terminateProcessTree } = require('../processes.cjs');
 const VERSION = '1.21.4';
 const UA = 'benana/0.1 (neatHack)';
 const dir = path.join(dataDir, 'game', 'server');
-const PORT = 25599;
-const RCON_PORT = 25598;
+const PORT = Number(process.env.BENANA_MC_PORT) || 25599;
+const RCON_PORT = Number(process.env.BENANA_RCON_PORT) || 25598;
+const LEVEL = 'studio-flat64';
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 const ready = /Done \([\d.,]+s\)! For help/;
@@ -48,7 +49,7 @@ function configure(rconPassword) {
     'rcon.port': RCON_PORT,
     'rcon.password': rconPassword,
     // Surface at y=64: prismarine-viewer only places its camera once the bot is above y=0.
-    'level-name': 'studio-flat64',
+    'level-name': LEVEL,
     'level-type': 'minecraft\\:flat',
     'generator-settings': JSON.stringify({
       layers: [
@@ -81,6 +82,12 @@ class Server {
   }
 
   pluginsDir() { return path.join(dir, 'plugins'); }
+
+  // Deletes the saved world so the next start generates a pristine flat one. Only call while stopped.
+  wipeWorld() {
+    if (this.child) throw new Error('Stop the server before wiping its world.');
+    for (const suffix of ['', '_nether', '_the_end']) fs.rmSync(path.join(dir, `${LEVEL}${suffix}`), { recursive: true, force: true });
+  }
 
   async start({ onLine = () => {}, log = () => {} } = {}) {
     if (this.child) return;

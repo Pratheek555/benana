@@ -22,9 +22,25 @@ let log = () => {};
 const now = () => Date.now();
 const modFile = (id) => path.join(studioDir, id, 'mod.json');
 
+// The newest jar this mod built (Maven overwrites target/<Name>.jar on every attempt).
+function jarOf(mod) {
+  const built = [...mod.attempts].reverse().find((a) => a.build?.ok && a.build.jar && fs.existsSync(a.build.jar));
+  if (built) return built.build.jar;
+  const fallback = mod.repoDir && path.join(mod.repoDir, 'target', `${mod.name}.jar`);
+  return fallback && fs.existsSync(fallback) ? fallback : null;
+}
+
 function publicMod(mod) {
   const { feed, ...rest } = mod;
-  return { ...rest, feedCount: feed.length, running: active?.modId === mod.id };
+  const jar = jarOf(mod);
+  return { ...rest, feedCount: feed.length, running: active?.modId === mod.id, loadable: Boolean(jar), jar };
+}
+
+// Whether this mod's build is the one installed on the server (two mods can share a plugin name, so compare jars).
+function isLoaded(mod) {
+  const deployed = game.status().deployed;
+  const jar = jarOf(mod);
+  return Boolean(deployed && jar && (deployed.jar ? deployed.jar === jar : deployed.plugin === mod.name));
 }
 
 let saveTimers = new Map();
@@ -44,6 +60,11 @@ function load() {
     try {
       const mod = JSON.parse(fs.readFileSync(modFile(id), 'utf8'));
       if (!['passed', 'failed', 'stopped'].includes(mod.status)) mod.status = 'stopped';
+      // Mods saved before chats had turns: their one request is the first turn.
+      mod.turns ||= [{ prompt: mod.prompt, at: mod.createdAt, summary: mod.spec?.summary, checks: mod.testPlan?.checks, endPhase: mod.phase }];
+      const last = mod.turns.at(-1);
+      last.status ||= mod.status;
+      last.endPhase ||= mod.phase;
       mods.set(mod.id, mod);
     } catch {}
   }
@@ -83,7 +104,7 @@ const slugify = (s) => s.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[^a-zA-Z0-
 
 // Runs one agent session for a mod and records it on the attempt.
 async function agent(mod, attempt, role, options) {
-  const session = { role, model: options.model, startedAt: now(), sessionId: null };
+  const session = { role, turn: mod.turns.length - 1, model: options.model, startedAt: now(), sessionId: null };
   if (attempt) attempt.sessions.push(session);
   else mod.sessions.push(session);
   save(mod);
@@ -103,31 +124,48 @@ async function agent(mod, attempt, role, options) {
   return result;
 }
 
-async function specPhase(mod) {
-  if (mod.seed) {
+async function specPhase(mod, turn) {
+  if (mod.seed && !turn.revision) {
     const seeded = JSON.parse(fs.readFileSync(path.join(SEEDED, 'spec.json'), 'utf8'));
     feed(mod, { role: 'benana', kind: 'note', text: 'Seeded bug fallback: using the labeled LaunchSword fixture spec instead of the spec agent.' });
     return seeded;
   }
   const work = path.join(studioDir, mod.id, 'spec');
   fs.mkdirSync(work, { recursive: true });
-  const res = await agent(mod, null, 'spec', { cwd: work, prompt: prompts.spec(mod.prompt), model: MODELS.build, tools: [] });
+  // The spec agent runs before the mod repo exists, so it gets its own Neatlogs hooks.
+  if (!fs.existsSync(path.join(work, '.claude', 'settings.json'))) await repo.enableNeatlogs(work);
+  const prompt = turn.revision ? prompts.specRevision({ mod, request: turn.prompt }) : prompts.spec(prompts.requestOf(mod));
+  const res = await agent(mod, null, 'spec', { cwd: work, prompt, model: MODELS.build, tools: [] });
   if (!res.ok) throw new Error(`Spec agent failed: ${res.error}`);
   const spec = parseJson(res.final);
-  if (!/^[A-Za-z]{2,24}$/.test(spec.modName || '')) spec.modName = 'StudioMod';
+  // A revised plugin keeps the name its repository, jar and main class already use.
+  if (turn.revision) spec.modName = mod.name;
+  else if (!/^[A-Za-z]{2,24}$/.test(spec.modName || '')) spec.modName = 'StudioMod';
   if (!spec.testPlan?.checks?.length) throw new Error('Spec agent returned no test checks.');
   spec.testPlan.modName = spec.modName;
   return spec;
 }
 
-async function trace(sessionId) {
-  if (!sessionId || !neatlogs.configured()) return '';
-  const ev = await neatlogs.evidence({ sessionId });
-  if (!ev.matched) return '';
-  return ev.traces.map((t) => {
-    const spans = (t.spans || []).slice(0, 25).map((s) => `  - ${s.name || s.span_name || 'span'}${s.status === 'error' || s.status_code === 'ERROR' ? ' (error)' : ''}`).join('\n');
-    return `trace ${t.traceId || t.trace_id || t.id}\n${spans}`;
-  }).join('\n').slice(0, 4000);
+// The hooks ship spans while a session runs, but the trace only finalizes shortly after it ends, so wait for it.
+const TRACE_WAIT_MS = 90 * 1000;
+async function playtestTrace(sessionId, wait = TRACE_WAIT_MS) {
+  if (!neatlogs.configured()) return { state: 'unconfigured' };
+  if (!sessionId) return { state: 'missing' };
+  const until = now() + wait;
+  let ev;
+  for (;;) {
+    ev = await neatlogs.evidence({ sessionId }).catch((e) => ({ matched: false, error: e.message }));
+    if ((ev.matched && ev.traces[0].summary.finalized) || now() >= until || active?.stopped) break;
+    await new Promise((r) => setTimeout(r, 8000));
+  }
+  if (!ev.matched) return { state: ev.error ? 'error' : 'notfound', error: ev.error };
+  const t = ev.traces[0];
+  const s = t.summary;
+  const text = [
+    `trace ${s.traceId} · ${s.status} · ${s.spans} spans · ${s.toolCalls} tool calls · ${s.errors.length} failed`,
+    ...s.sequence.map((x) => `  - ${x.name}${x.n > 1 ? ` x${x.n}` : ''}${x.error ? ' (error)' : ''}`),
+  ].join('\n').slice(0, 4000);
+  return { state: 'read', sessionId, summary: s, text };
 }
 
 async function codePhase(mod, attempt, previous) {
@@ -138,18 +176,39 @@ async function codePhase(mod, attempt, previous) {
   }
   const lessonList = lessons().map((l) => l.lesson);
   if (attempt.role === 'builder') {
-    const res = await agent(mod, attempt, 'builder', { cwd: mod.repoDir, prompt: prompts.builder({ mod, lessons: lessonList }), model: MODELS.build, tools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'], allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'] });
+    const prompt = attempt.revision
+      ? prompts.reviser({ mod, attempt, request: mod.turns[attempt.turn].prompt, lessons: lessonList })
+      : prompts.builder({ mod, lessons: lessonList });
+    const res = await agent(mod, attempt, 'builder', { cwd: mod.repoDir, prompt, model: MODELS.build, tools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'], allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'] });
     if (!res.ok) throw new Error(`Builder failed: ${res.error}`);
     attempt.summary = res.final.slice(0, 2000);
     return;
   }
-  const cps = await repo.checkpoints(mod.repoDir);
+  // The chat shows this handoff as a card that fills in once the trace is read.
+  const playtester = previous.sessions.filter((s) => s.role === 'playtester').at(-1);
+  attempt.context = { from: previous.n, neatlogs: { state: 'waiting', sessionId: playtester?.sessionId || null } };
+  feed(mod, { attempt: attempt.n, role: 'benana', kind: 'handoff', from: previous.n });
+  save(mod);
+  const [cps, nl, history] = await Promise.all([
+    repo.checkpoints(mod.repoDir),
+    playtestTrace(playtester?.sessionId).catch((e) => ({ state: 'error', error: e.message })),
+    repo.history(mod.repoDir),
+  ]);
   const context = {
-    history: await repo.history(mod.repoDir),
+    history,
     checkpoints: cps.ok ? cps.items.slice(0, 8).map((c) => `${c.checkpoint_id} "${c.message}" session ${c.session_id} (${c.agent})`).join('\n') : '',
-    trace: await trace(previous.sessions.find((s) => s.role === 'playtester')?.sessionId).catch(() => ''),
+    trace: nl.text || '',
   };
-  attempt.context = { entireCheckpoints: cps.ok ? cps.items.length : 0, neatlogsTrace: Boolean(context.trace) };
+  const neatlogsRead = { ...nl };
+  delete neatlogsRead.text;
+  attempt.context = {
+    from: previous.n,
+    entireCheckpoints: cps.ok ? cps.items.length : 0,
+    checkpoints: cps.ok ? cps.items.slice(0, 3).map((c) => ({ id: c.checkpoint_id, message: c.message })) : [],
+    neatlogsTrace: Boolean(context.trace),
+    neatlogs: { sessionId: playtester?.sessionId || null, ...neatlogsRead },
+  };
+  save(mod);
   const res = await agent(mod, attempt, 'fixer', { cwd: mod.repoDir, prompt: prompts.fixer({ mod, attempt, previous, context }), model: MODELS.build, tools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'], allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'] });
   if (!res.ok) throw new Error(`Fixer failed: ${res.error}`);
   attempt.summary = res.final.slice(0, 2000);
@@ -168,7 +227,7 @@ async function playtestPhase(mod, attempt) {
     const v = game.mockVerdict(mod.testPlan, attempt.n);
     fs.writeFileSync(verdictFile, JSON.stringify(v, null, 2));
     feed(mod, { attempt: attempt.n, role: 'playtester', kind: 'note', text: '[mock runtime] canned verdict' });
-    return game.readVerdict(verdictFile);
+    return game.readVerdict(verdictFile, mod.testPlan);
   }
 
   for (let run = 1; run <= 2; run++) {
@@ -177,7 +236,7 @@ async function playtestPhase(mod, attempt) {
     fs.writeFileSync(mcpFile, JSON.stringify(game.mcpConfig({ runId: `${mod.id}_${attempt.n}`, verdictFile, testPlanFile })));
     const poll = setInterval(() => {
       if (!fs.existsSync(verdictFile)) return;
-      const live = game.readVerdict(verdictFile);
+      const live = game.readVerdict(verdictFile, mod.testPlan);
       attempt.verdict = { ...live, live: true };
       save(mod);
     }, 1000);
@@ -186,19 +245,26 @@ async function playtestPhase(mod, attempt) {
     } finally {
       clearInterval(poll);
     }
-    const verdict = game.readVerdict(verdictFile);
+    const verdict = game.readVerdict(verdictFile, mod.testPlan);
     if (verdict.finished) return verdict;
     feed(mod, { attempt: attempt.n, role: 'benana', kind: 'note', text: run === 1 ? 'The playtester stopped before finishing; running it again.' : 'The playtester did not finish the test plan.' });
   }
-  return game.readVerdict(verdictFile);
+  return game.readVerdict(verdictFile, mod.testPlan);
 }
 
-async function runAttempt(mod, n, previous) {
-  const attempt = { n, role: n === 1 ? (mod.seed ? 'seeded' : 'builder') : 'fixer', status: 'running', startedAt: now(), sessions: [] };
+// Attempt numbers run across the whole chat (playtest folders and the UI key on them); `previous` is null for a turn's first attempt.
+async function runAttempt(mod, turnIndex, n, previous) {
+  const turn = mod.turns[turnIndex];
+  const first = !previous;
+  const attempt = {
+    n, turn: turnIndex, revision: first && Boolean(turn.revision),
+    role: !first ? 'fixer' : mod.seed && !turn.revision ? 'seeded' : 'builder',
+    status: 'running', startedAt: now(), sessions: [],
+  };
   mod.attempts.push(attempt);
   save(mod);
 
-  setPhase(mod, n === 1 ? 'build' : 'fix', n === 1 ? `Attempt 1: writing ${mod.name}` : `Attempt ${n}: fixing what the playtester found`);
+  setPhase(mod, first ? 'build' : 'fix', !first ? `Attempt ${n}: fixing what the playtester found` : `Attempt ${n}: ${attempt.revision ? 'changing' : 'writing'} ${mod.name}`);
   await codePhase(mod, attempt, previous);
 
   setPhase(mod, 'compile', `Attempt ${n}: compiling with Maven`);
@@ -208,7 +274,8 @@ async function runAttempt(mod, n, previous) {
     attempt.commit = await repo.commit(mod.repoDir, `Attempt ${n} (${attempt.role}): build failed`);
     return attempt;
   }
-  attempt.commit = await repo.commit(mod.repoDir, `Attempt ${n} (${attempt.role}): ${attempt.role === 'fixer' ? 'fix from playtest evidence' : 'implement'} ${mod.name}`);
+  const did = attempt.role === 'fixer' ? `fix ${mod.name} from playtest evidence` : attempt.revision ? `change ${mod.name}: ${turn.prompt.replace(/\s+/g, ' ').slice(0, 72)}` : `implement ${mod.name}`;
+  attempt.commit = await repo.commit(mod.repoDir, `Attempt ${n} (${attempt.role}): ${did}`);
   feed(mod, { attempt: n, role: 'benana', kind: 'note', text: `Committed ${attempt.commit.sha.slice(0, 7)}${attempt.commit.checkpoint ? `, Entire checkpoint ${attempt.commit.checkpoint}` : ''}` });
 
   setPhase(mod, 'deploy', `Attempt ${n}: deploying to the Paper server`);
@@ -231,49 +298,68 @@ async function runAttempt(mod, n, previous) {
   return attempt;
 }
 
+// Runs the mod's latest turn. The first turn builds the plugin from scratch; a revision turn (the repository already exists)
+// updates the spec and test plan, changes the existing code, and playtests it again.
 async function run(mod) {
+  const turnIndex = mod.turns.length - 1;
+  const turn = mod.turns[turnIndex];
   active = { modId: mod.id, stop: () => {}, stopped: false };
+  // Records how the turn ended so older turns keep their own result once the chat moves on.
+  const settle = (status, done) => {
+    mod.status = status;
+    turn.status = status;
+    if (done) setPhase(mod, 'done', done);
+    turn.endPhase = mod.phase;
+  };
   try {
     if (game.status().bot !== 'online' && !game.status().mock) {
       setPhase(mod, 'game', 'Starting the Minecraft server');
       await game.start(emit);
     }
     mod.status = 'running';
-    setPhase(mod, 'spec', 'Writing the spec and an in-game test plan');
-    const spec = await specPhase(mod);
+    mod.error = null;
+    setPhase(mod, 'spec', turn.revision ? 'Updating the spec and test plan for your change' : 'Writing the spec and an in-game test plan');
+    const spec = await specPhase(mod, turn);
     mod.name = spec.modName;
     mod.spec = { summary: spec.summary, behavior: spec.behavior || [] };
     mod.testPlan = spec.testPlan;
+    Object.assign(turn, { summary: spec.summary, checks: spec.testPlan.checks });
     feed(mod, { role: 'spec', kind: 'plan', text: `${mod.testPlan.checks.length} checks: ${mod.testPlan.checks.map((c) => c.title).join(' · ')}` });
 
-    setPhase(mod, 'repo', 'Creating the mod repository with Entire and Neatlogs hooks');
-    const created = await repo.create({ slug: `${slugify(mod.name)}-${mod.id.slice(-4)}`, name: mod.name, summary: mod.spec.summary });
-    mod.repoDir = created.dir;
-    mod.partners = created.partners;
-    fs.mkdirSync(path.join(mod.repoDir, 'playtest'), { recursive: true });
-    fs.writeFileSync(path.join(mod.repoDir, 'playtest', 'test-plan.json'), JSON.stringify(mod.testPlan, null, 2));
-    await repo.commit(mod.repoDir, 'Add the in-game test plan');
+    if (turn.revision) {
+      fs.mkdirSync(path.join(mod.repoDir, 'playtest'), { recursive: true });
+      fs.writeFileSync(path.join(mod.repoDir, 'playtest', 'test-plan.json'), JSON.stringify(mod.testPlan, null, 2));
+      await repo.commit(mod.repoDir, 'Update the in-game test plan');
+    } else {
+      setPhase(mod, 'repo', 'Creating the mod repository with Entire and Neatlogs hooks');
+      const created = await repo.create({ slug: `${slugify(mod.name)}-${mod.id.slice(-4)}`, name: mod.name, summary: mod.spec.summary });
+      mod.repoDir = created.dir;
+      mod.partners = created.partners;
+      fs.mkdirSync(path.join(mod.repoDir, 'playtest'), { recursive: true });
+      fs.writeFileSync(path.join(mod.repoDir, 'playtest', 'test-plan.json'), JSON.stringify(mod.testPlan, null, 2));
+      await repo.commit(mod.repoDir, 'Add the in-game test plan');
+    }
     save(mod);
 
     let previous = null;
-    for (let n = 1; n <= MAX_ATTEMPTS; n++) {
-      const attempt = await runAttempt(mod, n, previous);
+    const firstN = (mod.attempts.at(-1)?.n ?? 0) + 1;
+    for (let n = firstN; n < firstN + MAX_ATTEMPTS; n++) {
+      const attempt = await runAttempt(mod, turnIndex, n, previous);
       attempt.status = attempt.failure ? 'failed' : 'passed';
       attempt.endedAt = now();
       save(mod);
       if (!attempt.failure) {
-        mod.status = 'passed';
         if (attempt.lesson) addLesson(attempt.lesson, mod);
-        setPhase(mod, 'done', n === 1 ? `${mod.name} passed every check on the first attempt` : `${mod.name} passed after ${n} attempts`);
+        const used = n - firstN + 1;
+        settle('passed', used === 1 ? `${mod.name} passed every check on the first attempt` : `${mod.name} passed after ${used} attempts`);
         return;
       }
       feed(mod, { attempt: n, role: 'benana', kind: 'failure', text: `Attempt ${n} failed (${attempt.failure.kind}): ${attempt.failure.summary}` });
       previous = attempt;
     }
-    mod.status = 'failed';
-    setPhase(mod, 'done', `${mod.name} still fails after ${MAX_ATTEMPTS} attempts`);
+    settle('failed', `${mod.name} still fails after ${MAX_ATTEMPTS} attempts`);
   } catch (e) {
-    mod.status = active?.stopped ? 'stopped' : 'failed';
+    settle(active?.stopped ? 'stopped' : 'failed');
     mod.error = e.message;
     feed(mod, { role: 'benana', kind: 'error', text: e.message });
     log(`studio: ${e.message}`, 'error');
@@ -284,17 +370,100 @@ async function run(mod) {
   }
 }
 
-function create({ prompt, seed = false }) {
+// "Run mod": a short AI-driven showcase of the mod in the live view. Only one runs at a time.
+let demoRun = null; // { modId, stop, stopped }
+
+function emitDemo(extra = {}) {
+  emit('studio:demo', { modId: demoRun?.modId || null, running: Boolean(demoRun), ...extra });
+}
+
+function stopDemo() {
+  if (!demoRun) return false;
+  demoRun.stopped = true;
+  demoRun.stop();
+  return true;
+}
+
+async function runDemo({ id }) {
+  if (active) throw new Error('A mod is building. Run it after it finishes.');
+  if (demoRun) throw new Error('A demo is already running.');
+  const mod = mods.get(id);
+  if (!mod?.testPlan) throw new Error('This mod has no spec yet.');
+  const jar = jarOf(mod);
+  if (!jar) throw new Error(`${mod.name} has no built jar yet.`);
+  const run = { modId: id, stop: () => {}, stopped: false };
+  demoRun = run;
+  emitDemo();
+  let summary = '';
+  let error = null;
+  try {
+    if (!isLoaded(mod)) {
+      const out = await game.deployPlugin({ jarPath: jar, emit });
+      if (!out.loaded) throw new Error(`${mod.name} did not load: ${out.errors[0] || 'see the server log'}`);
+    } else if (game.status().bot !== 'online' && !game.status().mock) {
+      await game.start(emit);
+    }
+    if (run.stopped) return { stopped: true };
+    if (game.status().mock) return { summary: '[mock runtime] no demo' };
+    const dir = path.join(studioDir, mod.id, 'demo');
+    fs.mkdirSync(dir, { recursive: true });
+    const mcpFile = path.join(dir, 'mcp.json');
+    fs.writeFileSync(mcpFile, JSON.stringify(game.mcpConfig({ runId: `${mod.id}_demo`, verdictFile: path.join(dir, 'verdict.json'), testPlanFile: path.join(dir, 'test-plan.json') })));
+    // Runs outside the mod repo so a demo is never traced or checkpointed as part of the mod's history.
+    const handle = runClaude({ cwd: dir, prompt: game.demoPrompt(mod), model: MODELS.playtest, tools: [], allowedTools: game.demoTools, mcpConfigFile: mcpFile, timeoutMs: 5 * 60 * 1000 });
+    run.stop = handle.stop;
+    if (run.stopped) handle.stop();
+    const res = await handle.done;
+    if (run.stopped) return { stopped: true };
+    if (!res.ok) throw new Error(res.error);
+    summary = res.final.trim();
+    return { summary };
+  } catch (e) {
+    error = e.message;
+    throw e;
+  } finally {
+    demoRun = null;
+    emitDemo({ summary, error });
+  }
+}
+
+function assertIdle() {
   if (active) throw new Error('Another mod is running. Stop it or wait for it to finish.');
+  if (game.status().deploying || game.status().resetting) throw new Error('The game is being reloaded. Try again in a few seconds.');
+  stopDemo();
+}
+
+function create({ prompt, seed = false }) {
+  assertIdle();
   const text = String(prompt || '').trim();
   if (!seed && text.length < 8) throw new Error('Describe the mod in a sentence.');
   const id = `mod_${now().toString(36)}`;
+  const request = seed ? text || 'A golden sword that launches any mob it hits into the sky with particles, with a 3 second cooldown.' : text;
   const mod = {
-    id, prompt: seed ? text || 'A golden sword that launches any mob it hits into the sky with particles, with a 3 second cooldown.' : text,
+    id, prompt: request, turns: [{ prompt: request, at: now() }],
     seed: Boolean(seed), name: 'New mod', status: 'queued', phase: 'queued', createdAt: now(), updatedAt: now(),
     spec: null, testPlan: null, repoDir: null, partners: null, sessions: [], attempts: [], feed: [], error: null,
   };
   mods.set(id, mod);
+  save(mod);
+  run(mod);
+  return publicMod(mod);
+}
+
+// A follow-up message in a mod's chat. With a repository it changes the existing plugin; without one (the first build died
+// before creating it) the message is folded into the original request and the build starts over.
+function revise({ id, prompt }) {
+  const mod = mods.get(id);
+  if (!mod) throw new Error('Unknown mod.');
+  assertIdle();
+  const text = String(prompt || '').trim();
+  if (text.length < 8) throw new Error('Describe the change in a sentence.');
+  const turn = { prompt: text, at: now(), revision: Boolean(mod.repoDir) };
+  mod.turns.push(turn);
+  mod.status = 'queued';
+  mod.phase = 'queued';
+  mod.error = null;
+  feed(mod, { role: 'user', kind: 'user', turn: mod.turns.length - 1, text });
   save(mod);
   run(mod);
   return publicMod(mod);
@@ -318,6 +487,28 @@ function handlers(deps) {
       return { ...publicMod(mod), feed: mod.feed };
     },
     'studio:create': create,
+    'studio:revise': revise,
+    // Puts a mod's latest build on the server so the user can play it or watch it in the live view.
+    'studio:load': async ({ id }) => {
+      if (active) throw new Error('A mod is building. Switch mods after it finishes.');
+      const mod = mods.get(id);
+      if (!mod) throw new Error('Unknown mod.');
+      const jar = jarOf(mod);
+      if (!jar) throw new Error(`${mod.name} has no built jar yet.`);
+      stopDemo();
+      const out = await game.deployPlugin({ jarPath: jar, emit });
+      if (!out.loaded) throw new Error(`${mod.name} did not load: ${out.errors[0] || 'see the server log'}`);
+      return out;
+    },
+    'studio:demo': runDemo,
+    'studio:demo-stop': () => stopDemo(),
+    'studio:demo-state': () => ({ modId: demoRun?.modId || null, running: Boolean(demoRun) }),
+    // Wipes the world back to its beginning and reloads the server with the same mod installed.
+    'studio:reset-world': async () => {
+      if (active) throw new Error('A mod is building. Reset the world after it finishes.');
+      stopDemo();
+      return game.resetWorld({ emit });
+    },
     'studio:stop': ({ id }) => {
       if (active?.modId !== id) return false;
       active.stopped = true;
@@ -337,4 +528,6 @@ function handlers(deps) {
   };
 }
 
-module.exports = { handlers };
+const busy = () => Boolean(active);
+
+module.exports = { handlers, busy };

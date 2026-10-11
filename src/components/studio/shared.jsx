@@ -39,8 +39,14 @@ export function phaseIndex(mod) {
   return PHASES.findIndex(([key]) => key === mod.phase);
 }
 
-export function latestVerdict(mod) {
-  return [...(mod?.attempts || [])].reverse().find((a) => a.verdict)?.verdict || null;
+// A mod is one chat: turn 0 builds it and every later turn changes it. Older saves and sample mods have just the first turn.
+export const turnsOf = (mod) => (mod?.turns?.length ? mod.turns : [{ prompt: mod?.prompt || "", at: mod?.createdAt }]);
+
+export const turnAttempts = (mod, k = turnsOf(mod).length - 1) => (mod?.attempts || []).filter((a) => (a.turn ?? 0) === k);
+
+// A later turn replaces the test plan, so a verdict never carries over from an earlier turn.
+export function latestVerdict(mod, k) {
+  return [...turnAttempts(mod, k)].reverse().find((a) => a.verdict)?.verdict || null;
 }
 
 export function allSessions(mods) {
@@ -114,10 +120,11 @@ export function Empty({ children }) {
   return <p className="empty">{children}</p>;
 }
 
-export function PageHead({ title, sub, children }) {
+export function PageHead({ title, sub, eyebrow, children }) {
   return (
     <header className="page-head">
       <div>
+        {eyebrow && <span className="page-eyebrow">{eyebrow}</span>}
         <h1>{title}</h1>
         {sub && <p>{sub}</p>}
       </div>
@@ -209,7 +216,7 @@ export function AttemptTimeline({ mod, onSelect }) {
           <div className="attempt-head">
             <CheckIcon status={{ passed: "pass", failed: "fail", running: "running" }[a.status] || "pending"} />
             <strong>Attempt {a.n}</strong>
-            <span className="meta">{a.role === "seeded" ? "Seeded fixture" : ROLE[a.role]}</span>
+            <span className="meta">{a.role === "seeded" ? "Seeded fixture" : a.revision ? "Builder · change" : ROLE[a.role]}</span>
             <Status status={a.status} />
           </div>
           <div className="attempt-body">
