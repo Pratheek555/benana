@@ -5,7 +5,9 @@ const path = require('node:path');
 const { appRoot, dataDir } = require('../env.cjs');
 const game = require('../game/index.cjs');
 const neatlogs = require('../neatlogs.cjs');
+const entire = require('../entire.cjs');
 const repo = require('./repo.cjs');
+const marketplace = require('../marketplace/index.cjs');
 const prompts = require('./prompts.cjs');
 const bench = require('./bench.cjs');
 const { runClaude, MODELS } = require('./claude.cjs');
@@ -641,6 +643,16 @@ function handlers(deps) {
       const [nl, entire] = await Promise.all([neatlogs.status(), repo.entireStatus()]);
       return { neatlogs: nl, entire };
     },
+    // Marketplace: rows in Supabase, files on this machine. The service key stays in the main process.
+    'market:list': () => marketplace.list(),
+    'market:publish': async ({ id, metadataOnly = false }) => {
+      const mod = mods.get(id);
+      if (!mod) throw new Error('Unknown mod.');
+      if (active?.modId === id) throw new Error('This mod is building. Publish after it finishes.');
+      const sessions = metadataOnly ? [] : '*';
+      return marketplace.publish(mod, { sessions, log: (text) => feed(mod, { role: 'benana', kind: 'note', text }) });
+    },
+    'market:status': () => ({ configured: marketplace.configured(), storeDir: marketplace.storeDir }),
   };
 }
 
