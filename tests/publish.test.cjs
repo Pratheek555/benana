@@ -97,3 +97,8 @@ test("transcripts lose signatures and embedded system prompts, and keep the conv
   assert.equal(out.attachment.systemPrompt, undefined);
   assert.equal(out.attachment.other, 1);
 });
+
+test("uppercase UUIDs are identifiers, not secrets; mixed random tokens are still flagged", () => {
+  assert.equal(sanitize('{"id":"579D0815-9364-4C06-9161-9A4B14862FBA"}').suspicious.length, 0);
+  assert.equal(sanitize("x=sparkprofile1234567890AbCdEfG").suspicious.length, 1);
+});

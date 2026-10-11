@@ -15,7 +15,7 @@ function entropy(s) {
 
 // Long, random-looking tokens (mixed case and digits, high entropy) that are not hashes we expect.
 const TOKEN = /[A-Za-z0-9_\-+]{24,}={0,2}/g; // no "/": paths are not secrets
-const EXPECTED = [/^[0-9a-f]{40}$/, /^[0-9a-f]{64}$/, /^[0-9A-Z]{26}$/, /^[0-9a-f]{8}-[0-9a-f-]{27}$/,
+const EXPECTED = [/^[0-9a-f]{40}$/, /^[0-9a-f]{64}$/, /^[0-9A-Z]{26}$/, /^[0-9a-fA-F]{8}-[0-9a-fA-F-]{27}$/,
   /^(msg|toolu|srvtoolu|req|call|resp|run|thread|item)_[A-Za-z0-9]+$/]; // git sha, sha256, ULID, uuid, agent protocol IDs
 
 function suspicious(text) {
