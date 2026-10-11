@@ -4,6 +4,7 @@ import { Empty, PageHead, ROLE, SectionHead, allSessions, fmtDuration, fmtMoney,
 
 const FAILURE = {
   build: "Did not compile",
+  assets: "Broken resource pack",
   load: "Did not load on the server",
   playtest: "Failed in-game checks",
 };

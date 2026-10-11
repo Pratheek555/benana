@@ -224,3 +224,351 @@
   color: var(--text-2, #a0a3ab);
   white-space: pre-wrap;
 }
+
+/* Player HUD over the viewer (Hud.jsx). Sizes are Minecraft GUI pixels times --s. */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--mono, Consolas, monospace);
+}
+.hud-pixel {
+  image-rendering: pixelated;
+}
+.hud-text {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: 1px 1px 0 #3f3f3f;
+}
+.hud-top {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.game-view.demo .hud-top {
+  top: 54px;
+}
+.hud-boss {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.hud-boss-bar {
+  width: calc(182px * var(--s));
+  max-width: 70vw;
+  height: calc(5px * var(--s));
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+}
+.hud-boss-bar > div {
+  height: 100%;
+  background-size: calc(182px * var(--s)) 100%;
+  image-rendering: pixelated;
+  transition: width 0.3s;
+}
+.hud-bottom {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(2px * var(--s));
+}
+.hud-actionbar {
+  align-self: center;
+  margin-bottom: 4px;
+  white-space: nowrap;
+}
+.hud-hearts {
+  display: flex;
+}
+.hud-hearts span {
+  position: relative;
+  width: calc(8px * var(--s));
+  height: calc(9px * var(--s));
+  background-size: calc(9px * var(--s)) calc(9px * var(--s));
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.hud-hearts img {
+  position: absolute;
+  inset: 0;
+  width: calc(9px * var(--s));
+  height: calc(9px * var(--s));
+}
+.hud-hotbar {
+  position: relative;
+  width: calc(182px * var(--s));
+  height: calc(22px * var(--s));
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+}
+.hud-selection {
+  position: absolute;
+  top: calc(-1px * var(--s));
+  width: calc(24px * var(--s));
+  height: calc(23px * var(--s));
+}
+.hud-slot {
+  position: absolute;
+  top: calc(3px * var(--s));
+  width: calc(16px * var(--s));
+  height: calc(16px * var(--s));
+  display: grid;
+  place-items: center;
+}
+.hud-chip.mod img,
+.hud-slot.mod img {
+  filter: drop-shadow(0 0 3px rgba(170, 120, 255, 0.95));
+}
+.hud-slot b {
+  position: absolute;
+  right: -2px;
+  bottom: -3px;
+  color: #fff;
+  font-size: 12px;
+  text-shadow: 1px 1px 0 #3f3f3f;
+}
+.hud-icon-text {
+  color: #ddd;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.hud-side {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.hud-side.below-boss {
+  top: calc(10px + (18px + 5px * var(--s) + 6px) * 1 + 8px);
+}
+.game-view.demo .hud-side {
+  top: 54px;
+}
+.game-view.demo .hud-side.below-boss {
+  top: calc(54px + 18px + 5px * var(--s) + 14px);
+}
+.hud-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
+  border-radius: 4px;
+  background: rgba(8, 9, 10, 0.72);
+  color: #ececee;
+  font-size: 11px;
+}
+.hud-chip em {
+  color: #9aa0aa;
+  font-style: normal;
+}
+.hud-chip.mod {
+  outline: 1px solid rgba(170, 120, 255, 0.55);
+}
+.hud-toast {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 10px 12px;
+  border: 1px solid rgba(170, 120, 255, 0.6);
+  border-radius: 8px;
+  background: rgba(14, 10, 24, 0.86);
+  color: #fff;
+  animation: hud-toast 3.5s ease forwards;
+}
+.hud-toast div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.hud-toast small {
+  color: #b9a6e8;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.hud-toast strong {
+  font-size: 14px;
+}
+.hud-toast code {
+  color: #9aa0aa;
+  font-size: 10.5px;
+}
+@keyframes hud-toast {
+  0% { opacity: 0; transform: translate(-50%, 8px); }
+  8%, 85% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; }
+}
+.game-view.hud-on .game-actions {
+  bottom: calc(44px + 22px + 30px);
+  max-width: 55%;
+}
+
+/* Demo walkthrough caption (the `showcase` tool). */
+.game-caption {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  z-index: 2;
+  padding: 8px 12px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(8, 9, 10, 0.82);
+  backdrop-filter: blur(6px);
+  color: #ececee;
+}
+.game-caption-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.game-caption p {
+  margin: 3px 0 0 22px;
+  color: #b4b8c0;
+  font-size: 12px;
+}
+.game-caption ol {
+  display: flex;
+  gap: 4px;
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.game-caption li {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.game-caption li.done {
+  background: var(--good, #4cc38a);
+}
+.game-caption li.now {
+  background: #a87bff;
+  animation: caption-pulse 1.2s ease-in-out infinite;
+}
+@keyframes caption-pulse {
+  50% { opacity: 0.45; }
+}
+.game-view.captioned .hud-top {
+  top: 84px;
+}
+.game-view.captioned .hud-side {
+  top: 84px;
+}
+.game-view.captioned .hud-side.below-boss {
+  top: calc(84px + 18px + 5px * var(--s) + 14px);
+}
+
+/* Effects the viewer cannot draw. */
+.hud-fx {
+  position: absolute;
+  right: 12px;
+  bottom: calc(22px * var(--s) + 9px * var(--s) + 22px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  max-width: 42%;
+}
+.hud-fx-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 4px;
+  background: rgba(8, 9, 10, 0.7);
+  color: #e6e7ea;
+  font-size: 11px;
+  animation: fx-in 3s ease forwards;
+}
+.hud-fx-item i {
+  width: 12px;
+  font-style: normal;
+  text-align: center;
+  color: #ffd166;
+}
+.hud-fx-item.sound i {
+  color: #7cc4ff;
+}
+.hud-fx-item.explosion i {
+  color: #ff7a45;
+}
+.hud-fx-item em {
+  color: #9aa0aa;
+  font-style: normal;
+}
+@keyframes fx-in {
+  0% { opacity: 0; transform: translateX(-6px); }
+  8%, 80% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+.hud-flash {
+  position: absolute;
+  top: 54%;
+  z-index: 3;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  background: rgba(10, 12, 24, 0.84);
+  border: 1px solid rgba(124, 196, 255, 0.6);
+  color: #fff;
+  white-space: nowrap;
+  animation: flash-in 2.6s ease forwards;
+}
+.hud-flash strong {
+  font-size: 16px;
+}
+.hud-flash small {
+  color: #a9b4c8;
+  font-size: 11px;
+}
+.hud-flash.red {
+  border-color: rgba(229, 72, 77, 0.75);
+}
+.hud-flash.red strong {
+  color: #ff8a8e;
+}
+.hud-flash.launch strong {
+  color: #9fd8ff;
+}
+@keyframes flash-in {
+  0% { opacity: 0; transform: translate(-50%, 10px) scale(0.96); }
+  8% { opacity: 1; transform: translate(-50%, 0) scale(1.04); }
+  14%, 82% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -6px); }
+}
+.hud-hurt {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 70px 12px rgba(229, 40, 40, 0.55);
+  animation: hurt 0.6s ease-out forwards;
+}
+@keyframes hurt {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}

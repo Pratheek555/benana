@@ -190,7 +190,7 @@ export function HandoffCard({ mod, n }) {
   const ctx = attempt?.context;
   const from = mod.attempts.find((a) => a.n === (ctx?.from ?? n - 1));
   const nl = ctx?.neatlogs;
-  // Mods from before the handoff was recorded only know whether a trace was read; look it up for the details.
+  // Older mods only recorded a trace flag. A late lookup can display the trace, but cannot prove the fixer read it.
   const legacy = useTrace(!nl && ctx?.neatlogsTrace ? from?.sessions.filter((s) => s.role === "playtester").at(-1)?.sessionId : null, false);
   const waiting = !ctx || nl?.state === "waiting";
   const summary = nl?.summary || legacy?.summary;
@@ -202,8 +202,11 @@ export function HandoffCard({ mod, n }) {
     if (last?.name === e.name) last.n++;
     else failedCalls.push({ name: e.name, n: 1 });
   }
-  const SEQ = 16;
   const seq = summary?.sequence || [];
+  const pain = from?.failure?.summary || from?.verdict?.checks?.find((check) => check.status === "fail")?.observed || "The previous attempt did not pass.";
+  const evidenceState = waiting ? "waiting" : summary ? "ready" : "unavailable";
+  const entireCount = ctx?.entireCheckpoints || 0;
+  const entireReady = entireCount > 0;
 
   return (
     <div className={`handoff ${waiting ? "waiting" : ""}`}>
@@ -215,8 +218,14 @@ export function HandoffCard({ mod, n }) {
         </span>
       </div>
 
+      <div className="handoff-problem">
+        <span>Failure to fix</span>
+        <strong>{pain}</strong>
+      </div>
+
       <div className="handoff-src nl">
         <span className="handoff-brand">Neatlogs</span>
+        <span className={`evidence-state ${evidenceState}`}>{evidenceState}</span>
         {waiting ? (
           <span className="handoff-wait">
             <span className="spinner" />
@@ -224,7 +233,7 @@ export function HandoffCard({ mod, n }) {
           </span>
         ) : summary ? (
           <span>
-            Read the playtester's trace: {plural(summary.spans, "span")}, {plural(summary.toolCalls, "tool call")}
+            {nl?.summary ? "Fixer read" : "Playtest trace found later"}: {plural(summary.spans, "span")}, {plural(summary.toolCalls, "tool call")}
             {summary.errors.length ? (
               <>
                 , <b className="bad">{summary.errors.length} failed</b>
@@ -255,22 +264,25 @@ export function HandoffCard({ mod, n }) {
       )}
 
       {summary && seq.length > 0 && (
-        <div className="handoff-seq" aria-label="Playtester tool calls in order">
-          {seq.slice(0, SEQ).map((x, i) => (
-            <span key={i} className={x.error ? "err" : ""}>
-              {x.name}
-              {x.n > 1 && <em>×{x.n}</em>}
-            </span>
-          ))}
-          {seq.length > SEQ && <span className="more">+{seq.length - SEQ} more</span>}
-        </div>
+        <details className="handoff-sequence">
+          <summary>Evidence sequence <span>{seq.length} steps</span></summary>
+          <div className="handoff-seq" aria-label="Playtester tool calls in order">
+            {seq.map((x, i) => (
+              <span key={i} className={x.error ? "err" : ""}>
+                {x.name}
+                {x.n > 1 && <em>×{x.n}</em>}
+              </span>
+            ))}
+          </div>
+        </details>
       )}
 
       {!waiting && ctx && (
         <div className="handoff-src entire">
           <span className="handoff-brand">Entire</span>
+          <span className={`evidence-state ${entireReady ? "ready" : "unavailable"}`}>{entireReady ? "ready" : "unavailable"}</span>
           <span>
-            Read {plural(ctx.entireCheckpoints || 0, "checkpoint")}
+            {entireReady ? `Read ${plural(entireCount, "checkpoint")}` : "No Entire checkpoints were available"}
             {ctx.checkpoints?.length > 0 && (
               <>
                 {" "}
@@ -282,6 +294,14 @@ export function HandoffCard({ mod, n }) {
               </>
             )}
           </span>
+          {ctx.checkpoints?.length > 0 && (
+            <details className="checkpoint-list">
+              <summary>Checkpoint messages</summary>
+              {ctx.checkpoints.map((c) => (
+                <p key={c.id}><code>{shortSha(c.id)}</code><span>{c.message}</span></p>
+              ))}
+            </details>
+          )}
         </div>
       )}
     </div>

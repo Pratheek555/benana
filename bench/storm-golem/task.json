@@ -1,0 +1,78 @@
+{
+  "id": "storm-golem",
+  "title": "Storm Golem boss fight",
+  "summary": "A boss mod with a command, boss bar, timed slam that launches the player, a second phase, and a textured drop with its own effect.",
+  "prompt": "Add a Storm Golem boss. Typing /stormgolem summons it about 8 blocks in front of you, with a purple boss bar named \"Storm Golem\" that tracks its health. It has 200 health. Every 5 seconds it slams the ground and launches every player within 6 blocks into the air. Below half health it enters phase two: the boss bar turns red and it slams every 3 seconds. When it dies it drops a Storm Core, a custom item with its own texture. Right-clicking the Storm Core uses it up and gives you Jump Boost II for 10 seconds.",
+  "capabilities": {
+    "boss": "Command-summoned boss",
+    "ui": "Boss bar",
+    "ability": "Timed area ability",
+    "movement": "Moves the player",
+    "state": "Boss phases",
+    "asset": "Generated texture",
+    "item": "Custom item effect"
+  },
+  "assets": { "min": 1, "capability": "asset" },
+  "gold": {
+    "version": 1,
+    "setup": ["give @bot netherite_sword"],
+    "checks": [
+      {
+        "id": "summon-command",
+        "capability": "boss",
+        "title": "/stormgolem summons a 200-health boss in front of the player",
+        "steps": "Run the checks in this order on ONE boss and do not call reset_arena between them. chat \"/stormgolem\", wait_ticks 20, then nearby_entities with radius 16.",
+        "expect": "A new non-player mob appears 5 to 12 blocks from the bot with health above 150 (200 expected). Its customName or the server log names it Storm Golem."
+      },
+      {
+        "id": "boss-bar",
+        "capability": "ui",
+        "title": "A purple Storm Golem boss bar tracks its health",
+        "steps": "Right after summoning, call boss_bars.",
+        "expect": "A boss bar whose title contains \"Storm Golem\", with color purple and health above 0.9."
+      },
+      {
+        "id": "slam-launch",
+        "capability": "movement",
+        "title": "The slam launches a nearby player into the air",
+        "steps": "move_to the boss with range 3 (do not attack it), then track_self for 140 ticks.",
+        "expect": "track_self reports at least 1 launch and maxUpwardVelocity of at least 0.8 (a normal jump is 0.42). The server log shows a slam."
+      },
+      {
+        "id": "slam-range",
+        "capability": "ability",
+        "title": "Players farther than 6 blocks are not launched",
+        "steps": "Walk with move_to to a point at least 12 blocks from the boss (on the far side of the arena center, within 15 blocks of 0,65,0), check the distance with nearby_entities, then track_self for 140 ticks.",
+        "expect": "track_self reports 0 launches and maxUpwardVelocity below 0.5 while the server log shows the boss kept slamming."
+      },
+      {
+        "id": "phase-two",
+        "capability": "state",
+        "title": "Below half health the boss bar turns red",
+        "steps": "game_setup: \"data merge entity @e[type=!player,type=!item,distance=..24,sort=nearest,limit=1] {Health:106f}\". equip netherite_sword, attack the boss once, wait_ticks 60, then boss_bars.",
+        "expect": "The Storm Golem boss bar is red with health below 0.5, and the server log mentions the second phase."
+      },
+      {
+        "id": "phase-two-faster",
+        "capability": "ability",
+        "title": "In phase two the slam repeats every 3 seconds",
+        "steps": "move_to the boss with range 3, then track_self for 150 ticks. If it reports fewer than 2 launches (the bot was pushed out of range), move_to the boss again and repeat once.",
+        "expect": "At least 2 launches in one track_self call, and consecutive launchTicks are at most 75 ticks apart (about 3 s; phase one would be 100 ticks)."
+      },
+      {
+        "id": "core-drop",
+        "capability": "asset",
+        "title": "The boss drops a textured Storm Core",
+        "steps": "game_setup: \"kill @e[type=!player,type=!item,distance=..30]\". wait_ticks 20, nearby_entities with radius 20 to find the dropped item whose item.customName contains Storm Core, move_to it to pick it up, then bot_state.",
+        "expect": "The inventory holds an item whose customName contains \"Storm Core\" and whose itemModel is outside the minecraft namespace (for example benana:storm_core). After the boss died, boss_bars no longer lists the Storm Golem bar."
+      },
+      {
+        "id": "core-jump",
+        "capability": "item",
+        "title": "Right-clicking the Storm Core gives Jump Boost II and consumes it",
+        "steps": "equip the Storm Core (its material name is in bot_state), use_item with no target, bot_state, then move with jump true for 12 ticks.",
+        "expect": "bot_state lists a jump boost effect at level 2 lasting about 10 s, the Storm Core count dropped by one, and move reports maxHeightGain above 2.0 (a normal jump is about 1.25; level I is about 1.8)."
+      }
+    ]
+  }
+}

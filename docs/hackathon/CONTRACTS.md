@@ -81,8 +81,10 @@ game.status()
 
 await game.start(emit)            // download/prepare Paper if needed, start the server, connect the bot, start the viewer
 await game.stop()
-await game.deployPlugin({ jarPath, emit })
+await game.deployPlugin({ jarPath, packPath?, emit })
 // Removes previously deployed studio jars, copies jarPath, restarts, waits for the bot.
+// packPath is the mod's resource pack zip (target/<Name>-pack.zip); the server offers it to every player who joins,
+// served from the control API at GET /pack.zip. A deploy without packPath removes the previous mod's pack.
 // Deploys are queued, so a manual switch (IPC `studio:load { id }`) never overlaps a pipeline deploy.
 // Every deploy wipes the saved world, so each mod starts on untouched terrain.
 // -> { loaded: boolean, plugin: string|null, errors: string[], logTail: string[] }
@@ -116,20 +118,26 @@ This stdio MCP server forwards calls to the bot's local control API (`BENANA_GAM
 | Tool | Purpose |
 |---|---|
 | `game_setup(commands[])` | Run test-plan setup console commands (`@bot` substituted) |
-| `bot_state()` | Position, health, held item, inventory |
+| `bot_state()` | Entity id, position, velocity, health, effects, held item and inventory; items carry `customName`, `lore` and `itemModel` |
 | `reset_arena()` | Rebuild the flat arena, remove all non-player entities, reset the bot (empty inventory). Plugin state such as cooldowns is not reset |
 | `nearby_entities(radius?)` | id, type, position, velocity, distance, health (living entities) |
 | `equip(item)` | Put an item in hand |
 | `look_at(entityId \| position)` | Aim the bot |
-| `move_to(entityId \| position, range?)` | Pathfind toward a target |
+| `move_to(entityId \| position, range?)` | Pathfind toward a target (walk onto a dropped item to pick it up) |
+| `move({ forward, back, left, right, jump, sprint, sneak, ticks, yaw?, lookAt? })` | Hold movement keys and record the bot itself (height gain, launches, distance, health, effects) |
+| `track_self(ticks)` | Record the bot itself without acting, for mods that launch, pull or buff the player |
+| `place_block(item?, position)` / `dig_block(position)` | Place or break a block as a player, firing the plugin's block events |
+| `boss_bars()` | Boss bars the bot sees: title, health (0-1), color |
+| `particles_and_sounds({sinceMs?, radius?})` | Particles and sounds the server sent near the bot, grouped by name with counts, times and nearest position |
+| `showcase({steps?, step?, note?})` | Demo only: the walkthrough outline and the step on screen, captioned over the live view |
 | `attack(entityId, trackTicks?)` | Left-click an entity. Use `trackTicks` to sample it right after the hit |
 | `attack_sequence(entityIds[], intervalTicks?, trackTicks?)` | Hit several entities a few ticks apart in one call, for cooldown and combo checks |
-| `use_item(entityId?, trackTicks?, holdTicks?)` | Right-click, optionally on an entity. With a ranged item in hand it fires through `shoot` |
+| `use_item(entityId? \| position?, trackTicks?, trackSelf?, holdTicks?)` | Right-click on an entity, at a block or far point, or in the air. `trackSelf` records the bot. With a ranged item in hand it fires through `shoot` |
 | `shoot(entityId \| entityIds[] \| position, item?, chargeTicks?, intervalTicks?, trackTicks?, radius?)` | Aim and fire a bow, crossbow, trident or throwable; `entityIds` fires a sequence in one call. Reports each projectile (spawned, last position, removed or stuck), explosions with positions, ammo used, chat, and health before/after, deaths and max velocity of every living entity in `radius` |
 | `track_entity(entityId, ticks?)` | Per-tick position and velocity samples |
 | `wait_ticks(ticks)` | Let the game advance |
 | `chat(message)` | Speak or run a player command (`/launch`) |
-| `read_chat(sinceMs?)` | Recent chat |
+| `read_chat(sinceMs?)` | Recent chat, action bar and title text (with a `kind`) |
 | `server_log(sinceMs?, level?)` | Server console, including plugin stack traces |
 | `report_check({ id, status, expected, observed, evidence?, suspectedCause? })` | Record one check result |
 | `finish({ summary })` | Finalize `verdict.json` |

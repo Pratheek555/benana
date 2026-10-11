@@ -5,6 +5,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { appRoot, dataDir, env } = require('../env.cjs');
 const { resolveExecutable } = require('../processes.cjs');
+const pack = require('./pack.cjs');
 
 const TEMPLATE = path.join(appRoot, 'templates', 'paper-plugin');
 const modsDir = path.join(dataDir, 'mods');
@@ -122,7 +123,11 @@ async function build(dir, name) {
   const log = `${res.out}\n${res.err}`.trim();
   const jar = path.join(dir, 'target', `${name}.jar`);
   if (res.missing) return { ok: false, jar: null, log: 'Maven (mvn) is not on PATH.' };
-  return { ok: res.ok && fs.existsSync(jar), jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000) };
+  const ok = res.ok && fs.existsSync(jar);
+  // The resource pack is checked even when Maven fails, so one fixer pass sees every problem.
+  const p = pack.build(dir, path.join(dir, 'target', `${name}-pack.zip`));
+  const assets = { ok: p.ok, errors: p.errors, warnings: p.warnings, items: p.assets, zip: p.zip };
+  return { ok, jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000), assets };
 }
 
 module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, history, files, readFile, diff, build };

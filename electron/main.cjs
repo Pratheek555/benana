@@ -217,7 +217,7 @@ const handlers = {
 };
 
 // Never build or playtest with a pipeline that no longer matches the code on disk.
-for (const channel of ['studio:create', 'studio:revise']) {
+for (const channel of ['studio:create', 'studio:revise', 'studio:bench-run']) {
   const buildMod = handlers[channel];
   handlers[channel] = (payload) => {
     const { stale, changed } = code.state();

@@ -6,6 +6,7 @@ import ModsPage from "./ModsPage.jsx";
 import InsightsPage from "./InsightsPage.jsx";
 import NeatlogsPage from "./NeatlogsPage.jsx";
 import EntirePage from "./EntirePage.jsx";
+import BenchPage from "./BenchPage.jsx";
 import { Icon } from "./shared.jsx";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
@@ -14,6 +15,7 @@ import "./studio.css";
 const PAGES = [
   { id: "build", label: "Build" },
   { id: "mods", label: "Mods" },
+  { id: "bench", label: "Bench" },
   { id: "insights", label: "Insights" },
   { id: "neatlogs", label: "Neatlogs" },
   { id: "entire", label: "Entire" },
@@ -30,6 +32,7 @@ const ICONS = {
     </>
   ),
   insights: <path d="M3 16.5h14M6 13V9.5M10 13V5M14 13V8" />,
+  bench: <path d="M6 3.5h8M7 3.5v4.2L3.8 15a1.2 1.2 0 0 0 1.1 1.5h10.2a1.2 1.2 0 0 0 1.1-1.5L13 7.7V3.5M5.6 11.5h8.8" />,
   neatlogs: (
     <>
       <circle cx="5" cy="5" r="1.8" />
@@ -170,7 +173,7 @@ export default function ModStudio({ onOpenWorkspace }) {
     const offs = [
       on("studio:mod", (next) => {
         setMods((prev) => [next, ...prev.filter((m) => m.id !== next.id)].sort((a, b) => b.createdAt - a.createdAt));
-        if (next.status === "passed") call("studio:lessons").then(setLessons).catch(() => {});
+        if (["passed", "failed"].includes(next.status)) call("studio:lessons").then(setLessons).catch(() => {});
       }),
       on("game:status", setGame),
     ];
@@ -299,6 +302,7 @@ export default function ModStudio({ onOpenWorkspace }) {
           />
         )}
         {page === "mods" && <ModsPage mods={mods} mod={mod} setSelectedId={setSelectedId} onBuild={newMod} onWatch={watchMod} />}
+        {page === "bench" && <BenchPage mods={mods} lessons={lessons} running={running} onWatch={watchMod} onOpenMod={openMod} />}
         {page === "insights" && <InsightsPage mods={mods} lessons={lessons} />}
         {page === "neatlogs" && <NeatlogsPage mods={mods} onOpenMod={openMod} />}
         {page === "entire" && <EntirePage mods={mods} onOpenMod={openMod} />}
