@@ -1,4 +1,5 @@
 import React from "react";
+import Split from "./Split.jsx";
 import { call, on } from "../../api.js";
 import GamePane from "../game/GamePane.jsx";
 import { ROLE, allSessions, fmtDuration, shortModel, shortSha } from "./shared.jsx";
@@ -39,14 +40,16 @@ export function useStickyScroll(dep) {
 export default function TestPanel({ mod, building }) {
   return (
     <section className="test-panel">
-      <GamePane showLog={false} mod={mod} building={building} />
-      <div className="lanes">
-        <ServerLog mod={mod} />
-        <div className="lane-stack">
-          <NeatlogsLane mod={mod} />
-          <EntireLane mod={mod} />
-        </div>
-      </div>
+      <Split id="test-panel" direction="col" initial={[0.55, 0.45]} min={160}>
+        <GamePane showLog={false} mod={mod} building={building} />
+        <Split id="lanes" className="lanes" initial={[0.57, 0.43]} min={220}>
+          <ServerLog mod={mod} />
+          <Split id="lane-stack" direction="col" className="lane-stack" min={90}>
+            <NeatlogsLane mod={mod} />
+            <EntireLane mod={mod} />
+          </Split>
+        </Split>
+      </Split>
     </section>
   );
 }
