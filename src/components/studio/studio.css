@@ -691,34 +691,41 @@
   border-top: 1px solid var(--line);
 }
 .studio .runtime-status {
-  display: grid;
-  gap: 6px;
-  padding: 4px 10px 10px;
-}
-.studio .runtime-status > div {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
+  margin: 0 0 6px;
+  padding: 8px 10px;
+}
+.studio .rt-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.studio .rt-dot.ok {
+  background: var(--good);
+}
+.studio .rt-dot.busy {
+  background: var(--accent);
+}
+.studio .rt-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.35;
+}
+.studio .rt-text strong {
   color: var(--text-2);
   font-size: 12px;
+  font-weight: 500;
 }
-.studio .runtime-status small {
-  margin-left: auto;
+.studio .rt-text small {
+  overflow: hidden;
   color: var(--text-3);
   font-size: 11.5px;
-}
-.studio .runtime-status .dot.passed {
-  box-shadow: 0 0 0 3px var(--good-soft);
-}
-.studio .mock-note {
-  justify-self: start;
-  margin-top: 2px;
-  padding: 0 7px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 99px;
-  color: var(--text-3);
-  font-size: 11px;
-  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .studio-main {

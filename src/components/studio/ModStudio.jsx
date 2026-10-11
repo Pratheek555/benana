@@ -141,18 +141,15 @@ export default function ModStudio({ onOpenWorkspace }) {
         </div>
 
         <div className="side-foot">
-          <div className="runtime-status">
-            <div>
-              <span className={`dot ${server === "running" ? "passed" : server === "starting" ? "running" : "idle"}`} />
-              Paper {game?.version || "server"}
-              <small>{server === "running" ? "Running" : server === "starting" ? "Starting" : "Stopped"}</small>
-            </div>
-            <div>
-              <span className={`dot ${bot === "online" ? "passed" : "idle"}`} />
-              Test bot
-              <small>{bot === "online" ? "In game" : "Offline"}</small>
-            </div>
-            {game?.mock && <span className="mock-note">Mock runtime</span>}
+          <div className="runtime-status" title={game?.mock ? "Mock runtime: no real Paper server" : undefined}>
+            <span className={`rt-dot ${server === "running" && bot === "online" ? "ok" : server === "starting" || server === "running" ? "busy" : ""}`} />
+            <span className="rt-text">
+              <strong>Paper {game?.version || "server"}</strong>
+              <small>
+                {server === "running" ? (bot === "online" ? "Bot in game" : "Bot offline") : server === "starting" ? "Starting…" : "Stopped"}
+                {game?.mock ? " · mock" : ""}
+              </small>
+            </span>
           </div>
           <button className="nav-item" onClick={onOpenWorkspace} title="Open the repository workspace">
             <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS.workspace}</svg>
