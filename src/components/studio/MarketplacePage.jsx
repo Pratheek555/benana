@@ -48,13 +48,15 @@ export default function MarketplacePage({ mods }) {
           <span className="ent-label">Publish a mod</span>
           {!publishable.length && <p className="mk-muted">Finish a mod's build and playtest first. Only passed or failed mods can be published.</p>}
           {publishable.map((m) => (
-            <PublishCard key={m.id} mod={m} onPublished={load} />
+            <PublishCard key={m.id} mod={m} published={state?.listings?.find((l) => l.name === m.name)} onPublished={load} />
           ))}
         </aside>
       </div>
     </div>
   );
 }
+
+const clip = (t, n) => (t.length <= n ? t : `${t.slice(0, t.lastIndexOf(' ', n) > 0 ? t.lastIndexOf(' ', n) : n)}…`);
 
 function Listing({ listing, onChanged }) {
   const version = listing.versions?.[0];
@@ -72,7 +74,7 @@ function Listing({ listing, onChanged }) {
       <dl className="ent-facts">
         <dt>Version</dt><dd>v{version?.number} · {ago(new Date(version?.created_at).getTime())} ago</dd>
         <dt>Commit</dt><dd><code>{version?.commit_sha?.slice(0, 10)}</code></dd>
-        <dt>Playtest</dt><dd>{version?.playtest_status}{version?.playtest_summary ? ` — ${version.playtest_summary.slice(0, 160)}` : ""}</dd>
+        <dt>Playtest</dt><dd>{version?.playtest_status}{version?.playtest_summary ? ` — ${clip(version.playtest_summary, 160)}` : ""}</dd>
         <dt>Checkpoints</dt><dd>{version?.checkpoint_count} ({version?.transcripts} with transcripts)</dd>
         <dt>Tokens</dt><dd>{Number(version?.tokens || 0).toLocaleString()}</dd>
         <dt>Jar SHA-256</dt><dd><code>{version?.jar_sha256?.slice(0, 16)}…</code></dd>
@@ -100,7 +102,7 @@ function Listing({ listing, onChanged }) {
   );
 }
 
-function PublishCard({ mod, onPublished }) {
+function PublishCard({ mod, published, onPublished }) {
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState(null);
   const [log, setLog] = React.useState([]);
@@ -124,7 +126,8 @@ function PublishCard({ mod, onPublished }) {
         <Status status={mod.status} />
       </div>
       <p className="mk-muted">{mod.spec?.summary || mod.prompt}</p>
-      <button className="btn solid" disabled={busy} onClick={() => run(false)}>{busy ? "Publishing…" : "Publish with transcripts"}</button>
+      {published && <p className="mk-ok">Published as v{published.versions?.[0]?.number}{published.versions?.[0]?.playtest_status ? ` · playtest ${published.versions[0].playtest_status}` : ""}</p>}
+      <button className="btn solid" disabled={busy} onClick={() => run(false)}>{busy ? "Publishing…" : published ? "Publish update" : "Publish with transcripts"}</button>
 
       {result?.ok && !result.skipped && <p className="mk-ok">Published v{result.version.number}.</p>}
       {result?.ok && result.skipped && <p className="mk-muted">{result.skipped}</p>}
