@@ -13,6 +13,8 @@
     "mcp": "node electron/mcp-server.cjs"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "cytoscape": "^3.30.2",
     "dotenv": "^16.4.5",
     "mineflayer": "^4.39.0",

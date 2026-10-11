@@ -6,6 +6,8 @@ import InsightsPage from "./InsightsPage.jsx";
 import NeatlogsPage from "./NeatlogsPage.jsx";
 import EntirePage from "./EntirePage.jsx";
 import { Icon } from "./shared.jsx";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./studio.css";
 
 const PAGES = [
