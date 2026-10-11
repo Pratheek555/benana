@@ -1,11 +1,11 @@
 /* Mod Studio: calm dark workbench. One accent (banana) for live state; status by dot + label. */
 
 .studio {
-  --bg: #0d0e10;
-  --side: #121316;
-  --panel: #17181c;
-  --raised: #1d1f24;
-  --hover: #24262c;
+  --bg: #000000;
+  --side: #000000;
+  --panel: #0b0b0b;
+  --raised: #121212;
+  --hover: #1a1a1a;
   --line: rgba(255, 255, 255, 0.075);
   --line-strong: rgba(255, 255, 255, 0.13);
   --text: #f2f0e9;
@@ -1656,7 +1656,7 @@
   padding: 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: 99px;
-  background: #1a1c21;
+  background: #121212;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   color: var(--text);
   font-size: 12px;
@@ -2029,7 +2029,7 @@
 
 .studio .lane-body.log {
   padding: 6px 0;
-  background: #0d0e11;
+  background: #000;
   font-family: var(--mono);
   font-size: 11.5px;
   line-height: 1.6;
@@ -2457,7 +2457,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: #0d0e11;
+  background: #000;
 }
 .studio .viewer-head {
   padding: 9px 14px;
@@ -2699,7 +2699,7 @@
   padding: 9px 11px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background: #1a1c21;
+  background: #121212;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   font-size: 12px;
   pointer-events: none;
@@ -3142,3 +3142,69 @@ body.is-resizing canvas { pointer-events: none; }
 body.is-resizing { user-select: none; }
 .studio .split > .split-pane,
 .studio .split > .split-gutter { align-self: stretch; justify-self: stretch; height: 100%; max-height: 100%; }
+
+
+/* Collapsible sidebar */
+.studio .logo { position: relative; }
+.studio .logo-text { flex: 1; min-width: 0; }
+.studio .side-toggle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.studio .side-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.studio .side-toggle:hover { background: var(--hover); color: var(--text); }
+.studio .side-toggle::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px);
+  z-index: 20;
+  padding: 4px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-4px, -50%);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.studio .side-toggle:hover::after { opacity: 1; transform: translate(0, -50%); }
+.studio .side { transition: padding 0.2s ease; }
+.studio.side-collapsed .side { overflow: visible; }
+.studio.side-collapsed .logo { flex-direction: column; gap: 10px; }
+.studio.side-collapsed .logo-text,
+.studio.side-collapsed .nav-text,
+.studio.side-collapsed .side-label,
+.studio.side-collapsed .side-section,
+.studio.side-collapsed .rt-text,
+.studio.side-collapsed .side-resizer { display: none; }
+.studio.side-collapsed .side-toggle { margin-left: 0; }
+.studio.side-collapsed .new-mod,
+.studio.side-collapsed .nav-item {
+  justify-content: center;
+  padding-inline: 0;
+}
+.studio.side-collapsed .runtime-status { justify-content: center; }
+.studio .side { z-index: 10; }

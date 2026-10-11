@@ -99,6 +99,13 @@ const readSide = () => {
 
 export default function ModStudio({ onOpenWorkspace }) {
   const [sideWidth, setSideWidth] = React.useState(readSide);
+  const [collapsed, setCollapsedState] = React.useState(() => {
+    try { return localStorage.getItem("benana-side-collapsed") === "1"; } catch { return false; }
+  });
+  const setCollapsed = (v) => {
+    setCollapsedState(v);
+    try { localStorage.setItem("benana-side-collapsed", v ? "1" : "0"); } catch {}
+  };
   const setSide = (w) => {
     setSideWidth(w);
     try { localStorage.setItem("benana-side-width", String(w)); } catch {}
@@ -175,27 +182,40 @@ export default function ModStudio({ onOpenWorkspace }) {
   const currentPage = PAGES.find((item) => item.id === page);
 
   return (
-    <div className="studio" style={{ "--side-w": `${sideWidth}px` }}>
+    <div className={`studio ${collapsed ? "side-collapsed" : ""}`} style={{ "--side-w": `${collapsed ? 64 : sideWidth}px` }}>
       <nav className="side" aria-label="Mod Studio">
         <div
           className="side-resizer"
           role="separator"
           aria-orientation="vertical"
           title="Drag to resize · double-click to reset"
-          onPointerDown={resizeSide}
+          onPointerDown={collapsed ? undefined : resizeSide}
           onDoubleClick={() => setSide(SIDE_DEFAULT)}
         />
         <div className="logo">
           <span className="brand-mark">B</span>
-          <span>
+          <span className="logo-text">
             <strong>Benana</strong>
             <small>Mod Studio</small>
           </span>
+          <button
+            className="side-toggle"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expand" : "Collapse"}
+            aria-expanded={!collapsed}
+            data-tip={collapsed ? "Expand" : "Collapse"}
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <rect x="3" y="3.5" width="14" height="13" rx="2.5" />
+              <path d="M8 3.5v13" />
+              {collapsed ? <path d="M11.5 8.2 13.5 10l-2 1.8" /> : <path d="M13.5 8.2 11.5 10l2 1.8" />}
+            </svg>
+          </button>
         </div>
 
-        <button className="new-mod" onClick={newMod}>
+        <button className="new-mod" onClick={newMod} title="New mod">
           <Icon name="plus" size={14} />
-          New mod
+          <span className="nav-text">New mod</span>
         </button>
 
         <div className="nav">
