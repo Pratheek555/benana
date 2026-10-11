@@ -1,0 +1,28 @@
+what should i tick here
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\ef5cd96e-0b7b-49b5-8bbd-ed84b498c9e0-5b491571-cda5-461b-8b97-5d98a51329c0.png]
+
+---
+
+so when i click on it I can [Image: image.png; ref=image_77864a7f-89ca-465e-878b-ee33ab4cbb06] see the traces, but I want them to take the center stage with their official UI similarity [Image: image.png; ref=image_ff39ee71-6081-4fc0-ae96-61ff4c73e805]
+
+<t3_context version="1">
+<context kind="image" id="image_77864a7f-89ca-465e-878b-ee33ab4cbb06">
+name: image.png
+mimeType: image/png
+sizeBytes: 150077
+attachmentId: ef5cd96e-0b7b-49b5-8bbd-ed84b498c9e0-7e62385d-5142-4725-a83e-88ffa8689fe3
+</context>
+<context kind="image" id="image_ff39ee71-6081-4fc0-ae96-61ff4c73e805">
+name: image.png
+mimeType: image/png
+sizeBytes: 102715
+attachmentId: ef5cd96e-0b7b-49b5-8bbd-ed84b498c9e0-d884e266-1947-4761-bf51-89a8c1bf049a
+</context>
+</t3_context>
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\ef5cd96e-0b7b-49b5-8bbd-ed84b498c9e0-c6869251-c7b1-41ed-8d4f-ae035a024cfc.png]
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\ef5cd96e-0b7b-49b5-8bbd-ed84b498c9e0-7e62385d-5142-4725-a83e-88ffa8689fe3.png]
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\ef5cd96e-0b7b-49b5-8bbd-ed84b498c9e0-d884e266-1947-4761-bf51-89a8c1bf049a.png]
