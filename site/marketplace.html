@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>benana · marketplace</title>
+  <meta name="description" content="Minecraft mods made with Benana's AI studio, playtested by an AI player." />
+  <meta name="color-scheme" content="dark" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ffd60a'/%3E%3Crect x='4' y='4' width='8' height='8' fill='%230b0b0b'/%3E%3C/svg%3E" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#050505; --panel:#0e0e0f; --line:rgba(255,255,255,.09); --ink:#f3f1ea; --dim:#9b9ea8; --bee:#ffd60a; --good:#4cc38a; --bad:#e5484d; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:400 15px/1.5 Manrope, system-ui, sans-serif; }
+    a { color:inherit; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px clamp(16px,4vw,48px); border-bottom:1px solid var(--line); }
+    header a.brand { font-weight:600; font-size:18px; text-decoration:none; }
+    header nav a { margin-left:18px; color:var(--dim); text-decoration:none; font-size:14px; }
+    main { padding: 32px clamp(16px,4vw,48px) 64px; max-width:1200px; margin:0 auto; }
+    h1 { font-size: clamp(30px,4vw,44px); letter-spacing:-.03em; margin:0 0 8px; font-weight:500; }
+    .lede { color:var(--dim); max-width:620px; margin:0 0 28px; }
+    .status { color:var(--dim); font:400 12px 'DM Mono', monospace; margin-bottom:16px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:14px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:10px; }
+    .card:hover { border-color: rgba(255,214,10,.45); }
+    .card h2 { font-size:18px; margin:0; font-weight:600; }
+    .card p { margin:0; color:var(--dim); font-size:14px; }
+    .meta { display:flex; flex-wrap:wrap; gap:8px; font:400 12px 'DM Mono', monospace; color:var(--dim); }
+    .pill { border:1px solid var(--line); border-radius:99px; padding:2px 9px; }
+    .pill.ok { color:var(--good); border-color: rgba(76,195,138,.4); }
+    .pill.bad { color:var(--bad); border-color: rgba(229,72,77,.4); }
+    .actions { margin-top:auto; display:flex; gap:10px; flex-wrap:wrap; }
+    .btn { display:inline-block; padding:9px 14px; border-radius:10px; text-decoration:none; font-weight:600; font-size:14px; background:var(--bee); color:#111; }
+    .btn.ghost { background:none; border:1px solid var(--line); color:var(--ink); font-weight:500; }
+    .empty, .err { color:var(--dim); padding:40px 0; }
+    .err { color:var(--bad); }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">benana</a>
+    <nav><a href="/">home</a><a href="/marketplace.html" aria-current="page">marketplace</a></nav>
+  </header>
+  <main>
+    <h1>Marketplace</h1>
+    <p class="lede">Mods made in Benana's studio. Each one was built by an AI agent, then tested by an AI player on a live Paper server. Open a mod in the app to install it.</p>
+    <div id="status" class="status">loading mods…</div>
+    <section id="grid" class="grid" aria-live="polite"></section>
+  </main>
+  <script type="module" src="/src/marketplace.js"></script>
+</body>
+</html>
