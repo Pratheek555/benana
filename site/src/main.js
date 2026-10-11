@@ -3,6 +3,7 @@ import { inject } from '@vercel/analytics';
 inject();
 import { createWorld } from './world/index.js';
 import { createDust } from './dust.js';
+import './waitlist.js';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const scenes = [...document.querySelectorAll('.scene')];

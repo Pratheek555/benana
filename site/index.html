@@ -29,7 +29,7 @@
     <a class="brand" href="/" aria-label="benana home">benana</a>
     <nav class="links" aria-label="primary">
       <span class="link" aria-disabled="true" data-soon>pricing</span>
-      <span class="link" aria-disabled="true" data-soon>download</span>
+      <button class="link" type="button" data-open-waitlist>waitlist</button>
       <span class="link" aria-disabled="true" data-soon>marketplace</span>
     </nav>
     <div class="right">
@@ -76,13 +76,24 @@
     <section class="scene" data-scene="6">
       <h2 class="headline" data-split>gg. go build.</h2>
       <p class="sub" data-fade>desktop app dropping soon.</p>
-      <span class="cta" aria-disabled="true" data-fade>download &nbsp;·&nbsp; soon</span>
+      <button class="cta" type="button" data-fade data-open-waitlist>join the waitlist</button>
     </section>
   </main>
 
   <div class="rail" aria-hidden="true"></div>
   <p class="credit" hidden></p>
   <div class="hint" aria-hidden="true"><span>scroll</span><i></i></div>
+
+  <div class="wl" hidden>
+    <form class="wl-card" novalidate>
+      <button class="wl-x" type="button" aria-label="close">×</button>
+      <h3>get early access</h3>
+      <p>we'll email you when the desktop app ships.</p>
+      <input type="email" name="email" placeholder="you@example.com" required maxlength="254" autocomplete="email" />
+      <button class="cta wl-go" type="submit">join</button>
+      <p class="wl-msg" role="status" aria-live="polite"></p>
+    </form>
+  </div>
 
   <div class="spacer" aria-hidden="true"></div>
   <script type="module" src="/src/main.js"></script>
