@@ -3,7 +3,7 @@
   "checkpoint_id": "01M4N96PMQ8CQVMP0F01WQJVZA",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     "docs/hackathon/CONTRACTS.md",
     "electron/lib/game/index.cjs",
@@ -11,12 +11,18 @@
     "electron/lib/studio/index.cjs",
     "electron/lib/studio/prompts.cjs",
     "electron/main.cjs",
+    "scripts/dev-electron.cjs",
     "src/components/game/GamePane.jsx",
     "src/components/game/game.css",
     "src/components/studio/BuildPage.jsx",
     "src/components/studio/InsightsPage.jsx",
+    "src/components/studio/ModStudio.jsx",
+    "src/components/studio/NeatlogsPage.jsx",
     "src/components/studio/shared.jsx",
-    "src/demo/bridge.js"
+    "src/components/studio/studio.css",
+    "src/components/workspace/GraphWorkspace.jsx",
+    "src/demo/bridge.js",
+    "src/styles.css"
   ],
   "sessions": [
     {
@@ -32,13 +38,20 @@
       "compact_transcript": "/1/transcript.jsonl",
       "content_hash": "/1/content_hash.txt",
       "prompt": "/1/prompt.txt"
+    },
+    {
+      "metadata": "/2/metadata.json",
+      "transcript": "/2/full.jsonl",
+      "compact_transcript": "/2/transcript.jsonl",
+      "content_hash": "/2/content_hash.txt",
+      "prompt": "/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 156,
-    "cache_creation_tokens": 303048,
-    "cache_read_tokens": 10182652,
-    "output_tokens": 100796,
-    "api_call_count": 78
+    "input_tokens": 164,
+    "cache_creation_tokens": 332521,
+    "cache_read_tokens": 10320815,
+    "output_tokens": 102511,
+    "api_call_count": 82
   }
 }
