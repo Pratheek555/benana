@@ -5,7 +5,7 @@
   "description": "A desktop coding-agent workspace with repository context, verified attempts, and reviewed recovery.",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently -k -n vite,electron -c yellow,gray \"vite\" \"wait-on tcp:127.0.0.1:5199 && cross-env BENANA_DEV=1 electron .\"",
+    "dev": "concurrently -k -n vite,electron -c yellow,gray \"vite\" \"wait-on tcp:127.0.0.1:5199 && node scripts/dev-electron.cjs\"",
     "build": "vite build",
     "test": "node --test",
     "smoke:desktop": "npm run build && electron scripts/desktop-smoke.cjs",

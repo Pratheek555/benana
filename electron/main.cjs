@@ -17,6 +17,7 @@ const entire = require('./lib/entire.cjs');
 const artifacts = require('./lib/artifacts.cjs');
 const game = require('./lib/game/index.cjs');
 const studio = require('./lib/studio/index.cjs');
+const codewatch = require('./lib/codewatch.cjs');
 
 let win;
 let ctx = null; // { repo, repoPath, intent, harnessStore }
@@ -26,6 +27,24 @@ const configFile = path.join(dataDir, 'config.json');
 
 const emit = (channel, data) => win && !win.isDestroyed() && win.webContents.send(channel, data);
 const log = (text, level = 'info') => emit('log', { text, level, at: Date.now() });
+const code = codewatch.watch(__dirname, (state) => emit('app:code', state));
+// Written before an in-app restart so the next launch brings the game back up.
+const resumeFile = path.join(dataDir, 'resume.json');
+// scripts/dev-electron.cjs relaunches Electron when it exits with this code.
+const RESTART_CODE = 75;
+
+async function restart() {
+  if (studio.busy()) throw new Error('A mod is building. Stop it or let it finish before restarting.');
+  const resumeGame = game.status().server === 'running';
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(resumeFile, JSON.stringify({ resumeGame, at: Date.now() }));
+  await game.stop().catch(() => {});
+  setTimeout(() => {
+    if (process.env.BENANA_RESTARTABLE === '1') app.exit(RESTART_CODE);
+    else { app.relaunch(); app.exit(0); }
+  }, 100);
+  return { restarting: true };
+}
 
 function readConfig() { try { return JSON.parse(fs.readFileSync(configFile, 'utf8')); } catch { return {}; } }
 function writeConfig(c) { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(configFile, JSON.stringify(c, null, 2)); }
@@ -193,6 +212,16 @@ const handlers = {
   // Mod Studio: each track registers its channels in its own module (docs/hackathon/PLAN.md).
   ...game.handlers(emit),
   ...studio.handlers({ emit, log }),
+  'app:code': () => ({ ...code.state(), restartable: process.env.BENANA_RESTARTABLE === '1' || !process.env.BENANA_DEV }),
+  'app:restart': () => restart(),
+};
+
+// Never build or playtest with a pipeline that no longer matches the code on disk.
+const createMod = handlers['studio:create'];
+handlers['studio:create'] = (payload) => {
+  const { stale, changed } = code.state();
+  if (stale) throw new Error(`Benana's code changed since launch (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ', …' : ''}). Restart Benana to load it, then build.`);
+  return createMod(payload);
 };
 
 for (const [channel, fn] of Object.entries(handlers)) {
@@ -218,6 +247,13 @@ function createWindow() {
   else win.loadFile(path.join(appRoot, 'dist', 'index.html'));
 }
 
-app.whenReady().then(createWindow);
+function resumeAfterRestart() {
+  let resume;
+  try { resume = JSON.parse(fs.readFileSync(resumeFile, 'utf8')); } catch { return; }
+  fs.rmSync(resumeFile, { force: true });
+  if (resume.resumeGame && Date.now() - resume.at < 5 * 60 * 1000) game.start(emit).catch((e) => log(`game: ${e.message}`, 'error'));
+}
+
+app.whenReady().then(() => { createWindow(); resumeAfterRestart(); });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => { game.stop().catch(() => {}); });

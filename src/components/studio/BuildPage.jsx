@@ -48,7 +48,7 @@ export default function BuildPage({ mod, running, lessons, onCreated, onWatch, o
           onWatch={onWatch}
         />
       </section>
-      <TestPanel mod={mod} />
+      <TestPanel mod={mod} building={Boolean(running)} />
     </div>
   );
 }

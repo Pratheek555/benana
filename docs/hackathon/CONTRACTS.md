@@ -75,12 +75,15 @@ const game = require('./lib/game/index.cjs');
 
 game.status()
 // { server: 'stopped'|'starting'|'running'|'error', bot: 'offline'|'connecting'|'online',
-//   viewerUrl: string|null, controlUrl: string|null, version: '1.21.4', mock: boolean, error: string|null }
+//   viewerUrl: string|null, controlUrl: string|null, version: '1.21.4', mock: boolean, error: string|null,
+//   deployed: { plugin, jar?, at? }|null,   // the studio mod on the server
+//   deploying: string|null }               // jar name while a swap is in progress
 
 await game.start(emit)            // download/prepare Paper if needed, start the server, connect the bot, start the viewer
 await game.stop()
 await game.deployPlugin({ jarPath, emit })
 // Removes previously deployed studio jars, copies jarPath, restarts, waits for the bot.
+// Deploys are queued, so a manual switch (IPC `studio:load { id }`) never overlaps a pipeline deploy.
 // -> { loaded: boolean, plugin: string|null, errors: string[], logTail: string[] }
 await game.runCommand('time set day')   // -> console output string
 

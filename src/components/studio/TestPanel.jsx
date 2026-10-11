@@ -36,10 +36,10 @@ export function useStickyScroll(dep) {
   return { ref, onScroll, away, jump };
 }
 
-export default function TestPanel({ mod }) {
+export default function TestPanel({ mod, building }) {
   return (
     <section className="test-panel">
-      <GamePane showLog={false} />
+      <GamePane showLog={false} mod={mod} building={building} />
       <div className="lanes">
         <ServerLog mod={mod} />
         <div className="lane-stack">

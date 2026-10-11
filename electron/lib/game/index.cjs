@@ -25,7 +25,8 @@ const BOT_TOOLS = new Set(['bot_state', 'nearby_entities', 'equip', 'look_at', '
 const TOOLS = ['game_setup', 'reset_arena', ...BOT_TOOLS, 'server_log', 'report_check', 'finish'];
 const playtesterTools = TOOLS.map((t) => `mcp__minecraft__${t}`);
 
-let state = { server: 'stopped', bot: 'offline', viewerUrl: null, controlUrl: null, version: VERSION, mock: mock(), error: null };
+// deployed: the studio mod whose jar is in the server's plugins folder; deploying: the one being swapped in.
+let state = { server: 'stopped', bot: 'offline', viewerUrl: null, controlUrl: null, version: VERSION, mock: mock(), error: null, deployed: null, deploying: null };
 let emitter = () => {};
 
 function setState(patch) {
@@ -37,6 +38,15 @@ function setState(patch) {
 const status = () => ({ ...state, mock: mock() });
 
 const server = new Server();
+
+// Studio jars are copied in as studio-<ModName>.jar.
+function deployedOnDisk() {
+  try {
+    const jar = fs.readdirSync(server.pluginsDir()).find((f) => /^studio-.*\.jar$/.test(f));
+    return jar ? { plugin: jar.replace(/^studio-|\.jar$/g, '') } : null;
+  } catch { return null; }
+}
+state.deployed = deployedOnDisk();
 let host = null;
 let control = null;
 const pending = new Map();
@@ -240,8 +250,27 @@ async function stop() {
   return setState({ server: 'stopped', bot: 'offline', viewerUrl: null });
 }
 
-async function deployPlugin({ jarPath, emit }) {
+// Deploys are serialized: a manual mod switch and a pipeline deploy must never restart the server together.
+let deployQueue = Promise.resolve();
+function deployPlugin(args) {
+  const run = deployQueue.then(() => deployNow(args));
+  deployQueue = run.catch(() => {});
+  return run;
+}
+
+async function deployNow({ jarPath, emit }) {
   if (emit) emitter = emit;
+  setState({ deploying: path.basename(jarPath, '.jar') });
+  try {
+    const out = await swapPlugin(jarPath);
+    setState({ deployed: out.loaded ? { plugin: out.plugin, jar: jarPath, at: Date.now() } : deployedOnDisk() });
+    return out;
+  } finally {
+    setState({ deploying: null });
+  }
+}
+
+async function swapPlugin(jarPath) {
   if (!fs.existsSync(jarPath)) return { loaded: false, plugin: null, errors: [`Jar not found: ${jarPath}`], logTail: [] };
   if (mock()) return { loaded: true, plugin: path.basename(jarPath, '.jar'), errors: [], logTail: ['[mock] plugin enabled'] };
   systemNode();

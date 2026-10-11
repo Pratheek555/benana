@@ -25,7 +25,8 @@ function describe(a) {
 }
 
 // Live view of the test bot inside the local Paper server. Owner: Track A.
-export default function GamePane({ showLog = true }) {
+// With a mod (the chat the user is in), it offers to load that mod's latest build onto the server.
+export default function GamePane({ showLog = true, mod = null, building = false }) {
   const [status, setStatus] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -57,6 +58,21 @@ export default function GamePane({ showLog = true }) {
 
   const running = status && status.server !== "stopped";
   const recent = actions.filter((a) => a.done).slice(-3);
+  const deployed = status?.deployed?.plugin || null;
+  const deploying = status?.deploying || null;
+  const canLoad = mod?.loadable && !deploying && deployed !== mod.name;
+
+  const loadMod = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await call("studio:load", { id: mod.id });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <section className="game-pane">
@@ -71,7 +87,23 @@ export default function GamePane({ showLog = true }) {
           <span className={`game-dot ${status?.bot || "offline"}`} />
           Bot {(LABEL[status?.bot] || "unknown").toLowerCase()}
         </span>
+        <span
+          className={`game-mod ${mod && deployed === mod.name ? "match" : ""}`}
+          title="The studio mod loaded on the server"
+        >
+          {deploying ? `Loading ${deploying}…` : deployed || "No mod"}
+        </span>
         <span className="game-spacer" />
+        {canLoad && (
+          <button
+            className="game-btn load"
+            disabled={busy || building}
+            title={building ? "A mod is building. Switch after it finishes." : `Load ${mod.name}'s latest build onto the server`}
+            onClick={loadMod}
+          >
+            Load {mod.name}
+          </button>
+        )}
         {status?.bot === "online" && (
           <button
             className="game-btn ghost"
@@ -84,7 +116,7 @@ export default function GamePane({ showLog = true }) {
             {demo ? "Stop demo" : "Demo hits"}
           </button>
         )}
-        <button className="game-btn" disabled={busy} onClick={toggle}>
+        <button className={`game-btn ${canLoad ? "ghost" : ""}`} disabled={busy || Boolean(deploying)} onClick={toggle}>
           {busy ? "Working…" : running ? "Stop" : "Start game"}
         </button>
       </header>

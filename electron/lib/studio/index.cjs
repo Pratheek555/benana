@@ -22,9 +22,17 @@ let log = () => {};
 const now = () => Date.now();
 const modFile = (id) => path.join(studioDir, id, 'mod.json');
 
+// The newest jar this mod built (Maven overwrites target/<Name>.jar on every attempt).
+function jarOf(mod) {
+  const built = [...mod.attempts].reverse().find((a) => a.build?.ok && a.build.jar && fs.existsSync(a.build.jar));
+  if (built) return built.build.jar;
+  const fallback = mod.repoDir && path.join(mod.repoDir, 'target', `${mod.name}.jar`);
+  return fallback && fs.existsSync(fallback) ? fallback : null;
+}
+
 function publicMod(mod) {
   const { feed, ...rest } = mod;
-  return { ...rest, feedCount: feed.length, running: active?.modId === mod.id };
+  return { ...rest, feedCount: feed.length, running: active?.modId === mod.id, loadable: Boolean(jarOf(mod)) };
 }
 
 let saveTimers = new Map();
@@ -286,6 +294,7 @@ async function run(mod) {
 
 function create({ prompt, seed = false }) {
   if (active) throw new Error('Another mod is running. Stop it or wait for it to finish.');
+  if (game.status().deploying) throw new Error('A mod is being loaded into the game. Try again in a few seconds.');
   const text = String(prompt || '').trim();
   if (!seed && text.length < 8) throw new Error('Describe the mod in a sentence.');
   const id = `mod_${now().toString(36)}`;
@@ -318,6 +327,17 @@ function handlers(deps) {
       return { ...publicMod(mod), feed: mod.feed };
     },
     'studio:create': create,
+    // Puts a mod's latest build on the server so the user can play it or watch it in the live view.
+    'studio:load': async ({ id }) => {
+      if (active) throw new Error('A mod is building. Switch mods after it finishes.');
+      const mod = mods.get(id);
+      if (!mod) throw new Error('Unknown mod.');
+      const jar = jarOf(mod);
+      if (!jar) throw new Error(`${mod.name} has no built jar yet.`);
+      const out = await game.deployPlugin({ jarPath: jar, emit });
+      if (!out.loaded) throw new Error(`${mod.name} did not load: ${out.errors[0] || 'see the server log'}`);
+      return out;
+    },
     'studio:stop': ({ id }) => {
       if (active?.modId !== id) return false;
       active.stopped = true;
@@ -337,4 +357,6 @@ function handlers(deps) {
   };
 }
 
-module.exports = { handlers };
+const busy = () => Boolean(active);
+
+module.exports = { handlers, busy };

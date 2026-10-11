@@ -41,16 +41,72 @@ const ICONS = {
   workspace: <path d="M3.5 5h13M3.5 10h9M3.5 15h6" />,
 };
 
+// Shown when Benana's main-process code changed after launch; builds are refused until a restart loads it.
+function CodeBanner({ building }) {
+  const [code, setCode] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    call("app:code").then(setCode).catch(() => {});
+    return on("app:code", (next) => setCode((prev) => ({ ...prev, ...next })));
+  }, []);
+
+  if (!code?.stale) return null;
+  const files = code.changed.slice(0, 3).join(", ") + (code.changed.length > 3 ? ` +${code.changed.length - 3} more` : "");
+  const restart = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await call("app:restart");
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="code-banner">
+      <span>
+        <strong>Benana's code changed.</strong> {files} won't take effect until a restart, so new builds are paused.
+        {error && <em> {error}</em>}
+      </span>
+      {code.restartable ? (
+        <button disabled={busy || building} title={building ? "A mod is building. Restart after it finishes." : undefined} onClick={restart}>
+          {busy ? "Restarting…" : "Restart Benana"}
+        </button>
+      ) : (
+        <small>Stop and rerun npm run dev to load it.</small>
+      )}
+    </div>
+  );
+}
+
+const saved = (key, fallback) => {
+  try {
+    const v = localStorage.getItem(key);
+    return v == null ? fallback : JSON.parse(v);
+  } catch {
+    return fallback;
+  }
+};
+
 export default function ModStudio({ onOpenWorkspace }) {
   const [page, setPage] = React.useState("build");
   const [mods, setMods] = React.useState([]);
-  const [selectedId, setSelectedId] = React.useState(null);
-  const [composing, setComposing] = React.useState(true);
+  // The open chat survives restarts.
+  const [selectedId, setSelectedId] = React.useState(() => saved("benana.studio.selected", null));
+  const [composing, setComposing] = React.useState(() => saved("benana.studio.composing", true));
   const [lessons, setLessons] = React.useState([]);
   const [game, setGame] = React.useState(null);
   const [error, setError] = React.useState("");
   const mod = mods.find((m) => m.id === selectedId) || null;
   const running = mods.find((m) => m.running) || null;
+
+  React.useEffect(() => {
+    localStorage.setItem("benana.studio.selected", JSON.stringify(selectedId));
+    localStorage.setItem("benana.studio.composing", JSON.stringify(composing));
+  }, [selectedId, composing]);
 
   const watchMod = (id) => {
     setSelectedId(id);
@@ -71,7 +127,7 @@ export default function ModStudio({ onOpenWorkspace }) {
       .then((list) => {
         setMods(list);
         const live = list.find((m) => m.running);
-        setSelectedId((id) => id || live?.id || list[0]?.id || null);
+        setSelectedId((id) => (id && list.some((m) => m.id === id) ? id : live?.id || list[0]?.id || null));
         if (live) setComposing(false);
       })
       .catch((e) => setError(e.message));
@@ -159,6 +215,7 @@ export default function ModStudio({ onOpenWorkspace }) {
       </nav>
 
       <main className="studio-main">
+        <CodeBanner building={Boolean(running)} />
         {error && <div className="alert page-alert">{error}</div>}
         {page === "build" && (
           <BuildPage
