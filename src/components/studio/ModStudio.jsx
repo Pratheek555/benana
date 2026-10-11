@@ -1,4 +1,5 @@
 import React from "react";
+import { beginDrag } from "./Split.jsx";
 import { call, on, ago, isDemo } from "../../api.js";
 import BuildPage from "./BuildPage.jsx";
 import ModsPage from "./ModsPage.jsx";
@@ -91,7 +92,33 @@ const saved = (key, fallback) => {
   }
 };
 
+const SIDE_DEFAULT = 236;
+const readSide = () => {
+  try { return Number(localStorage.getItem("benana-side-width")) || SIDE_DEFAULT; } catch { return SIDE_DEFAULT; }
+};
+
 export default function ModStudio({ onOpenWorkspace }) {
+  const [sideWidth, setSideWidth] = React.useState(readSide);
+  const setSide = (w) => {
+    setSideWidth(w);
+    try { localStorage.setItem("benana-side-width", String(w)); } catch {}
+  };
+  const resizeSide = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sideWidth;
+    const end = beginDrag("col-resize");
+    let w = startW;
+    const move = (ev) => { w = Math.min(Math.max(startW + ev.clientX - startX, 180), 420); setSideWidth(w); };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      end();
+      setSide(w);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const [page, setPage] = React.useState("build");
   const [mods, setMods] = React.useState([]);
   // The open chat survives restarts.
@@ -148,8 +175,16 @@ export default function ModStudio({ onOpenWorkspace }) {
   const currentPage = PAGES.find((item) => item.id === page);
 
   return (
-    <div className="studio">
+    <div className="studio" style={{ "--side-w": `${sideWidth}px` }}>
       <nav className="side" aria-label="Mod Studio">
+        <div
+          className="side-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize · double-click to reset"
+          onPointerDown={resizeSide}
+          onDoubleClick={() => setSide(SIDE_DEFAULT)}
+        />
         <div className="logo">
           <span className="brand-mark">B</span>
           <span>

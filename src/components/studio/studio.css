@@ -27,7 +27,7 @@
   --mono: "Geist Mono Variable", "Cascadia Code", Consolas, monospace;
 
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: var(--side-w, 236px) minmax(0, 1fr);
   height: 100vh;
   background: var(--bg);
   color: var(--text);
@@ -3061,3 +3061,84 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Resizable panes (Split.jsx): a grid whose tracks are set inline. */
+.studio .split {
+  display: grid !important;
+  gap: 0 !important;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+}
+.studio .build-chat { --gutter: 0px; flex: 1 1 0; height: auto; min-height: 0; }
+.studio .split > .split-pane > .split { height: 100%; }
+.studio .split-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.studio .split-pane > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.studio .test-panel { display: flex; flex-direction: column; min-height: 0; }
+.studio .test-panel > .split { flex: 1; min-height: 0; }
+.studio .split-gutter {
+  position: relative;
+  touch-action: none;
+  z-index: 3;
+}
+.studio .split-row > .split-gutter { cursor: col-resize; }
+.studio .split-col > .split-gutter { cursor: row-resize; }
+/* The chat/test divider has no visual gap: widen its hit area over the seam instead. */
+.studio .build-chat > .split-gutter { margin: 0 -4px; }
+.studio .split-gutter::after {
+  content: "";
+  position: absolute;
+  border-radius: 99px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.studio .split-row > .split-gutter::after { top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); }
+.studio .split-col > .split-gutter::after { left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); }
+.studio .split-gutter:hover::after,
+.studio .split-gutter:active::after { opacity: 0.7; }
+
+/* Sidebar width handle */
+.studio .side { position: relative; }
+.studio .side-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 5;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.studio .side-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.studio .side-resizer:hover::after { opacity: 0.7; }
+
+/* Iframes and canvases (the live game view) must not swallow the drag. */
+body.is-resizing iframe,
+body.is-resizing canvas { pointer-events: none; }
+body.is-resizing { user-select: none; }
+.studio .split > .split-pane,
+.studio .split > .split-gutter { align-self: stretch; justify-self: stretch; height: 100%; max-height: 100%; }
