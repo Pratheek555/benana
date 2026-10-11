@@ -5,7 +5,7 @@ Landing page for benana. A live, procedurally generated Minecraft-style world fi
 - **Light mode → Overworld:** an island continent with snowy peaks, a cherry grove, birch and oak forests, flower meadows and beaches, under a golden-hour sun.
 - **Dark mode → Nether:** crimson and warped forests of huge fungi, basalt deltas and nether wastes around a lava sea, closed in by cliffs and a glowstone-studded ceiling.
 
-The toggle sits in the nav; the choice persists, and the first visit follows the system colour scheme.
+The toggle sits in the nav and the choice persists; first visits always open in the Overworld.
 
 ## Rendering ("shaders" look, after Solas)
 
@@ -21,6 +21,27 @@ The toggle sits in the nav; the choice persists, and the first visit follows the
 Resolution: at least ~2560×1440 internally (supersampled on 1080p screens, native on HiDPI). If frames stay slow it steps down in tiers (resolution to native density → fewer ray samples and smaller shadows → below native → no bloom).
 
 Text can't be selected or copied, by design.
+
+## Real gameplay footage (optional)
+
+If `public/video/overworld.{webm,mp4}` / `public/video/nether.{webm,mp4}` exist, the page plays that footage as the background instead of the live 3D world (each dimension falls back independently). Scrolling eases the footage slightly closer per scene. WebM (VP9) is used where the browser supports it, otherwise MP4.
+
+Use footage you recorded yourself and check [Mojang's usage guidelines](https://www.minecraft.net/en-us/usage-guidelines) before publishing it on a product site (don't imply Mojang endorses benana).
+
+Recording tips for the "running on shaders" look:
+
+1. Minecraft Java + Iris + the Solas shader pack, render distance 24+, FOV ~70, hide the HUD (F1).
+2. Record smooth, slow camera paths with the Replay Mod (keyframed camera) at 2560×1440 or 4K, 60 fps, 20–40 s, ideally ending where it began so the loop is seamless.
+3. Encode (no audio; the video is muted anyway):
+
+```sh
+# VP9 WebM, ~1440p, small enough for git/Vercel
+ffmpeg -i raw.mov -an -vf "scale=2560:-2,fps=30" -c:v libvpx-vp9 -b:v 0 -crf 34 -row-mt 1 -deadline good -cpu-used 2 public/video/overworld.webm
+# H.264 MP4 fallback (Safari)
+ffmpeg -i raw.mov -an -vf "scale=2560:-2,fps=30" -c:v libx264 -preset slow -crf 23 -pix_fmt yuv420p -movflags +faststart public/video/overworld.mp4
+```
+
+Keep each file well under 50 MB (GitHub rejects files over 100 MB); for longer or 4K clips, host the files on a CDN and adjust the paths in `src/main.js`.
 
 ## Using a resource pack
 

@@ -19,6 +19,11 @@ body { margin: 0; color: var(--ink); background: var(--bg); font-family: var(--s
 ::selection { background: var(--bee); color: #111; }
 
 /* ---------- world ---------- */
+#footage {
+  position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100lvh; z-index: 0; object-fit: cover; pointer-events: none;
+  opacity: 0; transform-origin: 50% 45%; transition: opacity 1.2s var(--ease-out), transform 2.4s var(--ease-out);
+}
+body.video-ready #footage { opacity: 1; }
 #world { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100lvh; display: block; z-index: 0; }
 .veil {
   position: fixed; inset: 0; z-index: 1; pointer-events: none;
@@ -167,3 +172,5 @@ body.ready::before { opacity: 0; }
 
 /* resource-pack attribution */
 .credit { position: fixed; left: var(--gutter); bottom: 14px; z-index: 6; margin: 0; max-width: 48ch; font: 400 10px/1.4 var(--mono); letter-spacing: 0.04em; color: rgba(255, 255, 255, 0.55); }
+
+#world[hidden], #footage[hidden] { display: none; }

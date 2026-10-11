@@ -43,6 +43,55 @@ const themeBtn = document.querySelector('.theme');
 const themeLabel = document.querySelector('.theme-label');
 let world = null;
 
+// ---------- background: real footage when provided, else the live world ----------
+// Recorded gameplay goes in public/video/overworld.mp4 and public/video/nether.mp4.
+const video = document.getElementById('footage');
+const FOOTAGE = { light: 'overworld', dark: 'nether' };
+let usingVideo = false;
+
+// Prefers WebM (VP9/AV1) where the browser can play it, then MP4 (H.264/HEVC).
+async function footageFor(theme) {
+  if (preview) return null;
+  const formats = [['webm', 'video/webm; codecs="vp9"'], ['mp4', 'video/mp4; codecs="avc1.640033"']]
+    .filter(([, type]) => video.canPlayType(type));
+  for (const [ext] of formats) {
+    const url = `/video/${FOOTAGE[theme]}.${ext}`;
+    try {
+      const r = await fetch(url, { method: 'HEAD' });
+      if (r.ok && (r.headers.get('content-type') || '').startsWith('video/')) return url;
+    } catch { /* try the next format */ }
+  }
+  return null;
+}
+
+async function mountBackground(theme) {
+  const url = await footageFor(theme);
+  if (url) {
+    world?.dispose(); world = null;
+    document.getElementById('world').hidden = true;
+    usingVideo = true;
+    video.src = url;
+    video.hidden = false;
+    const ready = () => document.body.classList.add('video-ready');
+    video.addEventListener('playing', ready, { once: true });
+    if (reducedMotion) { video.addEventListener('loadeddata', ready, { once: true }); video.load(); }
+    else video.play().catch(() => { ready(); }); // autoplay blocked: show the first frame
+    pushIn(Math.max(0, active));
+    return;
+  }
+  usingVideo = false;
+  video.pause(); video.removeAttribute('src'); video.load(); video.hidden = true;
+  document.body.classList.remove('video-ready');
+  mountWorld(theme);
+}
+
+// Footage can't change camera shots, so each scene eases in a little closer instead.
+function pushIn(i) {
+  if (!usingVideo || reducedMotion) return;
+  const k = 1.02 + i * 0.012;
+  video.style.transform = `scale(${k.toFixed(3)}) translate3d(${(i % 2 ? -1 : 1) * i * 0.25}%, ${-i * 0.15}%, 0)`;
+}
+
 function mountWorld(theme) {
   // A fresh canvas per world: a WebGL context can't be cleanly handed to a second renderer.
   const old = document.getElementById('world');
@@ -84,8 +133,8 @@ themeBtn.addEventListener('click', () => {
     try { localStorage.setItem('benana-theme', next); } catch { /* private mode */ }
     labelTheme(next);
     // Let the fade paint before the (synchronous) world build.
-    requestAnimationFrame(() => setTimeout(() => {
-      mountWorld(next);
+    requestAnimationFrame(() => setTimeout(async () => {
+      await mountBackground(next);
       document.body.classList.remove('switching');
       switching = false;
     }, 30));
@@ -108,6 +157,7 @@ function show(i) {
   ticks.forEach((t, k) => t.classList.toggle('on', k === i));
   document.body.dataset.scene = String(i);
   world?.setShot(i);
+  pushIn(i);
 }
 
 function onScroll() {
@@ -128,7 +178,7 @@ window.addEventListener('keydown', (e) => {
 
 let active = -1;
 labelTheme(root.dataset.theme);
-mountWorld(root.dataset.theme);
+mountBackground(root.dataset.theme);
 
 // Fade the world in from black, then reveal the wordmark.
 requestAnimationFrame(() => {

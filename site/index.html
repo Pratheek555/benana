@@ -7,7 +7,7 @@
   <meta name="description" content="benana — your claude or codex, plugged straight into minecraft. ship mods that actually boot." />
   <meta name="theme-color" content="#0b0b0b" />
   <meta name="color-scheme" content="light dark" />
-  <script>try{var t=localStorage.getItem("benana-theme");document.documentElement.dataset.theme=t||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){document.documentElement.dataset.theme="light"}</script>
+  <script>try{var t=localStorage.getItem("benana-theme");document.documentElement.dataset.theme=t==="dark"?"dark":"light"}catch(e){document.documentElement.dataset.theme="light"}</script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ffd60a'/%3E%3Crect x='4' y='4' width='8' height='8' fill='%230b0b0b'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,6 +16,7 @@
 </head>
 <body>
   <canvas id="world" aria-hidden="true"></canvas>
+  <video id="footage" muted loop playsinline preload="auto" disablepictureinpicture disableremoteplayback aria-hidden="true" tabindex="-1"></video>
   <div class="veil" aria-hidden="true"></div>
   <div class="grain" aria-hidden="true"></div>
 
