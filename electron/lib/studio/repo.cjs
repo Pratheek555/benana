@@ -72,7 +72,9 @@ async function create({ slug, name, summary }) {
     const file = path.join(dir, '.entire', 'settings.json');
     const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
     // Benana commits each attempt from a non-interactive process; prompting would hang the commit hook.
-    Object.assign(settings, { commit_linking: 'always', telemetry: false });
+    // Session pushing is on by default in Entire: a plain git push would send every transcript.
+    // Mods publish through the marketplace gate instead, so it stays off.
+    Object.assign(settings, { commit_linking: 'always', telemetry: false, strategy_options: { ...(settings.strategy_options || {}), push_sessions: false } });
     fs.writeFileSync(file, JSON.stringify(settings, null, 2));
     partners.entire = { enabled: true };
   } else {
@@ -117,6 +119,18 @@ async function graphGuide(dir) {
   return { ok: res.ok, error: res.ok ? null : (res.err || res.out).trim().slice(0, 300) };
 }
 
+// Existing mod repos created before push_sessions was turned off.
+function lockSessionPush(dir) {
+  const file = path.join(dir, '.entire', 'settings.json');
+  try {
+    const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (settings.strategy_options?.push_sessions === false) return false;
+    settings.strategy_options = { ...(settings.strategy_options || {}), push_sessions: false };
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2));
+    return true;
+  } catch { return false; }
+}
+
 async function history(dir) {
   return (await git(dir, 'log', '--format=%h %s%n%(trailers:key=Entire-Checkpoint)', '-20')).out.trim();
 }
@@ -148,4 +162,4 @@ async function build(dir, name) {
   return { ok, jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000), assets };
 }
 
-module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, graphGuide, history, files, readFile, diff, build };
+module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, graphGuide, lockSessionPush, history, files, readFile, diff, build };
