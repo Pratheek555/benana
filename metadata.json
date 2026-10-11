@@ -3,7 +3,7 @@
   "checkpoint_id": "01M4NZNKVWMPE2Z7H59AQD7S0C",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 1,
+  "checkpoints_count": 2,
   "files_touched": [
     "README.md",
     "src/components/studio/NeatlogsPage.jsx",
@@ -16,13 +16,20 @@
       "compact_transcript": "/0/transcript.jsonl",
       "content_hash": "/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/1/metadata.json",
+      "transcript": "/1/full.jsonl",
+      "compact_transcript": "/1/transcript.jsonl",
+      "content_hash": "/1/content_hash.txt",
+      "prompt": "/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 6,
-    "cache_creation_tokens": 2891,
-    "cache_read_tokens": 908875,
-    "output_tokens": 2449,
-    "api_call_count": 3
+    "input_tokens": 28,
+    "cache_creation_tokens": 25816,
+    "cache_read_tokens": 3389508,
+    "output_tokens": 10313,
+    "api_call_count": 14
   }
 }
