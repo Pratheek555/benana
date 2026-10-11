@@ -87,3 +87,13 @@ test("sessions not chosen ship metadata only", async () => {
   assert.equal(r.ok, true);
   assert.equal(fs.existsSync(path.join(out, "checkpoints/CK1/transcript.jsonl")), false);
 });
+
+test("transcripts lose signatures and embedded system prompts, and keep the conversation", () => {
+  const line = JSON.stringify({ type: "assistant", message: { content: [{ type: "thinking", thinking: "plan", signature: "EqXyZ123" }, { type: "text", text: "done" }] }, attachment: { systemPrompt: ["memory at /Users/x"], other: 1 } });
+  const out = JSON.parse(bundle.stripTranscript(line));
+  assert.equal(out.message.content[0].signature, undefined);
+  assert.equal(out.message.content[0].thinking, "plan");
+  assert.equal(out.message.content[1].text, "done");
+  assert.equal(out.attachment.systemPrompt, undefined);
+  assert.equal(out.attachment.other, 1);
+});
