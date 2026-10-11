@@ -12,7 +12,7 @@ The toggle sits in the nav; the choice persists, and the first visit follows the
 `src/world/`:
 
 - `voxels.js` — block registry, voxel storage and a mesher that emits only visible faces with per-vertex ambient occlusion (Minecraft's smooth lighting). Block textures come from one texture array, so mipmaps never bleed between tiles. Leaves and plants sway in the wind in the vertex shader.
-- `textures.js` — 16×16 block textures in the modern (1.14+) style, drawn in code (no game assets), plus the lava texture and a tiling water normal map.
+- `textures.js` — 16×16 built-in block textures in the vanilla style, drawn in code (no game assets) and seamlessly tileable; lit Voronoi "pebbles" for lumpy blocks; plus the resource-pack loader, lava texture and water normal map.
 - `overworld.js`, `nether.js` — world generation, lights and particles (petals and pollen; embers, ash and spores).
 - `sky.js` — sky dome with a round HDR sun, a stacked-slice volumetric-looking cloud deck, and GPU-animated particles.
 - `post.js` — depth-aware height fog that scatters warm light toward the sun, screen-space crepuscular rays occluded by terrain and trees, rising Nether smoke, bloom on HDR emissives (lava, glowstone, shroomlight), and a filmic grade.
@@ -21,6 +21,12 @@ The toggle sits in the nav; the choice persists, and the first visit follows the
 Resolution: at least ~2560×1440 internally (supersampled on 1080p screens, native on HiDPI). If frames stay slow it steps down in tiers (resolution to native density → fewer ray samples and smaller shadows → below native → no bloom).
 
 Text can't be selected or copied, by design.
+
+## Using a resource pack
+
+The built-in textures are drawn in code. To use real-looking pack textures instead, copy a pack's block textures into `site/public/textures/block/` with vanilla file names (`stone.png`, `grass_block_top.png`, `oak_log.png`, `crimson_nylium_side.png`, …). Anything missing falls back to the built-in tile; greyscale grass and leaves are tinted with vanilla's plains colours, and animated strips use their first frame. Any resolution works (16×, 32×, 64×…).
+
+Only use a pack you're allowed to redistribute: Mojang's own textures can't be published on a website. Openly licensed vanilla-style packs exist, e.g. *Pixel Perfection: Chorus Edit* (CC BY-SA 4.0). Put the attribution the licence requires in `site/public/textures/credit.txt`; the page shows it in the bottom-left corner.
 
 ## Run
 

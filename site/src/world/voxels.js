@@ -158,13 +158,13 @@ export function mesh(vox) {
 
 // Patches a MeshStandardMaterial to sample the block texture array, add per-vertex emission,
 // and sway leaves and plants in the wind.
-export function blockMaterial(texArray, { cutout = false, uniforms }) {
+export function blockMaterial({ cutout = false, uniforms }) {
   const m = new THREE.MeshStandardMaterial({
     vertexColors: true, roughness: 0.92, metalness: 0, side: cutout ? THREE.DoubleSide : THREE.FrontSide,
     alphaTest: cutout ? 0.5 : 0, envMapIntensity: 0.55,
   });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uBlocks = { value: texArray };
+    sh.uniforms.uBlocks = uniforms.uBlocks; // shared, so a resource pack can be swapped in live
     sh.uniforms.uTime = uniforms.uTime;
     sh.uniforms.uWind = uniforms.uWind;
     sh.vertexShader = sh.vertexShader

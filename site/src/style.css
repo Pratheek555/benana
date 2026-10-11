@@ -164,3 +164,6 @@ body.ready::before { opacity: 0; }
   .c, [data-fade] { transform: none !important; filter: none !important; transition: opacity 0.4s linear !important; transition-delay: 0ms !important; }
   .grain, .hint i { animation: none; }
 }
+
+/* resource-pack attribution */
+.credit { position: fixed; left: var(--gutter); bottom: 14px; z-index: 6; margin: 0; max-width: 48ch; font: 400 10px/1.4 var(--mono); letter-spacing: 0.04em; color: rgba(255, 255, 255, 0.55); }

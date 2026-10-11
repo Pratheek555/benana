@@ -1,8 +1,8 @@
 // Builds and runs the background world. theme 'light' → Overworld, 'dark' → Nether.
 // The camera orbits continuously; scrolling only changes the orbit's radius and height.
 import * as THREE from 'three';
-import { buildTextureArray, lavaTexture, waterNormal } from './textures.js';
-import { mesh, blockMaterial } from './voxels.js';
+import { buildTextureArray, loadPack, lavaTexture, waterNormal } from './textures.js';
+import { mesh, blockMaterial, BLOCKS } from './voxels.js';
 import { generateOverworld, overworldScene } from './overworld.js';
 import { generateNether, netherScene } from './nether.js';
 import { createPost } from './post.js';
@@ -41,7 +41,7 @@ function lavaMesh(level) {
   return { mesh: l, update: (t) => { tex.offset.set(t * 0.0016, Math.sin(t * 0.1) * 0.003); m.emissiveIntensity = 1.2 + Math.sin(t * 0.8) * 0.12; } };
 }
 
-export function createWorld(canvas, { theme = 'light', reducedMotion = false, preview = false } = {}) {
+export function createWorld(canvas, { theme = 'light', reducedMotion = false, preview = false, onPack } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -54,11 +54,11 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
   const { scene } = env;
   renderer.toneMappingExposure = env.exposure;
 
-  const uniforms = { uTime: { value: 0 }, uWind: { value: reducedMotion ? 0 : 1 } };
   const tex = buildTextureArray();
+  const uniforms = { uTime: { value: 0 }, uWind: { value: reducedMotion ? 0 : 1 }, uBlocks: { value: tex } };
   const geo = mesh(world.vox);
-  const solid = new THREE.Mesh(geo.solid, blockMaterial(tex, { uniforms }));
-  const cutout = new THREE.Mesh(geo.cutout, blockMaterial(tex, { cutout: true, uniforms }));
+  const solid = new THREE.Mesh(geo.solid, blockMaterial({ uniforms }));
+  const cutout = new THREE.Mesh(geo.cutout, blockMaterial({ cutout: true, uniforms }));
   for (const m of [solid, cutout]) { m.castShadow = true; m.receiveShadow = true; scene.add(m); }
 
   const envMap = environment(renderer, scene);
@@ -66,6 +66,14 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
   const liquid = nether ? lavaMesh(env.lava.level) : waterMesh(env.water.level, env.water.color, envMap);
   scene.add(liquid.mesh);
   if (preview) env.sun.shadow.mapSize.set(1024, 1024);
+
+  // A resource pack in /textures/block/ replaces the built-in tiles once it has loaded.
+  let disposed = false;
+  loadPack().then((pack) => {
+    if (!pack || disposed) { pack?.texture.dispose(); return; }
+    uniforms.uBlocks.value = pack.texture;
+    onPack?.(pack);
+  }).catch(() => {});
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.3, 5000);
   const post = createPost(renderer, scene, camera, env);
@@ -103,6 +111,21 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
     resize();
   }
 
+  // Highest non-plant block at or below `y + 8` around (x, z), scanning a 5×5 footprint.
+  const vox = world.vox;
+  function groundBelow(x, z, y) {
+    let best = 0;
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+      const bx = Math.floor(x) + dx; const bz = Math.floor(z) + dz;
+      for (let yy = Math.min(vox.sy - 1, Math.floor(y) + 8); yy > best; yy--) {
+        const id = vox.get(bx, yy, bz);
+        if (id && BLOCKS[id].kind !== 'plant') { best = yy + 1; break; }
+      }
+    }
+    return best;
+  }
+  let lift = o.shots[0].h;
+
   const clock = new THREE.Clock();
   let slow = 0;
   let raf = 0;
@@ -119,7 +142,11 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
     const k = reducedMotion || preview ? 1 : 1 - Math.pow(0.02, dt);
     cur.r += (s.r - cur.r) * k * 0.5; cur.h += (s.h - cur.h) * k * 0.5; cur.look += (s.look - cur.look) * k * 0.5;
     if (!reducedMotion) angle += dt * o.speed * (preview ? 0 : 1);
-    camera.position.set(o.center.x + Math.cos(angle) * cur.r, cur.h + Math.sin(t * 0.23) * 1.2, o.center.z + Math.sin(angle) * cur.r);
+    const cx = o.center.x + Math.cos(angle) * cur.r; const cz = o.center.z + Math.sin(angle) * cur.r;
+    // Keep clear of terrain and tree canopies: never closer than 4 blocks to what's below.
+    const want = Math.max(cur.h, groundBelow(cx, cz, cur.h) + 4);
+    lift += (want - lift) * (preview ? 1 : 1 - Math.pow(0.05, dt));
+    camera.position.set(cx, lift + Math.sin(t * 0.23) * 1.2, cz);
     target.set(o.center.x, cur.look, o.center.z);
     camera.lookAt(target);
 
@@ -135,6 +162,7 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
     get pixelRatio() { return pixelRatio; },
     get quality() { return quality; },
     dispose() {
+      disposed = true;
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
       scene.traverse((obj) => {
@@ -142,7 +170,7 @@ export function createWorld(canvas, { theme = 'light', reducedMotion = false, pr
         const mats = Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : [];
         for (const m of mats) { for (const v of Object.values(m)) if (v?.isTexture) v.dispose(); m.dispose(); }
       });
-      tex.dispose(); envMap.dispose(); post.dispose(); renderer.dispose();
+      tex.dispose(); if (uniforms.uBlocks.value !== tex) uniforms.uBlocks.value.dispose(); envMap.dispose(); post.dispose(); renderer.dispose();
     },
   };
 }

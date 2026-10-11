@@ -51,12 +51,20 @@ function mountWorld(theme) {
   canvas.setAttribute('aria-hidden', 'true');
   old.replaceWith(canvas);
   try {
-    world = createWorld(canvas, { theme, reducedMotion, preview });
+    world = createWorld(canvas, { theme, reducedMotion, preview, onPack: showCredit });
     world.setShot(Math.max(0, active));
   } catch (e) {
     world = null; // No WebGL: the copy still works on the dark background.
     console.warn('WebGL unavailable', e);
   }
+}
+
+// Resource packs usually require attribution (e.g. CC BY-SA); show the pack's credit line.
+function showCredit(pack) {
+  const el = document.querySelector('.credit');
+  if (!pack.credit) return;
+  el.textContent = pack.credit;
+  el.hidden = false;
 }
 
 function labelTheme(theme) {
