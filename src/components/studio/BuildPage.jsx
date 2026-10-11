@@ -1,6 +1,7 @@
 import React from "react";
 import { call, on } from "../../api.js";
 import TestPanel, { useNow, useStickyScroll } from "./TestPanel.jsx";
+import { HandoffCard, TraceChip, TraceDrawer } from "./traces.jsx";
 import {
   CheckIcon,
   Icon,
@@ -292,6 +293,7 @@ function buildThread(mod, feed) {
   const items = [{ type: "user", key: "user", k: 0, text: turns[0].prompt }, { type: "plan", key: "plan", k: 0 }];
   let turn = null;
   let k = 0;
+  const handoffs = new Set();
   feed.forEach((f, i) => {
     const key = `${f.at}-${i}`;
     if (f.kind === "session") return;
@@ -304,7 +306,10 @@ function buildThread(mod, feed) {
     if (f.role === "benana") {
       turn = null;
       if (f.kind === "phase") items.push({ type: "phase", key, f });
-      else if (f.kind === "failure" || f.kind === "error") items.push({ type: "alert", key, f });
+      else if (f.kind === "handoff") {
+        handoffs.add(f.attempt);
+        items.push({ type: "handoff", key, n: f.attempt });
+      } else if (f.kind === "failure" || f.kind === "error") items.push({ type: "alert", key, f });
       else items.push({ type: "note", key, f });
       return;
     }
@@ -315,6 +320,11 @@ function buildThread(mod, feed) {
     }
     const id = `${f.role}:${f.attempt || 0}`;
     if (!turn || turn.id !== id) {
+      // Fixer turns recorded before the handoff was posted to the feed still get their card.
+      if (f.role === "fixer" && f.attempt && !handoffs.has(f.attempt) && mod.attempts.some((a) => a.n === f.attempt && a.context)) {
+        handoffs.add(f.attempt);
+        items.push({ type: "handoff", key: `${key}-handoff`, n: f.attempt });
+      }
       turn = { type: "turn", key, id, k, role: f.role, attempt: f.attempt || null, entries: [] };
       items.push(turn);
     }
@@ -374,6 +384,8 @@ function Thread({ mod, onOpenCode }) {
                   </div>
                 </div>
               );
+            case "handoff":
+              return <HandoffCard key={it.key} mod={mod} n={it.n} />;
             case "turn":
               return <AgentTurn key={it.key} turn={it} mod={mod} live={mod.running && it === lastTurn} />;
             case "result":
@@ -394,13 +406,14 @@ function Thread({ mod, onOpenCode }) {
 
 const AVATAR = { benana: "B", spec: "S", builder: "Bu", playtester: "P", fixer: "F" };
 
-function Turn({ role, title, meta, children }) {
+function Turn({ role, title, meta, aside, children }) {
   return (
     <div className="turn">
       <div className="turn-head">
         <span className={`role-avatar ${role}`}>{AVATAR[role] || role[0]?.toUpperCase()}</span>
         <strong>{title}</strong>
         {meta && <span className="meta">{meta}</span>}
+        {aside}
       </div>
       <div className="turn-body">{children}</div>
     </div>
@@ -415,6 +428,8 @@ function sessionFor(mod, role, attemptN, k) {
 
 function AgentTurn({ turn, mod, live }) {
   const s = sessionFor(mod, turn.role, turn.attempt, turn.k);
+  const [traceOpen, setTraceOpen] = React.useState(false);
+  const tracing = Boolean(s && !s.endedAt && mod.running);
   const meta = [
     turn.attempt ? `attempt ${turn.attempt}` : null,
     s?.model ? shortModel(s.model) : null,
@@ -434,7 +449,13 @@ function AgentTurn({ turn, mod, live }) {
   }
 
   return (
-    <Turn role={turn.role} title={ROLE[turn.role] || turn.role} meta={meta}>
+    <Turn
+      role={turn.role}
+      title={ROLE[turn.role] || turn.role}
+      meta={meta}
+      aside={<TraceChip sessionId={s?.sessionId} live={tracing} open={traceOpen} onToggle={() => setTraceOpen((o) => !o)} />}
+    >
+      {traceOpen && <TraceDrawer sessionId={s?.sessionId} live={tracing} />}
       {groups.map((g, i) =>
         g.work ? (
           <WorkLog key={i} entries={g.entries} mod={mod} live={live && i === groups.length - 1} />
@@ -711,7 +732,7 @@ function inline(text) {
   );
 }
 
-function Markdown({ text }) {
+export function Markdown({ text }) {
   const blocks = String(text || "")
     .replace(/\s+-\s+(?=\*\*)/g, "\n- ")
     .split(/\n{2,}/);

@@ -132,6 +132,8 @@ async function specPhase(mod, turn) {
   }
   const work = path.join(studioDir, mod.id, 'spec');
   fs.mkdirSync(work, { recursive: true });
+  // The spec agent runs before the mod repo exists, so it gets its own Neatlogs hooks.
+  if (!fs.existsSync(path.join(work, '.claude', 'settings.json'))) await repo.enableNeatlogs(work);
   const prompt = turn.revision ? prompts.specRevision({ mod, request: turn.prompt }) : prompts.spec(prompts.requestOf(mod));
   const res = await agent(mod, null, 'spec', { cwd: work, prompt, model: MODELS.build, tools: [] });
   if (!res.ok) throw new Error(`Spec agent failed: ${res.error}`);
@@ -144,14 +146,26 @@ async function specPhase(mod, turn) {
   return spec;
 }
 
-async function trace(sessionId) {
-  if (!sessionId || !neatlogs.configured()) return '';
-  const ev = await neatlogs.evidence({ sessionId });
-  if (!ev.matched) return '';
-  return ev.traces.map((t) => {
-    const spans = (t.spans || []).slice(0, 25).map((s) => `  - ${s.name || s.span_name || 'span'}${s.status === 'error' || s.status_code === 'ERROR' ? ' (error)' : ''}`).join('\n');
-    return `trace ${t.traceId || t.trace_id || t.id}\n${spans}`;
-  }).join('\n').slice(0, 4000);
+// The hooks ship spans while a session runs, but the trace only finalizes shortly after it ends, so wait for it.
+const TRACE_WAIT_MS = 90 * 1000;
+async function playtestTrace(sessionId, wait = TRACE_WAIT_MS) {
+  if (!neatlogs.configured()) return { state: 'unconfigured' };
+  if (!sessionId) return { state: 'missing' };
+  const until = now() + wait;
+  let ev;
+  for (;;) {
+    ev = await neatlogs.evidence({ sessionId }).catch((e) => ({ matched: false, error: e.message }));
+    if ((ev.matched && ev.traces[0].summary.finalized) || now() >= until || active?.stopped) break;
+    await new Promise((r) => setTimeout(r, 8000));
+  }
+  if (!ev.matched) return { state: ev.error ? 'error' : 'notfound', error: ev.error };
+  const t = ev.traces[0];
+  const s = t.summary;
+  const text = [
+    `trace ${s.traceId} · ${s.status} · ${s.spans} spans · ${s.toolCalls} tool calls · ${s.errors.length} failed`,
+    ...s.sequence.map((x) => `  - ${x.name}${x.n > 1 ? ` x${x.n}` : ''}${x.error ? ' (error)' : ''}`),
+  ].join('\n').slice(0, 4000);
+  return { state: 'read', sessionId, summary: s, text };
 }
 
 async function codePhase(mod, attempt, previous) {
@@ -170,13 +184,31 @@ async function codePhase(mod, attempt, previous) {
     attempt.summary = res.final.slice(0, 2000);
     return;
   }
-  const cps = await repo.checkpoints(mod.repoDir);
+  // The chat shows this handoff as a card that fills in once the trace is read.
+  const playtester = previous.sessions.filter((s) => s.role === 'playtester').at(-1);
+  attempt.context = { from: previous.n, neatlogs: { state: 'waiting', sessionId: playtester?.sessionId || null } };
+  feed(mod, { attempt: attempt.n, role: 'benana', kind: 'handoff', from: previous.n });
+  save(mod);
+  const [cps, nl, history] = await Promise.all([
+    repo.checkpoints(mod.repoDir),
+    playtestTrace(playtester?.sessionId).catch((e) => ({ state: 'error', error: e.message })),
+    repo.history(mod.repoDir),
+  ]);
   const context = {
-    history: await repo.history(mod.repoDir),
+    history,
     checkpoints: cps.ok ? cps.items.slice(0, 8).map((c) => `${c.checkpoint_id} "${c.message}" session ${c.session_id} (${c.agent})`).join('\n') : '',
-    trace: await trace(previous.sessions.find((s) => s.role === 'playtester')?.sessionId).catch(() => ''),
+    trace: nl.text || '',
   };
-  attempt.context = { entireCheckpoints: cps.ok ? cps.items.length : 0, neatlogsTrace: Boolean(context.trace) };
+  const neatlogsRead = { ...nl };
+  delete neatlogsRead.text;
+  attempt.context = {
+    from: previous.n,
+    entireCheckpoints: cps.ok ? cps.items.length : 0,
+    checkpoints: cps.ok ? cps.items.slice(0, 3).map((c) => ({ id: c.checkpoint_id, message: c.message })) : [],
+    neatlogsTrace: Boolean(context.trace),
+    neatlogs: { sessionId: playtester?.sessionId || null, ...neatlogsRead },
+  };
+  save(mod);
   const res = await agent(mod, attempt, 'fixer', { cwd: mod.repoDir, prompt: prompts.fixer({ mod, attempt, previous, context }), model: MODELS.build, tools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'], allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash'] });
   if (!res.ok) throw new Error(`Fixer failed: ${res.error}`);
   attempt.summary = res.final.slice(0, 2000);

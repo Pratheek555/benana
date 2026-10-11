@@ -45,6 +45,7 @@ stub("../electron/lib/studio/repo.cjs", {
   build: async (dir, name) => ({ ok: true, jar: path.join(dir, `${name}.jar`), log: "" }),
   checkpoints: async () => ({ ok: false, items: [] }),
   history: async () => "",
+  enableNeatlogs: async () => ({ enabled: false }),
 });
 stub("../electron/lib/studio/claude.cjs", {
   MODELS: { build: "opus", playtest: "sonnet" },

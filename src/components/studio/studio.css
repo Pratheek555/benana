@@ -3061,3 +3061,289 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Neatlogs in the chat: a trace chip on each agent turn, its span drawer, and the playtest -> fixer handoff. */
+.studio .turn-head .meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio .nl-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 2px 8px 2px 7px;
+  border: 1px solid rgba(79, 184, 208, 0.22);
+  border-radius: 99px;
+  background: rgba(79, 184, 208, 0.07);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.studio .nl-chip:not(:disabled):hover {
+  border-color: rgba(79, 184, 208, 0.45);
+  background: rgba(79, 184, 208, 0.12);
+}
+.studio .nl-chip i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--neatlogs);
+}
+.studio .nl-chip-brand {
+  color: var(--neatlogs);
+  font-weight: 600;
+}
+.studio .nl-chip.live i {
+  animation: blink 1.4s ease-in-out infinite;
+}
+.studio .nl-chip.looking i,
+.studio .nl-chip.finalizing i {
+  animation: blink 1s ease-in-out infinite;
+  opacity: 0.6;
+}
+.studio .nl-chip.off,
+.studio .nl-chip.none,
+.studio .nl-chip.error {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--text-3);
+}
+.studio .nl-chip.off i,
+.studio .nl-chip.none i {
+  background: var(--text-3);
+}
+.studio .nl-chip.error i {
+  background: var(--bad);
+}
+.studio .nl-chip-err {
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--bad-soft);
+  color: var(--bad-text);
+  font-weight: 600;
+}
+.studio .nl-chip-caret {
+  width: 6px;
+  height: 6px;
+  margin: -3px 1px 0 1px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.studio .nl-chip.open .nl-chip-caret {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}
+
+.studio .nl-drawer {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(79, 184, 208, 0.2);
+  border-left: 2px solid var(--neatlogs);
+  border-radius: 8px;
+  background: var(--panel);
+  animation: rise 0.18s ease-out;
+}
+.studio .nl-drawer-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.studio .nl-drawer-stats code {
+  margin-left: auto;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.studio .nl-spans {
+  display: grid;
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.studio .nl-spans li {
+  display: grid;
+  grid-template-columns: 34px minmax(90px, 0.9fr) minmax(80px, 1.1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 11.5px;
+}
+.studio .nl-span-type {
+  color: var(--text-3);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.studio .nl-spans li.llm .nl-span-type {
+  color: var(--accent);
+}
+.studio .nl-span-name {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio .nl-span-track {
+  position: relative;
+  height: 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.studio .nl-span-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px;
+  background: rgba(79, 184, 208, 0.65);
+}
+.studio .nl-spans li.llm .nl-span-track i {
+  background: rgba(232, 196, 90, 0.65);
+}
+.studio .nl-spans li.err .nl-span-name,
+.studio .nl-spans li.err .nl-span-type {
+  color: var(--bad-text);
+}
+.studio .nl-spans li.err .nl-span-track i {
+  background: var(--bad);
+}
+.studio .nl-span-ms {
+  color: var(--text-3);
+  font-size: 11px;
+  text-align: right;
+}
+.studio .nl-drawer-more {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.studio .handoff {
+  display: grid;
+  gap: 9px;
+  margin-left: 31px;
+  padding: 12px 14px;
+  border: 1px solid rgba(79, 184, 208, 0.25);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(79, 184, 208, 0.07), rgba(79, 184, 208, 0.02));
+}
+.studio .handoff-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.studio .handoff-head strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.studio .handoff-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--neatlogs);
+}
+.studio .handoff.waiting .handoff-mark {
+  animation: blink 1.2s ease-in-out infinite;
+}
+.studio .handoff-src {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.studio .handoff-src .muted {
+  color: var(--text-3);
+}
+.studio .handoff-src b.bad {
+  color: var(--bad-text);
+  font-weight: 600;
+}
+.studio .handoff-src code {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(167, 139, 250, 0.12);
+  color: var(--entire);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.studio .handoff-brand {
+  flex: none;
+  width: 62px;
+  color: var(--neatlogs);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.studio .handoff-src.entire .handoff-brand {
+  color: var(--entire);
+}
+.studio .handoff-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+.studio .handoff-wait .spinner {
+  border-color: rgba(79, 184, 208, 0.25);
+  border-top-color: var(--neatlogs);
+}
+.studio .handoff-errors {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0 0 0 70px;
+  list-style: none;
+}
+.studio .handoff-errors li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.studio .handoff-errors code {
+  color: var(--bad-text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.studio .handoff-seq {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 70px;
+}
+.studio .handoff-seq span {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.studio .handoff-seq span em {
+  margin-left: 3px;
+  color: var(--text-3);
+  font-style: normal;
+}
+.studio .handoff-seq span.err {
+  border-color: rgba(229, 72, 77, 0.35);
+  background: var(--bad-soft);
+  color: var(--bad-text);
+}
+.studio .handoff-seq span.more {
+  border-style: dashed;
+  color: var(--text-3);
+}

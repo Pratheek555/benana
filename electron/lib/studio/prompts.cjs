@@ -149,7 +149,7 @@ ${evidence}
 Repository history (Entire checkpoints link each commit to the agent session that produced it):
 ${context.history || '(none)'}
 ${context.checkpoints ? `\nEntire checkpoints:\n${context.checkpoints}` : ''}
-${context.trace ? `\nNeatlogs trace of the failed playtest session:\n${context.trace}` : ''}
+${context.trace ? `\nNeatlogs trace of the failed playtest session (the playtester's tool calls in order; "(error)" marks a call that failed):\n${context.trace}` : ''}
 
 Steps:
 1. Find the root cause from the evidence; the playtester's measurements are ground truth, and its suspected cause is only a guess.

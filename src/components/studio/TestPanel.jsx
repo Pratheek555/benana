@@ -2,6 +2,7 @@ import React from "react";
 import { call, on } from "../../api.js";
 import GamePane from "../game/GamePane.jsx";
 import { ROLE, allSessions, fmtDuration, shortModel, shortSha } from "./shared.jsx";
+import { useTraces } from "./traces.jsx";
 
 const clock = (ts) =>
   ts ? new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "";
@@ -135,60 +136,16 @@ function ServerLog({ mod }) {
   );
 }
 
-const RETRY_MS = 20000;
-
 function NeatlogsLane({ mod }) {
-  const [status, setStatus] = React.useState(null);
-  const [evidence, setEvidence] = React.useState({});
-  const pending = React.useRef(new Set());
   const sessions = React.useMemo(
     () => (mod ? allSessions([mod]).filter((s) => s.sessionId).reverse() : []),
     [mod],
   );
   const running = sessions.some((s) => !s.endedAt);
   const now = useNow(running);
-
-  React.useEffect(() => {
-    call("studio:partners")
-      .then((p) => setStatus(p.neatlogs))
-      .catch(() => setStatus({ configured: true, ok: false }));
-  }, []);
-
-  const timers = React.useRef({});
-  const clearTimers = () => {
-    Object.values(timers.current).forEach(clearTimeout);
-    timers.current = {};
-  };
-  React.useEffect(() => clearTimers, []);
-
-  React.useEffect(() => {
-    clearTimers();
-    setEvidence({});
-    pending.current = new Set();
-  }, [mod?.id]);
-
-  React.useEffect(() => {
-    if (status?.configured === false) return;
-    for (const s of sessions) {
-      const id = s.sessionId;
-      if (!s.endedAt || pending.current.has(id)) continue;
-      const prev = evidence[id];
-      if (prev && (prev.matched || prev.configured === false || prev.tries >= 3)) continue;
-      pending.current.add(id);
-      const lookup = () =>
-        call("studio:evidence", { sessionId: id })
-          .catch((e) => ({ matched: false, traces: [], error: e.message }))
-          .then((r) => {
-            pending.current.delete(id);
-            delete timers.current[id];
-            setEvidence((m) => ({ ...m, [id]: { ...r, tries: (m[id]?.tries || 0) + 1 } }));
-          });
-      if (prev) timers.current[id] = setTimeout(lookup, RETRY_MS);
-      else lookup();
-    }
-  }, [sessions, evidence, status?.configured]);
-
-  const matched = Object.values(evidence).filter((e) => e.matched).length;
+  const traces = useTraces(sessions.map((s) => ({ sessionId: s.sessionId, live: !s.endedAt && Boolean(mod?.running) })));
+  const off = Object.values(traces).some((t) => t.state === "off");
+  const matched = Object.values(traces).filter((t) => t.trace).length;
   const { ref, onScroll } = useStickyScroll(sessions.length + matched);
 
   return (
@@ -197,64 +154,52 @@ function NeatlogsLane({ mod }) {
         <span className="lane-mark neatlogs" />
         <strong>Neatlogs</strong>
         {running && <span className="lane-live on">Tracing</span>}
-        <span className="lane-meta">
-          {status?.configured === false ? "Not configured" : `${matched}/${sessions.length} traced`}
-        </span>
+        <span className="lane-meta">{off ? "Not configured" : `${matched}/${sessions.length} traced`}</span>
       </header>
       <div className="lane-body" ref={ref} onScroll={onScroll}>
-        {!sessions.length && (
-          <p className="lane-empty">
-            {status?.configured === false
-              ? "Add NEATLOGS_API_KEY and NEATLOGS_PROJECT_ID to .env to trace agent sessions."
-              : "Each agent session is traced here as it runs."}
-          </p>
-        )}
+        {!sessions.length && <p className="lane-empty">Each agent session is traced here as it runs.</p>}
         {sessions.map((s) => {
-          const ev = evidence[s.sessionId];
-          const trace = ev?.traces?.[0];
-          const spans = trace?.spans || [];
+          const t = traces[s.sessionId];
+          const sum = t?.summary;
+          const spans = t?.trace?.spans || [];
           const live = !s.endedAt;
           return (
-            <article key={s.key} className={`ntrace ${live ? "live" : ev?.matched ? "matched" : ""}`}>
+            <article key={s.key} className={`ntrace ${live ? "live" : t?.trace ? "matched" : ""}`}>
               <div className="trace-row">
                 <span className={`role-dot ${s.role}`} />
                 <strong>{ROLE[s.role] || s.role}</strong>
                 <span className="lane-meta">{s.attemptN ? `attempt ${s.attemptN}` : "spec"}</span>
                 <span className="trace-state">
                   {live
-                    ? `Tracing · ${fmtDuration(now - s.startedAt)}`
-                    : status?.configured === false
-                      ? "Not configured"
-                      : !ev
-                        ? "Looking up trace…"
-                        : ev.matched
-                          ? `${spans.length} spans`
-                          : ev.tries >= 3
-                            ? "No trace found"
-                            : "Waiting for trace…"}
+                    ? `Tracing · ${sum ? `${sum.spans} spans · ` : ""}${fmtDuration(now - s.startedAt)}`
+                    : {
+                        off: "Not configured",
+                        looking: "Looking up trace…",
+                        finalizing: `${sum?.spans} spans · finalizing`,
+                        matched: `${sum?.spans} spans`,
+                        none: "No trace found",
+                        error: "Neatlogs unreachable",
+                      }[t?.state] || "Looking up trace…"}
                 </span>
               </div>
               <div className="trace-sub">
                 <code>{s.sessionId.slice(0, 18)}</code>
                 <span>{shortModel(s.model)}</span>
-                {trace?.durationMs != null && <span>{fmtDuration(trace.durationMs)}</span>}
+                {sum?.durationMs != null && <span>{fmtDuration(sum.durationMs)}</span>}
               </div>
               {live && <div className="trace-progress" />}
               {spans.length > 0 && (
-                <div className="span-strip" title={spans.map((sp) => sp.spanName || sp.name).join(" · ")}>
+                <div className="span-strip" title={spans.map((sp) => sp.spanName).join(" · ")}>
                   {spans.slice(0, 40).map((sp, i) => (
-                    <i key={i} className={sp.status === "error" || sp.status_code === "ERROR" ? "err" : ""} />
+                    <i key={i} className={String(sp.status).toUpperCase() === "ERROR" ? "err" : ""} />
                   ))}
                 </div>
               )}
-              {spans
-                .filter((sp) => sp.status === "error" || sp.status_code === "ERROR")
-                .slice(0, 2)
-                .map((sp, i) => (
-                  <p key={i} className="trace-error">
-                    {sp.spanName || sp.name}: {sp.failure || "error"}
-                  </p>
-                ))}
+              {sum?.errors.slice(0, 2).map((e, i) => (
+                <p key={i} className="trace-error">
+                  {e.name} failed
+                </p>
+              ))}
             </article>
           );
         })}
