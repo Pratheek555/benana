@@ -134,6 +134,15 @@ async function entireStatus() {
   return { installed: true, version: /Entire CLI\s+(\S+)/.exec(res.out)?.[1] || res.out.trim().split('\n')[0] };
 }
 
+// entire-graph: the agent guide in CLAUDE.md/AGENTS.md teaches builder and fixer agents to query
+// the code graph (search, neighbors, impact) before reading files. Safe to run more than once.
+async function graphGuide(dir) {
+  const claude = path.join(dir, "CLAUDE.md");
+  if (fs.existsSync(claude) && /graph-agent\.md|entire graph/.test(fs.readFileSync(claude, "utf8"))) return { ok: true, already: true };
+  const res = await exec("entire", ["graph", "init-agents", "--repo", dir], dir, { timeoutMs: 60000 });
+  return { ok: res.ok, error: res.ok ? null : (res.err || res.out).trim().slice(0, 300) };
+}
+
 async function history(dir) {
   return (await git(dir, 'log', '--format=%h %s%n%(trailers:key=Entire-Checkpoint)', '-20')).out.trim();
 }
@@ -168,4 +177,4 @@ async function build(dir, name) {
   return { ok, jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000), assets };
 }
 
-module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, commits, entireStatus, history, files, readFile, diff, build };
+module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, commits, entireStatus, graphGuide, history, files, readFile, diff, build };

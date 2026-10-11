@@ -619,6 +619,8 @@ function handlers(deps) {
     },
     'studio:checkpoint': ({ id, checkpoint }) => repo.checkpoint(repoOf(id), checkpoint),
     'studio:commits': ({ id }) => repo.commits(repoOf(id)),
+    // The mod's code graph from entire-graph (files, symbols, relations), for the graph window.
+    'studio:graph': ({ id }) => entire.graph(repoOf(id)),
     'studio:files': ({ id }) => repo.files(repoOf(id)),
     'studio:file': ({ id, path: rel }) => repo.readFile(repoOf(id), rel),
     'studio:diff': ({ id, sha }) => repo.diff(repoOf(id), sha),

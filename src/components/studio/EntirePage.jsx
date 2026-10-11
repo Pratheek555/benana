@@ -2,6 +2,7 @@ import React from "react";
 import { call } from "../../api.js";
 import { shortModel, shortSha } from "./shared.jsx";
 import "./entire.css";
+import GraphWindow from "./GraphWindow.jsx";
 
 const IDLE = Object.freeze({ state: "idle" });
 
@@ -277,6 +278,7 @@ export default function EntirePage({ mods, onOpenMod }) {
   const [selectedSha, setSelectedSha] = React.useState(null);
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState("all");
+  const [graphOpen, setGraphOpen] = React.useState(false);
   const railRef = React.useRef(null);
   const commitCount = mod ? mod.attempts.reduce((n, a) => n + (a.commit?.sha ? 1 : 0) + (a.playtestCommit?.sha ? 1 : 0), 0) : 0;
 
@@ -403,6 +405,7 @@ export default function EntirePage({ mods, onOpenMod }) {
             onRetry={() => selected.checkpoint && loadCheckpoint(mod, selected)} onClose={() => setSelectedSha(null)} onOpenMod={onOpenMod} onSelect={setSelectedSha} />
         </div>
       ) : <>
+        {graphOpen && mod && <GraphWindow mod={mod} onClose={() => setGraphOpen(false)} />}
         <section className="en-kpis" aria-label="Entire summary">
           <article><span>Repositories</span><strong>{repos.length.toLocaleString()}</strong><small>{repos.length ? `${enabled} with Entire enabled` : "One per mod"}</small></article>
           <article><span>Agent commits</span><strong>{allCommits.length.toLocaleString()}</strong><small>{allCommits.length - playtests} code · {playtests} playtest</small></article>
@@ -419,6 +422,7 @@ export default function EntirePage({ mods, onOpenMod }) {
               <div>
                 <span className="en-browser-count">{plural(commits.length, "commit")}</span>
                 <button className="en-icon-button" onClick={() => loadLog(mod)} disabled={log.state === "loading"} title="Refresh commits" aria-label="Refresh commits"><Icon name="retry" size={14} /></button>
+                <button className="en-button" onClick={() => setGraphOpen(true)}><Icon name="spark" size={14} />View graph</button>
                 <button className="en-button" onClick={() => call("open-path", mod.repoDir)}><Icon name="folder" size={14} />Repository</button>
               </div>
             </div>
