@@ -93,3 +93,31 @@ test("a mod without assets has no pack and passes", () => {
   const out = pack.build(repo([]), path.join(os.tmpdir(), "unused.zip"));
   assert.deepEqual([out.ok, out.zip, out.assets.length], [true, null, 0]);
 });
+
+test("setItemModel through a field, a constant or plugin-namespaced key still counts as using the art", () => {
+  const dir = repo([]);
+  draw(dir, GEM);
+  const java = path.join(dir, "src/main/java/dev/benana/mod/Mod.java");
+  const cases = [
+    'private NamespacedKey coreKey; void on() { coreKey = new NamespacedKey("benana", "storm_core"); meta.setItemModel(coreKey); }',
+    'static final String CORE = "benana:storm_core"; void a() { meta.setItemModel(NamespacedKey.fromString(CORE)); }',
+    'void a() { meta.setItemModel(key("storm_core")); }',
+  ];
+  for (const code of cases) {
+    fs.writeFileSync(java, code);
+    const out = pack.build(dir, path.join(dir, "target", "Mod-pack.zip"));
+    assert.deepEqual([out.ok, out.warnings], [true, []], code);
+  }
+  // The PDC key here is not an item model, so it must not be reported as missing art.
+  fs.writeFileSync(java, 'NamespacedKey tag = new NamespacedKey("benana", "golem"); NamespacedKey model = new NamespacedKey("benana", "storm_core"); meta.setItemModel(model);');
+  assert.equal(pack.build(dir, path.join(dir, "target", "Mod-pack.zip")).ok, true);
+});
+
+test("the live view reads each item's texture back out of the pack zip", () => {
+  const dir = repo(["storm_core"]);
+  draw(dir, GEM);
+  const out = pack.build(dir, path.join(dir, "target", "Mod-pack.zip"));
+  const textures = pack.packTextures(out.zip);
+  assert.deepEqual(Object.keys(textures), ["benana:storm_core"]);
+  assert.equal(textures["benana:storm_core"], out.assets[0].texture);
+});

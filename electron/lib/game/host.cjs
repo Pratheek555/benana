@@ -624,6 +624,31 @@ const tools = {
   },
 };
 
+// What a player's screen would show that the 3D viewer cannot: the hotbar (with each item's resource-pack
+// model), boss bars, health, effects, the action bar, and mod items lying nearby. Sent only when it changes.
+let lastHud = '';
+setInterval(() => {
+  if (!bot.entity || !bot.inventory) return;
+  const recent = chat.filter((c) => c.kind === 'actionbar' && Date.now() - c.at < 3000).pop();
+  const hud = {
+    selected: bot.quickBarSlot,
+    hotbar: Array.from({ length: 9 }, (_, i) => describeItem(bot.inventory.slots[36 + i])),
+    bossBars: Object.values(bot.bossBars || {}).map((b) => ({ title: plain(b.title), health: round(b.health), color: b.color })),
+    health: bot.health,
+    effects: effects(bot.entity),
+    actionbar: recent?.text || null,
+    ground: Object.values(bot.entities)
+      .filter((e) => e.name === 'item' && !dead.has(e.id) && e.position.distanceTo(bot.entity.position) <= 16)
+      .map((e) => { try { return { id: e.id, distance: round(e.position.distanceTo(bot.entity.position)), item: describeItem(e.getDroppedItem()) }; } catch { return null; } })
+      .filter((g) => g?.item && (g.item.itemModel || g.item.customName))
+      .slice(0, 4),
+  };
+  const key = JSON.stringify({ ...hud, ground: hud.ground.map((g) => [g.id, Math.round(g.distance)]) });
+  if (key === lastHud) return;
+  lastHud = key;
+  send({ event: 'hud', hud });
+}, 300);
+
 process.on('message', async ({ id, tool, args }) => {
   try {
     if (!tools[tool]) throw new Error(`Unknown bot tool ${tool}`);

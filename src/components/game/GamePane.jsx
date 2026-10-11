@@ -1,5 +1,6 @@
 import React from "react";
 import { call, on } from "../../api.js";
+import Hud from "./Hud.jsx";
 import "./game.css";
 
 const LABEL = {
@@ -17,6 +18,11 @@ function describe(a) {
   if (a.error) return a.error.slice(0, 80);
   const r = a.result;
   if (r?.after) return `${r.after.name} ↑ ${r.after.maxUpwardVelocity} b/t, +${r.after.maxHeightGain} blocks`;
+  if (r?.self) return `bot +${r.self.maxHeightGain} blocks, ${r.self.launches} launch${r.self.launches === 1 ? "" : "es"}`;
+  if (a.tool === "track_self" && r) return `bot +${r.maxHeightGain} blocks, ${r.launches} launch${r.launches === 1 ? "" : "es"}, ${r.health?.min} hp min`;
+  if (a.tool === "boss_bars" && Array.isArray(r)) return r.map((b) => `${b.title} ${Math.round(b.health * 100)}% ${b.color}`).join(" · ") || "no boss bar";
+  if (a.tool === "server_log" && Array.isArray(r?.lines ?? r)) return `${(r.lines ?? r).length} log lines`;
+  if (a.tool === "read_chat" && Array.isArray(r)) return r.slice(-1).map((c) => c.text).join("") || "no chat";
   if (a.tool === "track_entity" && r) return `${r.name} ↑ ${r.maxUpwardVelocity} b/t, +${r.maxHeightGain} blocks`;
   if (a.tool === "nearby_entities" && Array.isArray(r)) return r.slice(0, 3).map((e) => `${e.name}#${e.id}`).join(" ") || "nothing nearby";
   if (a.tool === "game_setup") return (a.args?.commands || []).join(" · ").slice(0, 80);
@@ -34,16 +40,19 @@ export default function GamePane({ showLog = true, mod = null, building = false 
   const [lines, setLines] = React.useState([]);
   const [actions, setActions] = React.useState([]);
   const [demo, setDemo] = React.useState(false);
+  const [hud, setHud] = React.useState(null);
   const [modDemo, setModDemo] = React.useState({ modId: null, running: false, summary: "", error: null });
   const [dismissed, setDismissed] = React.useState(false);
   const synced = React.useRef(null);
 
   React.useEffect(() => {
     call("game:status").then(setStatus).catch((e) => setError(e.message));
+    call("game:hud").then(setHud).catch(() => {});
     call("studio:demo-state").then((s) => setModDemo((prev) => ({ ...prev, ...s }))).catch(() => {});
     const offs = [
       on("game:status", setStatus),
       on("game:log", (l) => setLines((prev) => [...prev.slice(-199), l])),
+      on("game:hud", setHud),
       on("game:action", (a) => setActions((prev) => [...prev.slice(-29), a])),
       on("studio:demo", (d) => {
         setModDemo({ summary: "", error: null, ...d });
@@ -66,6 +75,7 @@ export default function GamePane({ showLog = true, mod = null, building = false 
   const demoRunning = modDemo.running && modDemo.modId === mod?.id;
   const demoNote = !dismissed && !demoRunning && modDemo.modId === mod?.id ? modDemo : null;
   const locked = busy || building || reloading;
+  const showHud = Boolean(hud && status?.viewerUrl && !reloading && status?.bot === "online");
 
   const attempt = async (fn) => {
     setBusy(true);
@@ -188,9 +198,12 @@ export default function GamePane({ showLog = true, mod = null, building = false 
           {busy ? "Working…" : running ? "Stop" : "Start game"}
         </button>
       </header>
-      <div className="game-view">
+      <div className={`game-view ${showHud ? "hud-on" : ""} ${demoRunning || demoNote ? "demo" : ""}`}>
         {status?.viewerUrl && !reloading ? (
-          <iframe title="Bot view" src={status.viewerUrl} />
+          <>
+            <iframe title="Bot view" src={status.viewerUrl} />
+            {showHud && <Hud hud={hud} viewerUrl={status.viewerUrl} />}
+          </>
         ) : (
           <div className="game-empty">
             {resetting

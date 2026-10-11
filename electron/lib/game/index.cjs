@@ -13,6 +13,7 @@ const { spawnSync } = require('node:child_process');
 const { appRoot } = require('../env.cjs');
 const { resolveExecutable, spawnExecutable, terminateProcessTree } = require('../processes.cjs');
 const { Server, VERSION, PORT, dir: serverDir } = require('./server.cjs');
+const { packTextures } = require('../studio/pack.cjs');
 
 const BOT = 'BenanaBot';
 // The bot is kept near this spot so it stays inside the viewer's fixed camera orbit.
@@ -60,6 +61,23 @@ function packOffer() {
   const sha1 = crypto.createHash('sha1').update(fs.readFileSync(PACK_FILE)).digest('hex');
   return { url: `${state.controlUrl}/pack.zip?v=${sha1.slice(0, 10)}`, sha1 };
 }
+// The pack's item textures, so the live view's HUD can draw the mod's items as a real client would.
+let textures = { key: null, map: {} };
+function packTexturesNow() {
+  try {
+    const st = fs.statSync(PACK_FILE);
+    const key = `${st.size}:${st.mtimeMs}`;
+    if (textures.key !== key) textures = { key, map: packTextures(PACK_FILE) };
+  } catch { textures = { key: null, map: {} }; }
+  return textures.map;
+}
+let hud = null;
+function withTextures(h) {
+  const map = packTexturesNow();
+  const art = (i) => (i?.itemModel && map[i.itemModel] ? { ...i, texture: map[i.itemModel] } : i);
+  return { ...h, hotbar: h.hotbar.map(art), ground: h.ground.map((g) => ({ ...g, item: art(g.item) })) };
+}
+
 let host = null;
 let control = null;
 const pending = new Map();
@@ -100,10 +118,11 @@ function startHost() {
         if (msg.bot === 'online') { clearTimeout(timer); resolve(); }
       }
       if (msg.event === 'chat') emitter('game:log', { line: `[chat] ${msg.text}`, level: 'info', at: Date.now() });
+      if (msg.event === 'hud') { hud = msg.hud; emitter('game:hud', withTextures(hud)); }
     });
     child.on('exit', (code) => {
       clearTimeout(timer);
-      if (host === child) { host = null; setState({ bot: 'offline', viewerUrl: null }); }
+      if (host === child) { host = null; hud = null; emitter('game:hud', null); setState({ bot: 'offline', viewerUrl: null }); }
       for (const p of pending.values()) p.reject(new Error('The bot disconnected.'));
       pending.clear();
       reject(new Error(`The bot process exited (code ${code}).`));
@@ -473,6 +492,7 @@ function handlers(emit) {
   return {
     'game:demo': ({ on }) => demo(on),
     'game:status': () => status(),
+    'game:hud': () => (hud ? withTextures(hud) : null),
     'game:logs': ({ limit } = {}) => server.logSince(0).slice(-Math.min(Number(limit) || 300, 1000)),
     'game:start': () => start(emit),
     'game:stop': () => stop(),

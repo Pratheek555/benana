@@ -86,14 +86,65 @@ function modelRefs(node, out = []) {
   return out;
 }
 
-// Item models the plugin code points at with setItemModel(...).
+// The argument text of every `name(...)` call, with nested parentheses balanced.
+function callArgs(text, name) {
+  const out = [];
+  const re = new RegExp(`\\b${name}\\s*\\(`, 'g');
+  for (const m of text.matchAll(re)) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    const from = i;
+    for (; i < text.length && depth; i++) depth += text[i] === '(' ? 1 : text[i] === ')' ? -1 : 0;
+    out.push(text.slice(from, i - 1).trim());
+  }
+  return out;
+}
+
+// A NamespacedKey expression as "ns:path". Follows fields and constants the key was stored in
+// (`coreKey = new NamespacedKey("benana", "core")`, `CORE = "benana:core"`); null when it cannot tell.
+function keyOf(expr, text, pluginNs, depth = 0) {
+  if (depth > 3) return null;
+  const e = expr.trim();
+  let m;
+  if ((m = e.match(/^new\s+NamespacedKey\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)$/))) return `${m[1]}:${m[2]}`;
+  // new NamespacedKey(plugin, "x") uses the plugin's lowercased name as the namespace.
+  if ((m = e.match(/^new\s+NamespacedKey\(\s*[\w.()]+\s*,\s*"([^"]+)"\s*\)$/))) return pluginNs ? `${pluginNs}:${m[1]}` : null;
+  if ((m = e.match(/^NamespacedKey\.minecraft\(\s*"([^"]+)"\s*\)$/))) return `minecraft:${m[1]}`;
+  if ((m = e.match(/^(?:java\.util\.)?Objects\.requireNonNull\(\s*(.+)\)$/))) return keyOf(m[1], text, pluginNs, depth + 1);
+  if ((m = e.match(/^NamespacedKey\.fromString\(\s*(.+?)\s*\)$/))) {
+    const str = stringOf(m[1], text, depth);
+    return str == null ? null : str.includes(':') ? str : `minecraft:${str}`;
+  }
+  if ((m = e.match(/^(?:this\.|\w+\.)?(\w+)$/))) {
+    const assigned = text.match(new RegExp(`\\b${m[1]}\\s*=\\s*([^;]+);`));
+    return assigned ? keyOf(assigned[1], text, pluginNs, depth + 1) : null;
+  }
+  return null;
+}
+
+function stringOf(expr, text, depth) {
+  const e = expr.trim();
+  const lit = e.match(/^"([^"]+)"$/);
+  if (lit) return lit[1];
+  const id = e.match(/^(?:this\.|\w+\.)?(\w+)$/);
+  const assigned = id && text.match(new RegExp(`\\b${id[1]}\\s*=\\s*"([^"]+)"\\s*;`));
+  return assigned && depth < 3 ? assigned[1] : null;
+}
+
+// Item models the plugin code points at with setItemModel(...). `id` is null when the key is built in a way
+// this cannot follow (a helper method, string concatenation); `names` then holds the code's string literals.
 function codeModels(repoDir) {
   const src = path.join(repoDir, 'src', 'main', 'java');
+  const yml = path.join(repoDir, 'src', 'main', 'resources', 'plugin.yml');
+  const pluginName = fs.existsSync(yml) ? fs.readFileSync(yml, 'utf8').match(/^name:\s*["']?([\w-]+)/m)?.[1] : null;
+  const pluginNs = pluginName ? pluginName.toLowerCase() : null;
   const found = [];
   for (const rel of walk(src).filter((f) => f.endsWith('.java'))) {
     const text = fs.readFileSync(path.join(src, rel), 'utf8');
-    const re = /setItemModel\(\s*(?:new\s+NamespacedKey\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)|NamespacedKey\.(?:fromString|minecraft)\(\s*"([^"]+)"\s*\))/g;
-    for (const m of text.matchAll(re)) found.push({ id: m[1] ? `${m[1]}:${m[2]}` : m[3].includes(':') ? m[3] : `minecraft:${m[3]}`, file: rel });
+    for (const arg of callArgs(text, 'setItemModel')) {
+      const id = keyOf(arg, text, pluginNs);
+      found.push(id ? { id, file: rel } : { id: null, file: rel, expr: arg, names: [...text.matchAll(/"([^"\n]+)"/g)].map((x) => x[1]) });
+    }
   }
   return found;
 }
@@ -115,7 +166,7 @@ function build(repoDir, outFile) {
   const used = codeModels(repoDir);
   const assetFiles = files.filter((f) => f.startsWith('assets/'));
   if (!assetFiles.length) {
-    for (const u of used) if (!u.id.startsWith('minecraft:')) errors.push(`${u.file} calls setItemModel("${u.id}") but pack/ has no assets. Draw it with tools/texture.cjs.`);
+    for (const u of used) if (u.id && !u.id.startsWith('minecraft:')) errors.push(`${u.file} calls setItemModel("${u.id}") but pack/ has no assets. Draw it with tools/texture.cjs.`);
     return { ok: !errors.length, errors, warnings, assets, zip: null, files: 0 };
   }
 
@@ -157,10 +208,12 @@ function build(repoDir, outFile) {
     assets.push({ id: `${ns}:${name}`, size, texture });
   }
   for (const u of used) {
-    if (u.id.startsWith('minecraft:')) continue;
+    if (!u.id || u.id.startsWith('minecraft:')) continue;
     if (!defined.has(u.id)) errors.push(`${u.file} calls setItemModel("${u.id}") but pack/assets/${split(u.id)[0]}/items/${split(u.id)[1]}.json does not exist.`);
   }
-  for (const a of assets) if (!used.some((u) => u.id === a.id)) warnings.push(`${a.id} is drawn but no setItemModel(...) in the code uses it.`);
+  // A key the code builds dynamically counts when the asset's id or name appears among its strings.
+  const usedBy = (a) => used.some((u) => u.id === a.id || (!u.id && u.names.some((n) => n === a.id || n === split(a.id)[1])));
+  for (const a of assets) if (!usedBy(a)) warnings.push(`${a.id} is drawn but no setItemModel(...) in the code uses it.`);
 
   let zipFile = null;
   if (!errors.length) {
@@ -171,4 +224,43 @@ function build(repoDir, outFile) {
   return { ok: !errors.length, errors, warnings, assets, zip: zipFile, files: files.length };
 }
 
-module.exports = { build, zip, pngSize, codeModels };
+// Reads back a zip from `zip()` (stored or deflated entries): name -> Buffer.
+function unzip(buf) {
+  const files = new Map();
+  const end = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (end < 0) return files;
+  let at = buf.readUInt32LE(end + 16);
+  for (let n = buf.readUInt16LE(end + 10); n > 0 && buf.readUInt32LE(at) === 0x02014b50; n--) {
+    const method = buf.readUInt16LE(at + 10);
+    const size = buf.readUInt32LE(at + 20);
+    const nameLen = buf.readUInt16LE(at + 28);
+    const local = buf.readUInt32LE(at + 42);
+    const name = buf.toString('utf8', at + 46, at + 46 + nameLen);
+    const dataAt = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    const raw = buf.subarray(dataAt, dataAt + size);
+    try { files.set(name, method === 8 ? zlib.inflateRawSync(raw) : raw); } catch {}
+    at += 46 + nameLen + buf.readUInt16LE(at + 30) + buf.readUInt16LE(at + 32);
+  }
+  return files;
+}
+
+/** Item model id -> PNG data URL for each item a pack zip defines, so the app can draw the mod's items. */
+function packTextures(zipFile) {
+  const files = unzip(fs.readFileSync(zipFile));
+  const json = (rel) => { try { return JSON.parse(files.get(rel).toString('utf8')); } catch { return null; } };
+  const out = {};
+  for (const rel of files.keys()) {
+    const m = rel.match(/^assets\/([^/]+)\/items\/(.+)\.json$/);
+    if (!m) continue;
+    for (const ref of modelRefs(json(rel)?.model || {})) {
+      const [mns, mpath] = split(ref);
+      const tex = Object.values(json(`assets/${mns}/models/${mpath}.json`)?.textures || {}).find((t) => typeof t === 'string' && !t.startsWith('#'));
+      const [tns, tpath] = tex ? split(tex) : [];
+      const png = tex && files.get(`assets/${tns}/textures/${tpath}.png`);
+      if (png) { out[`${m[1]}:${m[2]}`] = `data:image/png;base64,${png.toString('base64')}`; break; }
+    }
+  }
+  return out;
+}
+
+module.exports = { build, zip, unzip, packTextures, pngSize, codeModels };
