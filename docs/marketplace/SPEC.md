@@ -25,6 +25,11 @@ Launch is free. Listings are community-curated. There is no verification gate at
 | 11 | Storage | Supabase Storage for jars, 10 MB limit per jar |
 | 12 | Listing cap | 10 listings per account |
 | 13 | Traces | Linked to Neatlogs, never copied |
+| 14 | Changelog | Every version shows its changelog from `entire graph diff` against the previous version |
+| 15 | Code map | Each version stores an `entire graph index --report` code map, labelled "code map", not "verified" |
+| 16 | Graph at launch | Changelog and code map only. Search and impact views wait until there are listings to use them |
+| 17 | Graph in the Studio | Fixer receives graph search results instead of raw history (product change, separate branch) |
+| 18 | Intent matching | Investigate matching dead ends by symbol rather than file (product change, separate branch) |
 
 ## 3. Terms
 
@@ -99,9 +104,16 @@ We use the CLI and only read metadata by default.
 1. Session pushing can be turned off after publish without losing local history. (The flag exists; toggling after publish is untested.)
 2. Publishing can push only the checkpoints for public versions. (Untested. Depends on how checkpoints are stored as refs.)
 3. A moderator can read one checkpoint remote without access to the whole repo. (`repo grant` exists; untested.)
-4. `graph index --report` produces byte-identical reports on two machines for the same commit.
+4. `graph index --report` produces byte-identical reports on two machines for the same commit. (Same machine, two runs: identical. Two machines: untested.)
 5. Redaction of secrets in transcripts is thorough enough to publish opt-in transcripts. (Not verified.)
 
-## 11. Not in launch
+## 11. Graph decisions
+
+- The changelog is required for every version. It is computed from `entire graph diff` against the previous version's commit.
+- The code map is stored with each version and labelled "code map". It is not a verification badge.
+- Search and impact views are not part of launch.
+- Fixer context and symbol-level intent matching are Studio and intent-graph changes. They are tracked here but built on separate branches.
+
+## 12. Not in launch
 
 Payments, verification sandbox, paid listings, team organizations, and mobile.
