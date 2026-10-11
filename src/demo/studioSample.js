@@ -156,16 +156,27 @@ const MODS = [
     ],
     feed: [
       { at: at(5), role: "benana", kind: "phase", phase: "spec", text: "Writing the spec and an in-game test plan" },
+      { at: at(4.9), role: "spec", kind: "text", text: "I'll treat the trail as client-visible particles spawned on **PlayerMoveEvent** while the player is sneaking and holding a `FEATHER`. The test plan checks the trail appears, fades, and stays off while walking." },
       { at: at(4.5), role: "spec", kind: "plan", text: "3 checks: Glowing trail while sneaking · Trail fades after 2 seconds · No trail while walking" },
       { at: at(4), role: "benana", kind: "phase", phase: "repo", text: "Creating the mod repository with Entire and Neatlogs hooks" },
       { at: at(3), attempt: 1, role: "benana", kind: "phase", phase: "build", text: "Attempt 1: writing TrailBlazer" },
-      { at: at(2.5), attempt: 1, role: "builder", kind: "tool", name: "Edit", summary: "src/main/java/dev/benana/mod/TrailBlazer.java" },
-      { at: at(2), attempt: 1, role: "builder", kind: "text", text: "Particle trail spawns on move events while the player is sneaking." },
+      { at: at(2.9), attempt: 1, role: "builder", kind: "tool", name: "Read", summary: "{\"file_path\":\"playtest/test-plan.json\"}" },
+      { at: at(2.8), attempt: 1, role: "builder", kind: "tool", name: "Write", summary: "{\"file_path\":\"src/main/resources/plugin.yml\"}" },
+      { at: at(2.5), attempt: 1, role: "builder", kind: "tool", name: "Edit", summary: "{\"file_path\":\"src/main/java/dev/benana/mod/TrailBlazer.java\"}" },
+      { at: at(2.3), attempt: 1, role: "builder", kind: "tool", name: "Bash", summary: "{\"command\":\"mvn -q package\"}" },
+      { at: at(2), attempt: 1, role: "builder", kind: "text", text: "Particle trail spawns on move events while the player is sneaking.\n\n- Uses `Particle.END_ROD` so the trail glows\n- A per-player `BukkitTask` clears it after **40 ticks**" },
+      { at: at(1.9), attempt: 1, role: "benana", kind: "phase", phase: "compile", text: "Compiling the plugin with Maven" },
+      { at: at(1.85), attempt: 1, role: "benana", kind: "phase", phase: "deploy", text: "Deploying TrailBlazer to the Paper server" },
       { at: at(1.8), attempt: 1, role: "benana", kind: "note", text: "Committed 4a7f1d9, Entire checkpoint b6e3d0a8c4f1" },
       { at: at(1.5), attempt: 1, role: "benana", kind: "phase", phase: "playtest", text: "Attempt 1: the AI player is testing TrailBlazer in-game" },
-      { at: at(1.2), attempt: 1, role: "playtester", kind: "tool", name: "move_to", summary: "toward the spawn point" },
+      { at: at(1.4), attempt: 1, role: "playtester", kind: "tool", name: "game_setup", summary: "{\"commands\":[\"give Benana feather\",\"tp Benana 0 64 0\"]}" },
+      { at: at(1.3), attempt: 1, role: "playtester", kind: "tool", name: "equip", summary: "{\"item\":\"feather\"}" },
+      { at: at(1.2), attempt: 1, role: "playtester", kind: "tool", name: "move_to", summary: "{\"x\":6,\"z\":0,\"sneak\":true}" },
+      { at: at(1.1), attempt: 1, role: "playtester", kind: "tool", name: "track_entity", summary: "{\"entityId\":\"self\",\"ticks\":40}" },
       { at: at(1), attempt: 1, role: "playtester", kind: "result", name: "track_entity", text: "14 trail particles visible while sneaking" },
+      { at: at(0.9), attempt: 1, role: "playtester", kind: "tool", name: "report_check", summary: "{\"id\":\"trail\",\"status\":\"pass\",\"expected\":\"Particles follow the player\",\"observed\":\"Glowing trail seen while sneaking\"}" },
       { at: at(0.5), attempt: 1, role: "playtester", kind: "text", text: "Trail appears while sneaking. Checking the fade timing next." },
+      { at: at(0.3), attempt: 1, role: "playtester", kind: "tool", name: "wait_ticks", summary: "{\"ticks\":40}" },
     ],
   }),
   mod({
@@ -511,7 +522,60 @@ export const studioSample = {
     DIFFS[sha] ||
     `Sample commit ${sha}\n\ndiff --git a/playtest/test-plan.json b/playtest/test-plan.json\n@@ checks\n+  "checks": []\n`,
   "game:status": GAME,
+  "game:logs": () => SERVER_BACKLOG,
   "game:start": GAME,
   "game:stop": GAME,
   "game:demo": { demo: false },
 };
+
+const clock = (t) => new Date(t).toTimeString().slice(0, 8);
+const paper = (t, level, text) => ({ line: `[${clock(t)} ${level}]: ${text}`, level: level === "WARN" ? "warn" : level === "ERROR" ? "error" : "info", at: t });
+
+const SERVER_BACKLOG = [
+  [300, "INFO", "Starting minecraft server version 1.21.4"],
+  [296, "INFO", "Preparing level \"studio-flat64\""],
+  [290, "INFO", "Done (6.214s)! For help, type \"help\""],
+  [120, "INFO", "Benana joined the game"],
+  [118, "INFO", "[TrailBlazer] Enabling TrailBlazer v1.0.0"],
+  [117, "INFO", "[TrailBlazer] Listening for sneak movement"],
+  [96, "INFO", "Benana issued server command: /give Benana feather"],
+  [90, "INFO", "Benana issued server command: /tp Benana 0 64 0"],
+  [60, "WARN", "Can't keep up! Is the server overloaded? Running 2104ms or 42 ticks behind"],
+  [44, "INFO", "[TrailBlazer] Trail started for Benana"],
+  [20, "INFO", "[TrailBlazer] Trail cleared for Benana after 40 ticks"],
+].map(([sec, level, text]) => paper(NOW - sec * 1000, level, text));
+
+const LIVE_LINES = [
+  ["INFO", "[TrailBlazer] Trail started for Benana"],
+  ["INFO", "Benana moved too quickly! 0.42,0.0,0.12"],
+  ["INFO", "[TrailBlazer] Spawned 14 END_ROD particles"],
+  ["INFO", "[Benana] report_check trail: pass"],
+  ["INFO", "[TrailBlazer] Trail cleared for Benana after 40 ticks"],
+  ["WARN", "Benana was kicked for floating too long! (ignored in test mode)"],
+  ["INFO", "Benana issued server command: /tp Benana 0 64 0"],
+];
+
+const LIVE_ACTIONS = [
+  { tool: "move_to", args: { x: 6, z: 0, sneak: true }, result: { reached: true } },
+  { tool: "track_entity", args: { entityId: "self", ticks: 40 }, result: { name: "Benana", maxUpwardVelocity: 0, maxHeightGain: 0 } },
+  { tool: "wait_ticks", args: { ticks: 40 }, result: {} },
+  { tool: "nearby_entities", args: {}, result: [{ name: "end_rod", id: 412 }, { name: "end_rod", id: 413 }] },
+];
+
+let demoStarted = false;
+export function startStudioDemo(emit) {
+  if (demoStarted) return;
+  demoStarted = true;
+  let i = 0;
+  setInterval(() => {
+    const [level, text] = LIVE_LINES[i % LIVE_LINES.length];
+    emit("game:log", paper(Date.now(), level, text));
+    if (i % 2 === 0) {
+      const a = LIVE_ACTIONS[(i / 2) % LIVE_ACTIONS.length];
+      const started = Date.now();
+      emit("game:action", { ...a, at: started });
+      setTimeout(() => emit("game:action", { ...a, at: started, done: Date.now() }), 600);
+    }
+    i += 1;
+  }, 1800);
+}

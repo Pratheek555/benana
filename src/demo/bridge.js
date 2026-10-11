@@ -1,4 +1,4 @@
-import { studioSample } from "./studioSample.js";
+import { startStudioDemo, studioSample } from "./studioSample.js";
 
 const now = Date.now();
 const attempt1 = {
@@ -602,3 +602,4 @@ export const demoBridge = {
   },
   openExternal() {},
 };
+startStudioDemo(emit);

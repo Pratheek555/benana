@@ -1,17 +1,18 @@
 import React from "react";
 import { call, on } from "../../api.js";
-import GamePane from "../game/GamePane.jsx";
+import TestPanel, { useNow, useStickyScroll } from "./TestPanel.jsx";
 import {
-  AttemptTimeline,
-  Empty,
+  CheckIcon,
   Icon,
   PHASES,
-  PartnerStatus,
-  PlanChecks,
   ROLE,
-  SectionHead,
   Status,
+  fmtDuration,
+  fmtMoney,
+  latestVerdict,
+  modSpend,
   phaseIndex,
+  shortModel,
 } from "./shared.jsx";
 
 const EXAMPLES = [
@@ -20,28 +21,122 @@ const EXAMPLES = [
   "Right-clicking with a blaze rod shoots a fireball where you look.",
 ];
 
-const FLOW = [
-  ["Spec", "Opus turns your idea into a plugin spec and a test plan."],
-  ["Build", "Opus writes the Paper plugin, compiles it, and deploys it."],
-  ["Playtest", "Sonnet joins the server as a player and runs every check."],
-  ["Fix", "If a check fails, Opus reads the evidence and tries again."],
-];
+const STEP_DETAIL = {
+  spec: "Turn the idea into a plugin spec and an in-game test plan",
+  repo: "Create the mod repository with Entire and Neatlogs hooks",
+  build: "Write the Paper plugin",
+  compile: "Package it with Maven",
+  deploy: "Load it on the Paper server",
+  playtest: "An AI player runs every check in-game",
+  fix: "Patch failures from the evidence, up to 3 attempts",
+  done: "Report the result",
+};
 
 export default function BuildPage({ mod, running, lessons, onCreated, onWatch, onNew, onOpenCode }) {
-  return mod ? (
-    <RunView mod={mod} onNew={onNew} onOpenCode={onOpenCode} />
-  ) : (
-    <Composer running={running} lessons={lessons} onCreated={onCreated} onWatch={onWatch} />
+  const [prompt, setPrompt] = React.useState("");
+  return (
+    <div className="build-chat">
+      <section className="chat">
+        <ChatHead mod={mod} onNew={onNew} onOpenCode={onOpenCode} />
+        {mod ? <Thread mod={mod} onOpenCode={onOpenCode} /> : <Welcome lessons={lessons} onPick={setPrompt} />}
+        <Composer
+          mod={mod}
+          running={running}
+          prompt={prompt}
+          setPrompt={setPrompt}
+          onCreated={onCreated}
+          onWatch={onWatch}
+        />
+      </section>
+      <TestPanel mod={mod} />
+    </div>
   );
 }
 
-function Composer({ running, lessons, onCreated, onWatch }) {
-  const [prompt, setPrompt] = React.useState("");
+function ChatHead({ mod, onNew, onOpenCode }) {
+  return (
+    <header className="chat-head">
+      <div className="chat-title">
+        {mod ? (
+          <>
+            <strong>{mod.name}</strong>
+            <Status status={mod.running ? "running" : mod.status} />
+            {mod.seed && <span className="tag">Seeded bug</span>}
+          </>
+        ) : (
+          <strong>New mod</strong>
+        )}
+      </div>
+      {mod && (
+        <div className="page-actions">
+          {mod.running && (
+            <button className="btn danger sm" onClick={() => call("studio:stop", { id: mod.id })}>
+              <Icon name="stop" size={13} />
+              Stop
+            </button>
+          )}
+          {mod.repoDir && (
+            <button className="btn sm" onClick={() => onOpenCode(mod.id)}>
+              <Icon name="code" size={13} />
+              Code
+            </button>
+          )}
+          {!mod.running && (
+            <button className="btn sm" onClick={onNew}>
+              <Icon name="plus" size={13} />
+              New
+            </button>
+          )}
+        </div>
+      )}
+    </header>
+  );
+}
+
+function Welcome({ lessons, onPick }) {
+  return (
+    <div className="thread welcome-wrap">
+      <div className="intro">
+        <span className="welcome-mark">B</span>
+        <h1>What should your mod do?</h1>
+        <p>Describe a gameplay idea. Benana writes the Paper plugin, an AI player tests it on a live server, and a fixer patches anything that breaks.</p>
+        <div className="ideas">
+          {EXAMPLES.map((ex) => (
+            <button key={ex} onClick={() => onPick(ex)}>
+              <Icon name="spark" size={14} />
+              <span>{ex}</span>
+            </button>
+          ))}
+        </div>
+        {lessons.length > 0 && (
+          <div className="welcome-lessons">
+            <span className="side-label">
+              The fixer has learned {lessons.length} lesson{lessons.length === 1 ? "" : "s"}
+            </span>
+            <p>{lessons.at(-1).lesson}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Composer({ mod, running, prompt, setPrompt, onCreated, onWatch }) {
   const [seed, setSeed] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  const ref = React.useRef(null);
+  const canStart = !busy && !running && (seed || prompt.trim().length >= 8);
+
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+  }, [prompt]);
 
   const start = async () => {
+    if (!canStart) return;
     setBusy(true);
     setError("");
     try {
@@ -55,244 +150,548 @@ function Composer({ running, lessons, onCreated, onWatch }) {
     }
   };
 
-  const canStart = !busy && !running && (seed || prompt.trim().length >= 8);
-
   return (
-    <div className="view compose-page">
-      <div className="compose">
-        <h1>What should your mod do?</h1>
-        <p className="lede">Describe a gameplay idea. Benana writes the plugin, then an AI player tests it in a live server and fixes what breaks.</p>
-
-        {running && (
-          <button className="running-banner" onClick={() => onWatch(running.id)}>
-            <Status status="running">Building</Status>
-            <span>
-              <strong>{running.name}</strong> is in progress. One mod builds at a time.
-            </span>
-            <span className="banner-cta">
-              Watch <Icon name="arrow" size={14} />
-            </span>
+    <div className="composer-wrap">
+      {mod?.running && <Dock mod={mod} />}
+      {running && running.id !== mod?.id && (
+        <button className="dock dock-link" onClick={() => onWatch(running.id)}>
+          <span className="spinner" />
+          <span>
+            <strong>{running.name}</strong> is building
+          </span>
+          <span className="dock-cta">
+            Watch <Icon name="arrow" size={13} />
+          </span>
+        </button>
+      )}
+      {error && <div className="alert">{error}</div>}
+      <div className={`chat-input ${seed ? "seeded" : ""} ${running ? "locked" : ""}`}>
+        <textarea
+          ref={ref}
+          rows={1}
+          value={prompt}
+          disabled={seed}
+          aria-label="Describe a mod"
+          placeholder={
+            running ? "One mod builds at a time. Describe the next one…" : mod ? "Describe another mod…" : "A golden sword that launches mobs into the sky…"
+          }
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              start();
+            }
+          }}
+        />
+        <div className="chat-input-bar">
+          <label className="toggle" title="Attempt 1 starts from a labeled buggy fixture. The playtester and fixer still run for real.">
+            <input type="checkbox" checked={seed} onChange={(e) => setSeed(e.target.checked)} />
+            <span className="switch" />
+            Seeded bug
+          </label>
+          <span className="input-hint">{running ? "Waiting for the current build" : "Enter to build · Shift+Enter for a new line"}</span>
+          <button className="send" disabled={!canStart} onClick={start} aria-label="Build and playtest" title="Build and playtest">
+            {busy ? <span className="spinner dark" /> : <Icon name="send" size={16} />}
           </button>
-        )}
-
-        <div className={`prompt-box ${seed ? "seeded" : ""}`}>
-          <textarea
-            aria-label="Describe a mod"
-            value={prompt}
-            disabled={seed}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canStart) start();
-            }}
-            placeholder="A golden sword that launches mobs into the sky…"
-            rows={4}
-          />
-          <div className="composer-bar">
-            <label className="toggle" title="Attempt 1 starts from a labeled buggy fixture. The playtester and fixer still run for real.">
-              <input type="checkbox" checked={seed} onChange={(e) => setSeed(e.target.checked)} />
-              <span className="switch" />
-              Start from the seeded bug
-            </label>
-            <button className="btn solid" disabled={!canStart} onClick={start}>
-              {busy ? "Starting…" : "Build and playtest"}
-              <kbd>Ctrl ↵</kbd>
-            </button>
-          </div>
         </div>
-        {error && <div className="alert">{error}</div>}
-
-        <div className="examples">
-          <span className="side-label">Try one</span>
-          {EXAMPLES.map((ex) => (
-            <button key={ex} onClick={() => setPrompt(ex)} disabled={seed}>
-              <span>{ex}</span>
-              <Icon name="arrow" size={14} />
-            </button>
-          ))}
-        </div>
-
-        <ol className="flow">
-          {FLOW.map(([title, text], i) => (
-            <li key={title}>
-              <span className="flow-n">{i + 1}</span>
-              <strong>{title}</strong>
-              <p>{text}</p>
-            </li>
-          ))}
-        </ol>
-
-        {lessons.length > 0 && (
-          <section className="lessons">
-            <SectionHead title="What the fixer has learned" count={lessons.length} />
-            <p className="meta">Every new builder reads these before it writes code.</p>
-            <ul>
-              {lessons
-                .slice(-3)
-                .reverse()
-                .map((l) => (
-                  <li key={l.at}>
-                    <p>{l.lesson}</p>
-                    <small>{l.mod}</small>
-                  </li>
-                ))}
-            </ul>
-          </section>
-        )}
       </div>
     </div>
   );
 }
 
-function RunView({ mod, onNew, onOpenCode }) {
+function Dock({ mod }) {
+  const now = useNow(true);
+  const i = phaseIndex(mod);
+  const label = PHASES[i]?.[1] || "Working";
+  const verdict = latestVerdict(mod);
+  const total = mod.testPlan?.checks.length || 0;
+  const done = (verdict?.checks || []).length;
+  const attempt = mod.attempts.at(-1);
+  const since = attempt?.startedAt || mod.updatedAt || mod.createdAt;
+  const who =
+    mod.phase === "playtest" ? "The AI player is testing in-game" : mod.phase === "fix" ? "The fixer is patching the plugin" : `${label} in progress`;
+  return (
+    <div className="dock">
+      <span className="spinner" />
+      <span className="dock-text">
+        <strong>{who}</strong>
+        <small>
+          Step {i + 1} of {PHASES.length} · {label}
+          {attempt ? ` · attempt ${attempt.n}` : ""}
+        </small>
+      </span>
+      {total > 0 && (
+        <span className="dock-checks">
+          {done}/{total} checks
+        </span>
+      )}
+      <span className="dock-time">{fmtDuration(now - since)}</span>
+    </div>
+  );
+}
+
+/* ---------- Thread ---------- */
+
+function useFeed(mod) {
   const [feed, setFeed] = React.useState([]);
   const idRef = React.useRef(mod.id);
   idRef.current = mod.id;
-
-  React.useEffect(() => {
-    return on("studio:feed", ({ modId, item }) => {
-      if (modId === idRef.current) setFeed((prev) => [...prev.slice(-599), item]);
-    });
-  }, []);
-
+  React.useEffect(
+    () =>
+      on("studio:feed", ({ modId, item }) => {
+        if (modId === idRef.current) setFeed((prev) => [...prev.slice(-799), item]);
+      }),
+    [],
+  );
   React.useEffect(() => {
     setFeed([]);
     call("studio:get", { id: mod.id })
-      .then((full) => setFeed(full.feed.slice(-600)))
+      .then((full) => setFeed(full.feed.slice(-800)))
       .catch(() => {});
   }, [mod.id]);
+  return feed;
+}
+
+function buildThread(mod, feed) {
+  const items = [{ type: "user", key: "user" }, { type: "plan", key: "plan" }];
+  let turn = null;
+  feed.forEach((f, i) => {
+    const key = `${f.at}-${i}`;
+    if (f.kind === "session") return;
+    if (f.role === "benana") {
+      turn = null;
+      if (f.kind === "phase") items.push({ type: "phase", key, f });
+      else if (f.kind === "failure" || f.kind === "error") items.push({ type: "alert", key, f });
+      else items.push({ type: "note", key, f });
+      return;
+    }
+    if (f.kind === "plan") {
+      items.push({ type: "testplan", key, bare: turn?.role === "spec" });
+      turn = null;
+      return;
+    }
+    const id = `${f.role}:${f.attempt || 0}`;
+    if (!turn || turn.id !== id) {
+      turn = { type: "turn", key, id, role: f.role, attempt: f.attempt || null, entries: [] };
+      items.push(turn);
+    }
+    turn.entries.push(f);
+  });
+  if (!feed.some((f) => f.kind === "plan") && mod.testPlan) items.splice(2, 0, { type: "testplan", key: "tp" });
+  if (!mod.running && ["passed", "failed", "stopped"].includes(mod.status)) items.push({ type: "result", key: "result" });
+  return items;
+}
+
+function Thread({ mod, onOpenCode }) {
+  const feed = useFeed(mod);
+  const items = React.useMemo(() => buildThread(mod, feed), [mod, feed]);
+  const { ref, onScroll, away, jump } = useStickyScroll(`${items.length}:${feed.length}:${mod.updatedAt}`);
+  const lastTurn = [...items].reverse().find((x) => x.type === "turn");
 
   return (
-    <div className="view run-page">
-      <header className="run-head">
-        <div className="run-title">
-          <div className="run-name">
-            <h1>{mod.name}</h1>
-            <Status status={mod.running ? "running" : mod.status} />
-            {mod.seed && <span className="tag">Seeded bug</span>}
-          </div>
-          <p>{mod.prompt}</p>
-        </div>
-        <div className="page-actions">
-          {mod.running && (
-            <button className="btn danger" onClick={() => call("studio:stop", { id: mod.id })}>
-              <Icon name="stop" size={14} />
-              Stop run
-            </button>
-          )}
-          {mod.repoDir && (
-            <button className="btn" onClick={() => onOpenCode(mod.id)}>
-              <Icon name="code" size={14} />
-              View code
-            </button>
-          )}
-          {!mod.running && (
-            <button className="btn" onClick={onNew}>
-              <Icon name="plus" size={14} />
-              New mod
-            </button>
-          )}
-        </div>
-      </header>
-
-      <Pipeline mod={mod} />
-      {mod.error && <div className="alert">{mod.error}</div>}
-
-      <div className="run-grid">
-        <div className="run-stage">
-          <GamePane showLog={false} />
-          <Activity feed={feed} />
-        </div>
-        <aside className="run-side">
-          <PlanChecks mod={mod} />
-          <section className="block">
-            <SectionHead title="Attempts" count={mod.attempts.length} />
-            <AttemptTimeline mod={mod} />
-          </section>
-          <section className="block">
-            <SectionHead title="Partners" />
-            <PartnerStatus mod={mod} />
-          </section>
-        </aside>
+    <div className="thread" ref={ref} onScroll={onScroll}>
+      <div className="thread-inner">
+        {items.map((it) => {
+          switch (it.type) {
+            case "user":
+              return (
+                <div key={it.key} className="msg-user">
+                  <div className="bubble">{mod.prompt}</div>
+                </div>
+              );
+            case "plan":
+              return (
+                <Turn key={it.key} role="benana" title="Benana" meta="Plan">
+                  <p className="prose">I'll build this as a Paper plugin and test it with an AI player. This list updates as each step finishes.</p>
+                  <PipelineChecklist mod={mod} />
+                </Turn>
+              );
+            case "testplan":
+              return <TestPlanChecklist key={it.key} mod={mod} bare={it.bare} />;
+            case "phase":
+              return <PhaseLine key={it.key} f={it.f} mod={mod} />;
+            case "note":
+              return (
+                <div key={it.key} className={`note-line ${/Entire checkpoint/.test(it.f.text) ? "entire" : ""}`}>
+                  <Icon name="info" size={13} />
+                  <span>{it.f.text}</span>
+                </div>
+              );
+            case "alert":
+              return (
+                <div key={it.key} className="alert-card">
+                  <CheckIcon status="fail" />
+                  <div>
+                    <strong>{it.f.kind === "error" ? "Run error" : `Attempt ${it.f.attempt} failed`}</strong>
+                    <p>{it.f.text.replace(/^Attempt \d+ failed \(\w+\): /, "")}</p>
+                  </div>
+                </div>
+              );
+            case "turn":
+              return <AgentTurn key={it.key} turn={it} mod={mod} live={mod.running && it === lastTurn} />;
+            case "result":
+              return <ResultCard key={it.key} mod={mod} onOpenCode={onOpenCode} />;
+            default:
+              return null;
+          }
+        })}
       </div>
+      {away && (
+        <button className="jump" onClick={jump}>
+          Jump to latest
+        </button>
+      )}
     </div>
   );
 }
 
-function Pipeline({ mod }) {
-  const current = phaseIndex(mod);
-  const done = mod.status === "passed";
-  const failed = ["failed", "stopped"].includes(mod.status);
+const AVATAR = { benana: "B", spec: "S", builder: "Bu", playtester: "P", fixer: "F" };
+
+function Turn({ role, title, meta, children }) {
   return (
-    <ol className="pipeline" aria-label="Pipeline">
-      {PHASES.map(([key, label], i) => {
-        const state = done || i < current ? "done" : i === current ? (failed ? "failed" : "current") : "todo";
-        return (
-          <li key={key} className={state}>
-            <span className="pipe-icon">
-              {state === "done" && <Icon name="check" size={11} />}
-              {state === "failed" && <Icon name="x" size={11} />}
-            </span>
-            <span>{label}</span>
-          </li>
-        );
-      })}
-      <li className="pipe-meta">{mod.attempts.length ? `Attempt ${mod.attempts.length}` : "Not started"}</li>
-    </ol>
+    <div className="turn">
+      <div className="turn-head">
+        <span className={`role-avatar ${role}`}>{AVATAR[role] || role[0]?.toUpperCase()}</span>
+        <strong>{title}</strong>
+        {meta && <span className="meta">{meta}</span>}
+      </div>
+      <div className="turn-body">{children}</div>
+    </div>
   );
 }
 
-const clock = (ts) =>
-  ts ? new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "";
+function sessionFor(mod, role, attemptN) {
+  if (role === "spec") return mod.sessions.find((s) => s.role === "spec");
+  const a = mod.attempts.find((x) => x.n === attemptN);
+  return a?.sessions.filter((s) => s.role === role).at(-1);
+}
 
-function Activity({ feed }) {
-  const ref = React.useRef(null);
-  const stick = React.useRef(true);
-  const visible = feed.filter((f) => f.kind !== "session" && (f.kind !== "result" || f.isError || f.role === "playtester"));
+function AgentTurn({ turn, mod, live }) {
+  const s = sessionFor(mod, turn.role, turn.attempt);
+  const meta = [
+    turn.attempt ? `attempt ${turn.attempt}` : null,
+    s?.model ? shortModel(s.model) : null,
+    s?.endedAt && s?.startedAt ? fmtDuration(s.endedAt - s.startedAt) : null,
+    s?.usage?.costUsd ? fmtMoney(s.usage.costUsd) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
-  React.useEffect(() => {
-    if (ref.current && stick.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [visible.length]);
+  const groups = [];
+  for (const e of turn.entries) {
+    const isWork = e.kind === "tool" || e.kind === "result" || e.kind === "note";
+    const last = groups.at(-1);
+    if (isWork && last?.work) last.entries.push(e);
+    else if (isWork) groups.push({ work: true, entries: [e] });
+    else groups.push({ work: false, entries: [e] });
+  }
 
   return (
-    <section className="activity">
-      <div className="activity-head">
-        <h3>Agent activity</h3>
-        <span className="meta">{visible.length} events</span>
-      </div>
-      <div
-        className="activity-body"
-        ref={ref}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-        }}
-      >
-        {!visible.length && <Empty>Agent activity streams here as the run progresses.</Empty>}
-        {visible.slice(-250).map((f, i) => (
-          <div key={`${f.at}-${i}`} className={`event ${f.kind} ${f.isError ? "error" : ""}`}>
-            <time>{clock(f.at)}</time>
-            <span className={`event-role ${f.role}`}>
-              {ROLE[f.role] || f.role}
-              {f.attempt ? <small>#{f.attempt}</small> : null}
-            </span>
-            <div className="event-text">
-              {f.kind === "tool" ? (
-                <>
-                  <code>{f.name}</code>
-                  <span>{f.summary}</span>
-                </>
-              ) : f.kind === "result" ? (
-                <>
-                  <code>{f.name}</code>
-                  <span className="result">{f.text.slice(0, 300)}</span>
-                </>
-              ) : (
-                <span>{f.text}</span>
-              )}
+    <Turn role={turn.role} title={ROLE[turn.role] || turn.role} meta={meta}>
+      {groups.map((g, i) =>
+        g.work ? (
+          <WorkLog key={i} entries={g.entries} mod={mod} live={live && i === groups.length - 1} />
+        ) : (
+          <Markdown key={i} text={g.entries[0].text} />
+        ),
+      )}
+    </Turn>
+  );
+}
+
+function parseSummary(summary) {
+  if (!summary) return {};
+  try {
+    return JSON.parse(summary);
+  } catch {
+    const pick = (k) => summary.match(new RegExp(`"${k}":"([^"]*)"`))?.[1];
+    return { id: pick("id"), status: pick("status"), observed: pick("observed"), file_path: pick("file_path"), command: pick("command") };
+  }
+}
+
+const TOOL_ICON = {
+  Read: "file",
+  Write: "file",
+  Edit: "file",
+  MultiEdit: "file",
+  Bash: "terminal",
+  Grep: "search",
+  Glob: "search",
+};
+
+function describeArgs(name, summary) {
+  const args = parseSummary(summary);
+  if (args.file_path) return args.file_path.replace(/\\/g, "/");
+  if (args.command) return args.command;
+  if (args.pattern) return args.pattern;
+  if (typeof args === "object" && args && Object.keys(args).length) {
+    return Object.entries(args)
+      .filter(([, v]) => v != null && v !== "")
+      .map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : v}`)
+      .join(" · ")
+      .slice(0, 160);
+  }
+  return summary || "";
+}
+
+function WorkLog({ entries, mod, live }) {
+  const rows = entries.filter((e) => e.kind !== "result" || e.isError || e.name !== "report_check");
+  const [open, setOpen] = React.useState(false);
+  const LIMIT = 4;
+  const hidden = !open && rows.length > LIMIT + 1 ? rows.length - LIMIT : 0;
+  const shown = hidden ? rows.slice(-LIMIT) : rows;
+  const titles = new Map((mod.testPlan?.checks || []).map((c) => [c.id, c.title]));
+
+  return (
+    <div className={`worklog ${live ? "live" : ""}`}>
+      {hidden > 0 && (
+        <button className="worklog-more" onClick={() => setOpen(true)}>
+          {hidden} earlier action{hidden === 1 ? "" : "s"}
+        </button>
+      )}
+      {shown.map((e, i) => {
+        if (e.kind === "tool" && e.name === "report_check") {
+          const a = parseSummary(e.summary);
+          return (
+            <div key={i} className="work-row check">
+              <CheckIcon status={a.status} />
+              <span>
+                Reported <strong>{titles.get(a.id) || a.id}</strong>
+                {a.status ? ` · ${a.status}` : ""}
+              </span>
             </div>
+          );
+        }
+        if (e.kind === "tool" && e.name === "finish") {
+          return (
+            <div key={i} className="work-row check">
+              <CheckIcon status="pass" />
+              <span>Finished the playtest</span>
+            </div>
+          );
+        }
+        if (e.kind === "result") {
+          return (
+            <div key={i} className={`work-row result ${e.isError ? "error" : ""}`}>
+              <span className="work-arrow">↳</span>
+              <span className="work-out">{e.text.slice(0, 220)}</span>
+            </div>
+          );
+        }
+        if (e.kind === "note") {
+          return (
+            <div key={i} className="work-row note">
+              <Icon name="info" size={13} />
+              <span>{e.text}</span>
+            </div>
+          );
+        }
+        const isLast = live && i === shown.length - 1;
+        return (
+          <div key={i} className="work-row">
+            {isLast ? <span className="spinner" /> : <Icon name={TOOL_ICON[e.name] || "game"} size={13} />}
+            <code>{e.name}</code>
+            <span className="work-args">{describeArgs(e.name, e.summary)}</span>
           </div>
-        ))}
+        );
+      })}
+    </div>
+  );
+}
+
+function PhaseLine({ f, mod }) {
+  const current = mod.running && mod.phase === f.phase && phaseIndex(mod) === PHASES.findIndex(([k]) => k === f.phase);
+  return (
+    <div className={`phase-line ${current ? "current" : ""}`}>
+      {current ? <span className="spinner" /> : <CheckIcon status="pass" />}
+      <span>{f.text}</span>
+    </div>
+  );
+}
+
+function PipelineChecklist({ mod }) {
+  const current = phaseIndex(mod);
+  const passed = mod.status === "passed";
+  const failed = ["failed", "stopped"].includes(mod.status);
+  const fixSkipped = passed && !mod.attempts.some((a) => a.role === "fixer");
+  const doneCount = PHASES.filter((_, i) => passed || i < current).length;
+  return (
+    <div className="checklist">
+      <div className="checklist-head">
+        <strong>Build plan</strong>
+        <span className="meta">
+          {doneCount}/{PHASES.length}
+        </span>
       </div>
-    </section>
+      <ul>
+        {PHASES.map(([key, label], i) => {
+          let state = i < current ? "done" : i === current ? (failed ? "failed" : mod.running ? "active" : "done") : "todo";
+          if (passed) state = "done";
+          if (key === "fix" && fixSkipped) state = "skipped";
+          return (
+            <li key={key} className={state}>
+              <StepIcon state={state} />
+              <span className="step-label">{label}</span>
+              <span className="step-detail">{state === "skipped" ? "Not needed, passed first try" : STEP_DETAIL[key]}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function StepIcon({ state }) {
+  if (state === "active") return <span className="step-icon active"><span className="spinner" /></span>;
+  if (state === "done") return <span className="step-icon done"><Icon name="check" size={11} /></span>;
+  if (state === "failed") return <span className="step-icon failed"><Icon name="x" size={11} /></span>;
+  if (state === "skipped") return <span className="step-icon skipped" />;
+  return <span className="step-icon" />;
+}
+
+function TestPlanChecklist({ mod, bare }) {
+  const verdict = latestVerdict(mod);
+  const byId = new Map((verdict?.checks || []).map((c) => [c.id, c]));
+  const checks = mod.testPlan?.checks || [];
+  const testing = mod.running && mod.phase === "playtest";
+  const nextId = testing ? checks.find((c) => !byId.has(c.id))?.id : null;
+  const passing = checks.filter((c) => byId.get(c.id)?.status === "pass").length;
+  if (!checks.length) return null;
+  const list = (
+      <div className="checklist">
+        <div className="checklist-head">
+          <strong>Test plan</strong>
+          <span className="meta">
+            {passing}/{checks.length} passing
+          </span>
+        </div>
+        <ul>
+          {checks.map((c) => {
+            const r = byId.get(c.id);
+            const state = r ? (r.status === "pass" ? "done" : r.status === "fail" ? "failed" : "blocked") : c.id === nextId ? "active" : "todo";
+            return (
+              <li key={c.id} className={`${state} tall`}>
+                {state === "blocked" ? <CheckIcon status="blocked" /> : <StepIcon state={state} />}
+                <span className="step-label">{c.title}</span>
+                <span className="step-detail">{r?.observed || c.expect}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+  );
+  if (bare) return <div className="turn-cont">{list}</div>;
+  return (
+    <Turn role="spec" title="Spec agent" meta="Test plan">
+      {mod.spec?.summary && <p className="prose">{mod.spec.summary}</p>}
+      {list}
+    </Turn>
+  );
+}
+
+function ResultCard({ mod, onOpenCode }) {
+  const passed = mod.status === "passed";
+  const verdict = latestVerdict(mod);
+  const checks = verdict?.checks || [];
+  const lessons = mod.attempts.filter((a) => a.lesson);
+  const n = mod.attempts.length;
+  return (
+    <div className={`result-card ${mod.status}`}>
+      <div className="result-top">
+        <span className="result-icon">
+          <Icon name={passed ? "check" : "x"} size={18} />
+        </span>
+        <div>
+          <strong>
+            {passed
+              ? `${mod.name} passed every check${n === 1 ? " on the first attempt" : ` after ${n} attempts`}`
+              : mod.status === "stopped"
+                ? `${mod.name} was stopped`
+                : `${mod.name} still fails after ${n} attempt${n === 1 ? "" : "s"}`}
+          </strong>
+          <p>
+            {checks.filter((c) => c.status === "pass").length}/{mod.testPlan?.checks.length || checks.length} checks passing · {n} attempt
+            {n === 1 ? "" : "s"} · {fmtMoney(modSpend(mod))}
+          </p>
+        </div>
+      </div>
+      {lessons.map((a) => (
+        <div key={a.n} className="lesson">
+          <span>Lesson from attempt {a.n}</span>
+          <p>{a.lesson}</p>
+        </div>
+      ))}
+      {mod.repoDir && (
+        <div className="result-actions">
+          <button className="btn sm" onClick={() => onOpenCode(mod.id)}>
+            <Icon name="code" size={13} />
+            Review the code
+          </button>
+          <button className="btn sm" onClick={() => call("open-path", mod.repoDir)}>
+            <Icon name="folder" size={13} />
+            Open repository
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Minimal markdown: paragraphs, bullets, **bold**, `code` ---------- */
+
+function inline(text) {
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
+      <strong key={i}>{part.slice(2, -2)}</strong>
+    ) : part.startsWith("`") && part.endsWith("`") && part.length > 2 ? (
+      <code key={i}>{part.slice(1, -1)}</code>
+    ) : (
+      part
+    ),
+  );
+}
+
+function Markdown({ text }) {
+  const blocks = String(text || "")
+    .replace(/\s+-\s+(?=\*\*)/g, "\n- ")
+    .split(/\n{2,}/);
+  return (
+    <div className="prose">
+      {blocks.map((block, i) => {
+        const lines = block.split("\n").filter((l) => l.trim());
+        const bullets = lines.filter((l) => /^\s*([-*]|\d+\.)\s+/.test(l));
+        if (bullets.length && bullets.length === lines.length) {
+          return (
+            <ul key={i}>
+              {lines.map((l, j) => (
+                <li key={j}>{inline(l.replace(/^\s*([-*]|\d+\.)\s+/, ""))}</li>
+              ))}
+            </ul>
+          );
+        }
+        if (bullets.length && !/^\s*([-*]|\d+\.)\s+/.test(lines[0])) {
+          return (
+            <React.Fragment key={i}>
+              <p>{inline(lines[0])}</p>
+              <ul>
+                {lines.slice(1).map((l, j) => (
+                  <li key={j}>{inline(l.replace(/^\s*([-*]|\d+\.)\s+/, ""))}</li>
+                ))}
+              </ul>
+            </React.Fragment>
+          );
+        }
+        return (
+          <p key={i}>
+            {lines.map((l, j) => (
+              <React.Fragment key={j}>
+                {j > 0 && <br />}
+                {inline(l)}
+              </React.Fragment>
+            ))}
+          </p>
+        );
+      })}
+    </div>
   );
 }

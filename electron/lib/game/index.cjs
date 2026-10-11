@@ -332,6 +332,7 @@ function handlers(emit) {
   return {
     'game:demo': ({ on }) => demo(on),
     'game:status': () => status(),
+    'game:logs': ({ limit } = {}) => server.logSince(0).slice(-Math.min(Number(limit) || 300, 1000)),
     'game:start': () => start(emit),
     'game:stop': () => stop(),
     'game:command': ({ command }) => runCommand(command),

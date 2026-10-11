@@ -89,6 +89,13 @@ export function Icon({ name, size = 16 }) {
     folder: <path d="M2.5 4.5h4l1.5 1.5h5.5v6.5h-11z" />,
     code: <path d="M6 5 3 8l3 3M10 5l3 3-3 3" />,
     arrow: <path d="M4 8h8M8.5 4.5 12 8l-3.5 3.5" />,
+    send: <path d="M8 12.5v-9M4.5 7 8 3.5 11.5 7" />,
+    file: <path d="M4.5 2.5h4.5l2.5 2.5v8.5h-7zM9 2.5V5h2.5" />,
+    terminal: <path d="M3.5 5 6 7.5 3.5 10M7.5 11h5" />,
+    search: <path d="M7 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zM10.3 10.3l3 3" />,
+    game: <path d="M5 6v3M3.5 7.5h3M10 7h.01M11.5 8.5h.01M4 4.5h8a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2z" />,
+    info: <path d="M8 7.5v3.5M8 5h.01M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12z" />,
+    spark: <path d="M8 2.5 9.3 6.7 13.5 8l-4.2 1.3L8 13.5 6.7 9.3 2.5 8l4.2-1.3z" />,
   };
   return (
     <svg className="ico" width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
