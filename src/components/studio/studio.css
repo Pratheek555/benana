@@ -3595,3 +3595,66 @@ body.is-resizing { user-select: none; }
 }
 .studio.side-collapsed .runtime-status { justify-content: center; }
 .studio .side { z-index: 10; }
+
+/* ---------- Entire page ---------- */
+.studio .ent-view { display: flex; flex-direction: column; min-height: 0; }
+.studio .ent-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(300px, 380px); gap: 14px; flex: 1; min-height: 0; }
+.studio .ent-label { display: block; margin: 0 0 8px; color: var(--text-3); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.studio .ent-repos, .studio .ent-main, .studio .ent-detail { min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px; }
+.studio .ent-repo { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; width: 100%; margin-bottom: 4px; padding: 9px 10px; border: 1px solid transparent; border-radius: 9px; background: none; text-align: left; }
+.studio .ent-repo:hover { background: var(--hover); }
+.studio .ent-repo.active { border-color: color-mix(in srgb, var(--entire) 45%, transparent); background: color-mix(in srgb, var(--entire) 10%, transparent); }
+.studio .ent-repo-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.studio .ent-repo small { grid-column: 1 / -1; color: var(--text-3); font-size: 11px; }
+.studio .ent-badge { padding: 1px 7px; border-radius: 99px; background: var(--raised); color: var(--text-2); font: 600 11px var(--mono); }
+.studio .ent-badge.ok { background: var(--good-soft); color: var(--good-text); }
+.studio .ent-badge.warn { background: var(--bad-soft); color: var(--bad-text); }
+
+.studio .ent-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.studio .ent-head h2 { margin: 0; font-size: 18px; }
+.studio .ent-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.studio .ent-stat { padding: 4px 10px; border: 1px solid var(--line); border-radius: 99px; color: var(--text-2); font-size: 12px; }
+.studio .ent-stat strong { color: var(--text); }
+.studio .ent-stat.ok { border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.studio .ent-stat.warn { border-color: color-mix(in srgb, var(--bad) 45%, transparent); color: var(--bad-text); }
+.studio .ent-alert { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); border-radius: 9px; background: var(--bad-soft); color: var(--bad-text); font-size: 12.5px; }
+.studio .ent-alert span { flex: 1; }
+.studio .ent-link { border: 0; background: none; color: var(--text); font-weight: 600; text-decoration: underline; }
+.studio .ent-filters { display: flex; gap: 6px; margin-bottom: 12px; }
+.studio .ent-filters button { padding: 5px 11px; border: 1px solid var(--line); border-radius: 99px; background: none; color: var(--text-2); font-size: 12px; }
+.studio .ent-filters button.on { border-color: var(--entire); background: color-mix(in srgb, var(--entire) 14%, transparent); color: var(--text); }
+
+.studio .ent-timeline { margin: 0; padding: 0; list-style: none; }
+.studio .ent-attempt { position: relative; margin-bottom: 14px; padding-left: 16px; border-left: 2px solid var(--line); }
+.studio .ent-attempt-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 600; }
+.studio .ent-attempt-head::before { content: ""; position: absolute; left: -6px; width: 10px; height: 10px; border-radius: 3px; background: var(--entire); }
+.studio .ent-row { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; width: 100%; margin-bottom: 6px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--raised); text-align: left; }
+.studio .ent-row:hover { border-color: var(--line-strong); }
+.studio .ent-row.active { border-color: var(--entire); box-shadow: 0 0 0 1px var(--entire); }
+.studio .ent-row.bad .ent-row-label { color: var(--bad-text); }
+.studio .ent-kind { padding: 2px 0; border-radius: 5px; font: 600 10.5px var(--mono); text-align: center; text-transform: uppercase; }
+.studio .ent-kind.code { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.studio .ent-kind.playtest { background: color-mix(in srgb, var(--neatlogs) 14%, transparent); color: var(--neatlogs); }
+.studio .ent-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio .ent-sha { color: var(--text-3); font: 12px var(--mono); }
+.studio .ent-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 99px; background: color-mix(in srgb, var(--entire) 14%, transparent); color: var(--entire); font: 500 11.5px var(--mono); white-space: nowrap; }
+.studio .ent-chip i { width: 6px; height: 6px; border-radius: 2px; background: var(--entire); }
+.studio .ent-chip.missing { background: var(--bad-soft); color: var(--bad-text); font-family: var(--sans); }
+
+.studio .ent-detail-empty { display: grid; justify-items: center; gap: 8px; padding: 40px 10px; color: var(--text-3); text-align: center; }
+.studio .ent-facts { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px 10px; margin: 0 0 16px; font-size: 12.5px; }
+.studio .ent-facts dt { color: var(--text-3); }
+.studio .ent-facts dd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; min-width: 0; }
+.studio .ent-facts code { overflow-wrap: anywhere; font: 12px var(--mono); }
+.studio .ent-copy { padding: 1px 7px; border: 1px solid var(--line); border-radius: 6px; background: none; color: var(--text-2); font-size: 11px; }
+.studio .ent-copy:hover { border-color: var(--entire); color: var(--text); }
+.studio .ent-muted { color: var(--text-3); font-size: 12.5px; }
+.studio .ent-files { margin: 0 0 16px; padding: 0; list-style: none; font: 12px var(--mono); }
+.studio .ent-files li { display: flex; align-items: center; gap: 6px; padding: 3px 0; color: var(--text-2); }
+.studio .ent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.studio .ent-diff { max-height: 360px; overflow: auto; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #000; color: var(--text-2); font: 11.5px/1.5 var(--mono); white-space: pre; }
+
+@media (max-width: 1250px) {
+  .studio .ent-layout { grid-template-columns: 190px minmax(0, 1fr); }
+  .studio .ent-detail { grid-column: 1 / -1; }
+}
