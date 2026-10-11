@@ -86,13 +86,16 @@ Findings from a throwaway repo with two real Claude sessions:
 - **Single-checkpoint publishing works.** One ref was pushed to a second remote with an explicit refspec. The pre-push hook must be bypassed (`--no-verify`) for that, since the hook would otherwise push everything.
 - **Redaction did not remove a planted secret.** A fake AWS access key appeared 7 times in the raw transcript, and once each in `checkpoint explain` and `--full`. The metadata view (`--json`) did not show it. Entire's "secrets are redacted" claim does not hold for this pattern.
 
-Rules that follow:
+Rules that follow (decided: transcripts ship at launch):
 
-- **Transcripts are not published at launch.** The opt-in in the earlier draft is removed. A transcript may contain secrets, and we have no redaction we can rely on.
-- **Only metadata is published:** request, changed files, commit message, outcome, model, token counts and session count (`checkpoint explain --json`).
-- **Publishing pushes only the checkpoint refs for public versions**, using explicit refspecs with the hook bypassed. Session pushing stays off for the repo.
-- **Before a checkpoint ref is pushed, scan its transcript and metadata for secrets** with our own scanner. Block the publish if anything matches.
-- **Moderators read metadata only.** Transcript access is not part of the moderation process at launch.
+- **Transcripts are published at launch, opt-in per session.** The creator picks which sessions go with a version; none are included by default.
+- **Pipeline for every transcript:** sanitize (home paths, usernames, emails, hostnames → placeholders; long high-entropy strings flagged) → secret gate (gitleaks, fail closed) → preview shown to the creator → publish. Any finding blocks the publish.
+- **Transcripts never go inside the jar.** They ship as a separate bundle (`bundle/`) with its own `manifest.json` listing the SHA-256 of every file, next to the jar.
+- **Only the checkpoint refs of published versions are pushed**, with explicit refspecs and the pre-push hook bypassed. Session pushing stays off for the repo.
+- **Published transcripts are untrusted input.** Any agent that reads one (a remixer's builder or fixer) gets it as quoted data, never as instructions, with tools restricted while it is in context.
+- **Each transcript claim is shown next to the evidence it can be checked against:** the commit, changed files and playtest outcome.
+- **Takedown:** removing a listing deletes its bundle from storage. Copies already downloaded cannot be recalled; the publish preview says so.
+- **Moderators may read published transcripts** when reviewing a report, including for personal data.
 
 ## 8. Safety
 
@@ -112,7 +115,9 @@ Rules that follow:
 1. Turning session pushing off does not remove refs already on a remote. (Tested: they stay.) Decide how to retract a pushed checkpoint, if we ever need to.
 2. A moderator can read one checkpoint remote without access to the whole repo. (`repo grant` exists; untested.)
 3. `graph index --report` produces byte-identical reports on two machines for the same commit. (Same machine: identical. Two machines: untested.)
-4. Our secret scanner catches everything Entire's redaction misses, in both transcripts and metadata. (Not built yet.)
+4. The secret gate catches known secret formats (built, `electron/lib/publish/secrets.cjs`). It cannot catch invented formats or plain-text passwords; the sanitizer's entropy check and the creator preview cover part of that gap.
+5. Provider terms (Anthropic, OpenAI) on publishing model outputs. (Not checked.)
+6. A process for data-protection deletion requests.
 
 ## 11. Graph decisions
 
