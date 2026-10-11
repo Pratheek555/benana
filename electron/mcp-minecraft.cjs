@@ -9,6 +9,7 @@ const readline = require('node:readline');
 
 const gameUrl = process.env.BENANA_GAME_URL;
 const verdictFile = process.env.BENANA_VERDICT_FILE;
+const testPlanFile = process.env.BENANA_TEST_PLAN;
 const runId = process.env.BENANA_RUN_ID || 'manual';
 const startedAt = Date.now();
 
@@ -19,14 +20,29 @@ const trackTicks = { type: 'number', description: 'Record the target for this ma
 
 const tools = [
   { name: 'game_setup', description: 'Run server console commands as the bot (no leading slash). `@bot` is the bot; ^ and ~ coordinates are relative to it. Use for the test plan setup: give items, summon mobs, set time.', inputSchema: obj({ commands: { type: 'array', items: { type: 'string' } } }, ['commands']) },
+  { name: 'reset_arena', description: 'Rebuild the flat arena, remove all mobs, items and projectiles, and put the bot back at the center with an empty inventory. Use it between checks when an earlier check left mobs, craters or a cooldown state behind; then rerun your setup.', inputSchema: obj({}) },
   { name: 'bot_state', description: 'Bot position, health, held item and inventory.', inputSchema: obj({}) },
-  { name: 'nearby_entities', description: 'Entities near the bot with id, type, position, velocity and distance, nearest first.', inputSchema: obj({ radius: { type: 'number' } }) },
+  { name: 'nearby_entities', description: 'Entities near the bot with id, type, position, velocity, distance and health (living entities), nearest first.', inputSchema: obj({ radius: { type: 'number' } }) },
   { name: 'equip', description: 'Hold an inventory item, e.g. golden_sword.', inputSchema: obj({ item: { type: 'string' } }, ['item']) },
   { name: 'look_at', description: 'Aim at an entity or position.', inputSchema: obj({ entityId, position }) },
   { name: 'move_to', description: 'Walk to an entity or position.', inputSchema: obj({ entityId, position, range: { type: 'number' } }) },
   { name: 'attack', description: 'Left-click (hit) an entity with the held item. Walks into reach first if needed.', inputSchema: obj({ entityId, trackTicks }, ['entityId']) },
   { name: 'attack_sequence', description: 'Hit several entities back to back, intervalTicks apart (default 4), in ONE call, and track each. Use for cooldowns and combos; separate attack calls are seconds apart.', inputSchema: obj({ entityIds: { type: 'array', items: { type: 'number' } }, intervalTicks: { type: 'number' }, trackTicks }, ['entityIds']) },
-  { name: 'use_item', description: 'Right-click with the held item, on an entity if entityId is given.', inputSchema: obj({ entityId, trackTicks }) },
+  { name: 'use_item', description: 'Right-click with the held item, on an entity if entityId is given (holdTicks = how long to hold right-click, default 5). For bows, crossbows, tridents and throwables use `shoot` instead.', inputSchema: obj({ entityId, trackTicks, holdTicks: { type: 'number' } }) },
+  {
+    name: 'shoot',
+    description: 'Fire the held bow, crossbow, trident or throwable (snowball, egg, ender_pearl, wind_charge, splash_potion) at a target, aiming for the arc. Draws the bow fully (chargeTicks, default 22) and releases. Pass entityIds to fire several shots back to back in ONE call (for cooldowns). Returns each projectile (spawned or not, where it was last seen, whether it was removed), every explosion the bot saw with its position, the bot ammo before/after, chat during the shots, and for EVERY living entity within radius: health before/after, died, times hurt, max upward/horizontal velocity, and distance to the nearest explosion. Keep targets 5-15 blocks away.',
+    inputSchema: obj({
+      entityId,
+      entityIds: { type: 'array', items: { type: 'number' }, description: 'Shoot each in order, in one call' },
+      position,
+      item: { type: 'string', description: 'Equip this item first, e.g. bow' },
+      chargeTicks: { type: 'number', description: 'Bow/trident draw time in ticks (bow: 22 = full power)' },
+      intervalTicks: { type: 'number', description: 'Extra ticks between shots in a sequence (default 0)' },
+      trackTicks: { type: 'number', description: 'Max ticks to watch after the last shot (default 60)' },
+      radius: { type: 'number', description: 'Report living entities within this many blocks (default 24)' },
+    }),
+  },
   { name: 'track_entity', description: 'Sample an entity every tick: position, velocity, and position delta, plus maxUpwardVelocity and maxHeightGain.', inputSchema: obj({ entityId, ticks: { type: 'number' } }, ['entityId']) },
   { name: 'wait_ticks', description: 'Let the game run (20 ticks = 1 second).', inputSchema: obj({ ticks: { type: 'number' } }, ['ticks']) },
   { name: 'chat', description: 'Say something or run a player command like /launch.', inputSchema: obj({ message: { type: 'string' } }, ['message']) },
@@ -44,7 +60,7 @@ const tools = [
       suspectedCause: { type: 'string', description: 'For failures: your best guess at the plugin bug' },
     }, ['id', 'status', 'expected', 'observed']),
   },
-  { name: 'finish', description: 'Finalize the playtest after every check is reported.', inputSchema: obj({ summary: { type: 'string' } }, ['summary']) },
+  { name: 'finish', description: 'Finalize the playtest after every check in the test plan is reported (use status blocked for checks you could not run).', inputSchema: obj({ summary: { type: 'string' } }, ['summary']) },
 ];
 
 async function game(tool, args) {
@@ -77,6 +93,12 @@ function groupErrors(lines) {
   return out;
 }
 
+function planCheckIds() {
+  try { return (JSON.parse(fs.readFileSync(testPlanFile, 'utf8')).checks || []).map((c) => c.id); } catch { return []; }
+}
+
+let finishWarned = false;
+
 async function call(name, a) {
   if (name === 'server_log') return game('server_log', { sinceMs: a.sinceMs ?? startedAt, level: a.level });
   if (name === 'report_check') {
@@ -88,6 +110,12 @@ async function call(name, a) {
   }
   if (name === 'finish') {
     const v = readVerdict();
+    const missing = planCheckIds().filter((id) => !v.checks.some((c) => c.id === id));
+    if (missing.length && !finishWarned) {
+      finishWarned = true;
+      throw new Error(`These test plan checks were never reported: ${missing.join(', ')}. Run them now (reset_arena first if the world is in a bad state) and report_check each one. If a check truly cannot be run, report it with status "blocked" and say why. Unreported checks count as blocked.`);
+    }
+    for (const id of missing) v.checks.push({ id, status: 'blocked', expected: '', observed: 'The playtester finished without reporting this check.', evidence: {} });
     v.serverErrors = groupErrors(await game('server_log', { sinceMs: startedAt, level: 'error' }));
     v.finished = true;
     v.summary = a.summary;

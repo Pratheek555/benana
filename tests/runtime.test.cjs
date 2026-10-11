@@ -478,3 +478,13 @@ test("run diff includes tracked edits and untracked text without changing the ch
     "after\n",
   );
 });
+
+test("a playtest that skips test plan checks never passes", () => {
+  const game = require("../electron/lib/game/index.cjs");
+  const file = path.join(sandbox, "verdict-partial.json");
+  const plan = { checks: [{ id: "explodes", expect: "boom" }, { id: "cooldown", expect: "no boom" }] };
+  fs.writeFileSync(file, JSON.stringify({ version: 1, finished: true, checks: [{ id: "explodes", status: "pass" }], serverErrors: [] }));
+  const verdict = game.readVerdict(file, plan);
+  assert.equal(verdict.passed, false);
+  assert.deepEqual(verdict.checks.map((c) => `${c.id}=${c.status}`), ["explodes=pass", "cooldown=blocked"]);
+});

@@ -9,8 +9,8 @@ const { spawnExecutable, terminateProcessTree } = require('../processes.cjs');
 const VERSION = '1.21.4';
 const UA = 'benana/0.1 (neatHack)';
 const dir = path.join(dataDir, 'game', 'server');
-const PORT = 25599;
-const RCON_PORT = 25598;
+const PORT = Number(process.env.BENANA_MC_PORT) || 25599;
+const RCON_PORT = Number(process.env.BENANA_RCON_PORT) || 25598;
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 const ready = /Done \([\d.,]+s\)! For help/;

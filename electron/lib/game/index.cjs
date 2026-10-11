@@ -16,13 +16,13 @@ const { Server, VERSION, PORT } = require('./server.cjs');
 const BOT = 'BenanaBot';
 // The bot is kept near this spot so it stays inside the viewer's fixed camera orbit.
 const ARENA = [0.5, 65, 0.5];
-const VIEWER_PORT = 3007;
+const VIEWER_PORT = Number(process.env.BENANA_VIEWER_PORT) || 3007;
 const HOST = path.join(__dirname, 'host.cjs');
 const MCP = path.join(appRoot, 'electron', 'mcp-minecraft.cjs');
 const mock = () => process.env.BENANA_GAME_MOCK === '1';
 
-const BOT_TOOLS = new Set(['bot_state', 'nearby_entities', 'equip', 'look_at', 'move_to', 'attack', 'attack_sequence', 'use_item', 'track_entity', 'wait_ticks', 'chat', 'read_chat']);
-const TOOLS = ['game_setup', ...BOT_TOOLS, 'server_log', 'report_check', 'finish'];
+const BOT_TOOLS = new Set(['bot_state', 'nearby_entities', 'equip', 'look_at', 'move_to', 'attack', 'attack_sequence', 'use_item', 'shoot', 'track_entity', 'wait_ticks', 'chat', 'read_chat']);
+const TOOLS = ['game_setup', 'reset_arena', ...BOT_TOOLS, 'server_log', 'report_check', 'finish'];
 const playtesterTools = TOOLS.map((t) => `mcp__minecraft__${t}`);
 
 let state = { server: 'stopped', bot: 'offline', viewerUrl: null, controlUrl: null, version: VERSION, mock: mock(), error: null };
@@ -112,9 +112,27 @@ function botCall(tool, args) {
   });
 }
 
+// Rebuilds the flat arena around the bot (grass at y=64) and removes every non-player entity.
+// Explosions and bosses from earlier mods leave craters; mobs summoned into them spawn inside blocks and suffocate.
+const R = 20;
+const ARENA_RESET = [
+  'kill @e[type=!player]',
+  `fill -${R} 50 -${R} ${R} 60 ${R} stone`,
+  `fill -${R} 61 -${R} ${R} 63 ${R} dirt`,
+  `fill -${R} 64 -${R} ${R} 64 ${R} grass_block`,
+  `fill -${R} 65 -${R} ${R} 79 ${R} air`,
+  `fill -${R} 80 -${R} ${R} 95 ${R} air`,
+  'kill @e[type=item]',
+];
+
+async function resetArena() {
+  for (const cmd of ARENA_RESET) await server.command(cmd);
+}
+
 async function prepareWorld() {
   for (const cmd of ['gamerule doDaylightCycle false', 'gamerule doWeatherCycle false', 'gamerule doMobSpawning false', 'gamerule sendCommandFeedback false', 'time set day', 'weather clear'])
     await server.command(cmd);
+  await resetArena();
 }
 
 async function prepareBot() {
@@ -138,6 +156,12 @@ async function runTool(tool, args = {}) {
       out.push({ command: cmd, output: await server.command(`execute as ${BOT} at ${BOT} run ${cmd}`) });
     }
     return out;
+  }
+  if (tool === 'reset_arena') {
+    await resetArena();
+    await prepareBot();
+    await botCall('wait_ticks', { ticks: 10 });
+    return { reset: true, note: 'Arena rebuilt flat (grass at y=64), all mobs/items/projectiles removed, bot back at the center with an empty inventory. Run your setup commands again. Plugin state such as cooldowns is NOT reset; wait it out.' };
   }
   if (tool === 'server_log') return server.logSince(Number(args.sinceMs) || 0, args.level).slice(-200);
   throw new Error(`Unknown game tool ${tool}`);
@@ -265,22 +289,30 @@ function playtestPrompt(testPlan) {
     `Mod under test: ${testPlan.modName}: ${testPlan.summary}`,
     'Run `game_setup` with the setup commands, then perform every check like a player would and measure the outcome with tools.',
     '`attack` and `use_item` accept `trackTicks` to record the target right after the action; use it whenever the expected effect is movement.',
-    'Each tool call takes 1-8 real seconds. For anything timing-sensitive (cooldowns, combos), summon all targets first and use `attack_sequence`, which hits them a few ticks apart in one call.',
-    'Call `report_check` once per check with what you expected, what you observed, and evidence. Check `server_log` for plugin errors.',
-    'Finish with `finish`. Do not edit files.',
+    'For bows, crossbows, tridents and throwables, use `shoot` (never `use_item` on a mob: that only right-clicks it). It aims, fires, and reports the projectile, explosions, ammo used, and the health/deaths/knockback of every living entity nearby.',
+    'Each tool call takes 1-8 real seconds. For anything timing-sensitive (cooldowns, combos), summon all targets first and do it in ONE call: `attack_sequence` for melee, `shoot` with `entityIds` for ranged.',
+    'Start each check from a known state. If an earlier check left mobs, craters, or a cooldown behind, call `reset_arena` and rerun the setup.',
+    'Judge each check on direct evidence: shot/explosion/health numbers from the tools, chat lines, and the plugin log lines from `server_log`. A mob disappearing is not proof of anything by itself; find out why (died in an explosion? suffocated? left range?) before you pass a check on it.',
+    'If an action did not happen (no projectile, no ammo used, no plugin log line), the check cannot pass. Fix your setup and retry, or report it as blocked with the reason.',
+    'Call `report_check` exactly once for EVERY check id in the plan (pass, fail, or blocked), with what you expected, what you observed, and evidence. Check `server_log` for plugin errors.',
+    'Finish with `finish` only after every check is reported. Do not edit files.',
     '',
     'Test plan:',
     JSON.stringify(testPlan, null, 2),
   ].join('\n');
 }
 
-function readVerdict(verdictFile) {
+// With a test plan, any check the playtester never reported counts as blocked, so a partial run can't pass.
+function readVerdict(verdictFile, testPlan) {
   let v;
   try { v = JSON.parse(fs.readFileSync(verdictFile, 'utf8')); }
   catch (e) { return { version: 1, finished: false, passed: false, checks: [], serverErrors: [], error: `No verdict: ${e.message}` }; }
-  const checks = Array.isArray(v.checks) ? v.checks : [];
-  const serverErrors = Array.isArray(v.serverErrors) ? v.serverErrors : [];
+  const reported = Array.isArray(v.checks) ? v.checks : [];
   const finished = v.finished === true;
+  const missing = (testPlan?.checks || []).filter((c) => !reported.some((r) => r.id === c.id))
+    .map((c) => ({ id: c.id, status: 'blocked', expected: c.expect, observed: finished ? 'The playtester finished without reporting this check.' : 'Not reported yet.', evidence: {} }));
+  const checks = [...reported, ...missing];
+  const serverErrors = Array.isArray(v.serverErrors) ? v.serverErrors : [];
   return { ...v, checks, serverErrors, finished, passed: finished && checks.length > 0 && checks.every((c) => c.status === 'pass') && serverErrors.length === 0 };
 }
 

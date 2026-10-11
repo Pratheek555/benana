@@ -65,6 +65,7 @@ The `minecraft` MCP server (A) writes it from the playtester's `report_check` an
 
 - `status` is one of `pass`, `fail` or `blocked`. `blocked` means the playtester couldn't run the check, for example because the bot died or the plugin didn't load.
 - `passed` is `finished && every check passed && serverErrors is empty`.
+- Every check id in the test plan must appear. `finish` refuses once if any are unreported, then records the rest as `blocked`; `readVerdict(file, testPlan)` also fills unreported checks in as `blocked`, so a partial playtest never passes.
 - If the file is missing or the session never called `finish`, `readVerdict` returns `{ finished: false, passed: false, error }`. That never counts as a pass.
 
 ## Game runtime: `electron/lib/game/index.cjs` (A)
@@ -86,7 +87,7 @@ await game.runCommand('time set day')   // -> console output string
 game.mcpConfig({ runId, verdictFile, testPlanFile })   // -> object to write as the Claude `--mcp-config` file
 game.playtesterTools                                    // -> string[] for Claude `--allowedTools`
 game.playtestPrompt(testPlan)                           // -> prompt for the playtester session
-game.readVerdict(verdictFile)                           // -> verdict (see above)
+game.readVerdict(verdictFile, testPlan)                 // -> verdict (see above); unreported plan checks count as blocked
 game.mockVerdict(testPlan, attempt)                     // mock only: attempt 1 fails the first check, attempt 2+ passes
 ```
 
@@ -110,13 +111,15 @@ This stdio MCP server forwards calls to the bot's local control API (`BENANA_GAM
 |---|---|
 | `game_setup(commands[])` | Run test-plan setup console commands (`@bot` substituted) |
 | `bot_state()` | Position, health, held item, inventory |
-| `nearby_entities(radius?)` | id, type, position, velocity, distance |
+| `reset_arena()` | Rebuild the flat arena, remove all non-player entities, reset the bot (empty inventory). Plugin state such as cooldowns is not reset |
+| `nearby_entities(radius?)` | id, type, position, velocity, distance, health (living entities) |
 | `equip(item)` | Put an item in hand |
 | `look_at(entityId \| position)` | Aim the bot |
 | `move_to(entityId \| position, range?)` | Pathfind toward a target |
 | `attack(entityId, trackTicks?)` | Left-click an entity. Use `trackTicks` to sample it right after the hit |
 | `attack_sequence(entityIds[], intervalTicks?, trackTicks?)` | Hit several entities a few ticks apart in one call, for cooldown and combo checks |
-| `use_item(entityId?, trackTicks?)` | Right-click, optionally on an entity |
+| `use_item(entityId?, trackTicks?, holdTicks?)` | Right-click, optionally on an entity. With a ranged item in hand it fires through `shoot` |
+| `shoot(entityId \| entityIds[] \| position, item?, chargeTicks?, intervalTicks?, trackTicks?, radius?)` | Aim and fire a bow, crossbow, trident or throwable; `entityIds` fires a sequence in one call. Reports each projectile (spawned, last position, removed or stuck), explosions with positions, ammo used, chat, and health before/after, deaths and max velocity of every living entity in `radius` |
 | `track_entity(entityId, ticks?)` | Per-tick position and velocity samples |
 | `wait_ticks(ticks)` | Let the game advance |
 | `chat(message)` | Speak or run a player command (`/launch`) |

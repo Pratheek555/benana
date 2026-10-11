@@ -168,7 +168,7 @@ async function playtestPhase(mod, attempt) {
     const v = game.mockVerdict(mod.testPlan, attempt.n);
     fs.writeFileSync(verdictFile, JSON.stringify(v, null, 2));
     feed(mod, { attempt: attempt.n, role: 'playtester', kind: 'note', text: '[mock runtime] canned verdict' });
-    return game.readVerdict(verdictFile);
+    return game.readVerdict(verdictFile, mod.testPlan);
   }
 
   for (let run = 1; run <= 2; run++) {
@@ -177,7 +177,7 @@ async function playtestPhase(mod, attempt) {
     fs.writeFileSync(mcpFile, JSON.stringify(game.mcpConfig({ runId: `${mod.id}_${attempt.n}`, verdictFile, testPlanFile })));
     const poll = setInterval(() => {
       if (!fs.existsSync(verdictFile)) return;
-      const live = game.readVerdict(verdictFile);
+      const live = game.readVerdict(verdictFile, mod.testPlan);
       attempt.verdict = { ...live, live: true };
       save(mod);
     }, 1000);
@@ -186,11 +186,11 @@ async function playtestPhase(mod, attempt) {
     } finally {
       clearInterval(poll);
     }
-    const verdict = game.readVerdict(verdictFile);
+    const verdict = game.readVerdict(verdictFile, mod.testPlan);
     if (verdict.finished) return verdict;
     feed(mod, { attempt: attempt.n, role: 'benana', kind: 'note', text: run === 1 ? 'The playtester stopped before finishing; running it again.' : 'The playtester did not finish the test plan.' });
   }
-  return game.readVerdict(verdictFile);
+  return game.readVerdict(verdictFile, mod.testPlan);
 }
 
 async function runAttempt(mod, n, previous) {
