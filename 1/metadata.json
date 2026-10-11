@@ -1,0 +1,53 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4N96PMQ8CQVMP0F01WQJVZA",
+  "session_id": "6290da38-b4fc-44fd-97de-9d9c10b0e3f3",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-11T10:47:52.7222771Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "docs/hackathon/CONTRACTS.md",
+    "electron/lib/game/index.cjs",
+    "electron/lib/game/server.cjs",
+    "electron/lib/studio/index.cjs",
+    "src/components/game/GamePane.jsx",
+    "src/components/game/game.css"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-5-5",
+  "turn_id": "88d6b39adcb2",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 32,
+    "cache_creation_tokens": 110153,
+    "cache_read_tokens": 1425265,
+    "output_tokens": 24628,
+    "api_call_count": 16
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-11T10:47:52.6608768Z",
+    "agent_lines": 140,
+    "agent_removed": 81,
+    "human_added": 1472,
+    "human_modified": 1327,
+    "human_removed": 0,
+    "total_committed": 2939,
+    "total_lines_changed": 3372,
+    "agent_percentage": 6.553973902728351,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}

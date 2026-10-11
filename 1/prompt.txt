@@ -1,0 +1,12 @@
+when a user opens a chat, the live view should show the world according to that, and give user the world to reset the world to beginning and press run mod to show user what the mod can do [Image: image.png; ref=image_22a5c772-ae67-41c3-92f3-1d7ddb4288a8]  this world carried to my other mod chat
+
+<t3_context version="1">
+<context kind="image" id="image_22a5c772-ae67-41c3-92f3-1d7ddb4288a8">
+name: image.png
+mimeType: image/png
+sizeBytes: 321457
+attachmentId: 66ed404c-a3d1-4913-836d-8d8c643c2b3e-f9316227-f178-4596-a410-b1b91be51cca
+</context>
+</t3_context>
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\66ed404c-a3d1-4913-836d-8d8c643c2b3e-f9316227-f178-4596-a410-b1b91be51cca.png]
