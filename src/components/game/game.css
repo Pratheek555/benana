@@ -122,7 +122,7 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  background: #08090a;
+  background: #000;
 }
 .game-view iframe {
   display: block;

@@ -1,4 +1,5 @@
 import React from "react";
+import Split from "./Split.jsx";
 import { call, on } from "../../api.js";
 import TestPanel, { useNow, useStickyScroll } from "./TestPanel.jsx";
 import { HandoffCard, TraceChip, TraceDrawer } from "./traces.jsx";
@@ -45,7 +46,7 @@ const REVISION_DETAIL = {
 export default function BuildPage({ mod, running, lessons, onCreated, onWatch, onNew, onOpenCode }) {
   const [prompt, setPrompt] = React.useState("");
   return (
-    <div className="build-chat">
+    <Split id="build" className="build-chat" initial={[0.42, 0.58]} min={340}>
       <section className="chat">
         <ChatHead mod={mod} onNew={onNew} onOpenCode={onOpenCode} />
         {mod ? <Thread mod={mod} onOpenCode={onOpenCode} /> : <Welcome lessons={lessons} onPick={setPrompt} />}
@@ -59,7 +60,7 @@ export default function BuildPage({ mod, running, lessons, onCreated, onWatch, o
         />
       </section>
       <TestPanel mod={mod} building={Boolean(running)} />
-    </div>
+    </Split>
   );
 }
 

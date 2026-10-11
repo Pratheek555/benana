@@ -169,7 +169,7 @@
 .studio .neatlogs-page .nl-brief { position: relative; max-width: min(640px, 88%); padding: 14px 17px 13px; border: 1px solid var(--line-strong); border-radius: 14px 14px 4px 14px; background: #1b1c21; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
 .studio .neatlogs-page .nl-brief .prose { font-size: 12.5px; line-height: 1.6; }
 .studio .neatlogs-page .nl-brief.clamped { max-height: 196px; overflow: hidden; }
-.studio .neatlogs-page .nl-brief.clamped::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 70px; background: linear-gradient(rgba(27,28,33,0), #1b1c21 72%); pointer-events: none; }
+.studio .neatlogs-page .nl-brief.clamped::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 84px; background: linear-gradient(rgba(27,28,33,0), #1b1c21 58%); pointer-events: none; }
 .studio .neatlogs-page .nl-more { margin-top: 9px; padding: 0; border: 0; background: none; color: var(--nl-tool); font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
 .studio .neatlogs-page .nl-more:hover { color: #b3b8ff; }
 .studio .neatlogs-page .nl-brief.clamped .nl-more { position: absolute; bottom: 11px; left: 17px; z-index: 1; margin: 0; }
@@ -215,7 +215,7 @@
 .studio .neatlogs-page .nl-span-main:hover { background: rgba(255,255,255,.035); }
 .studio .neatlogs-page .nl-span.open > .nl-span-row .nl-span-main { background: rgba(255,255,255,.05); }
 .studio .neatlogs-page .nl-span-icon { display: grid; flex: none; place-items: center; color: var(--type); }
-.studio .neatlogs-page .nl-span-name { min-width: 0; color: #d9d8d2; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio .neatlogs-page .nl-span-name { min-width: 0; color: #d9d8d2; font-family: var(--sans); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studio .neatlogs-page .nl-span.workflow .nl-span-name { color: var(--text); font-weight: 560; }
 .studio .neatlogs-page .nl-span.failed .nl-span-name { color: var(--bad-text); }
 .studio .neatlogs-page .nl-ns { color: var(--text-3); opacity: .75; }
