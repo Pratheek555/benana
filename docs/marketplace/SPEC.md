@@ -78,13 +78,21 @@ We use the CLI and only read metadata by default.
   **(verify)** that the report is byte-identical on two machines for the same commit.
 - **Provenance per version:** the checkpoints reachable from the version's commit form that version's history. Only checkpoints linked to published versions are shown.
 
-## 7. Transcript and privacy rules
+## 7. Transcript and privacy rules (tested 2026-10-11)
 
-- Default: transcripts are not published. `push_sessions` stays off for the repo.
-- Opt-in: the creator turns on session pushing for the repo at publish time, with a warning that transcripts become visible to anyone who can read the checkpoint remote.
-- Publishing a version never pushes transcripts for checkpoints outside that version.
-- A separate checkpoint remote (`configure --checkpoint-remote`) may be used so private work and published work stay apart. **(verify)** that publishing can push only the checkpoints for public versions.
-- Moderators read metadata first. A transcript is read only inside an open report case, and the creator is notified when that happens.
+Findings from a throwaway repo with two real Claude sessions:
+
+- **Session pushing is on by default.** A plain `git push` sent every checkpoint ref (`pre-push` hook). `configure --skip-push-sessions` stops future pushes, but refs already on a remote stay there, and local refs are kept.
+- **Single-checkpoint publishing works.** One ref was pushed to a second remote with an explicit refspec. The pre-push hook must be bypassed (`--no-verify`) for that, since the hook would otherwise push everything.
+- **Redaction did not remove a planted secret.** A fake AWS access key appeared 7 times in the raw transcript, and once each in `checkpoint explain` and `--full`. The metadata view (`--json`) did not show it. Entire's "secrets are redacted" claim does not hold for this pattern.
+
+Rules that follow:
+
+- **Transcripts are not published at launch.** The opt-in in the earlier draft is removed. A transcript may contain secrets, and we have no redaction we can rely on.
+- **Only metadata is published:** request, changed files, commit message, outcome, model, token counts and session count (`checkpoint explain --json`).
+- **Publishing pushes only the checkpoint refs for public versions**, using explicit refspecs with the hook bypassed. Session pushing stays off for the repo.
+- **Before a checkpoint ref is pushed, scan its transcript and metadata for secrets** with our own scanner. Block the publish if anything matches.
+- **Moderators read metadata only.** Transcript access is not part of the moderation process at launch.
 
 ## 8. Safety
 
@@ -101,11 +109,10 @@ We use the CLI and only read metadata by default.
 
 ## 10. Open items (verify before build)
 
-1. Session pushing can be turned off after publish without losing local history. (The flag exists; toggling after publish is untested.)
-2. Publishing can push only the checkpoints for public versions. (Untested. Depends on how checkpoints are stored as refs.)
-3. A moderator can read one checkpoint remote without access to the whole repo. (`repo grant` exists; untested.)
-4. `graph index --report` produces byte-identical reports on two machines for the same commit. (Same machine, two runs: identical. Two machines: untested.)
-5. Redaction of secrets in transcripts is thorough enough to publish opt-in transcripts. (Not verified.)
+1. Turning session pushing off does not remove refs already on a remote. (Tested: they stay.) Decide how to retract a pushed checkpoint, if we ever need to.
+2. A moderator can read one checkpoint remote without access to the whole repo. (`repo grant` exists; untested.)
+3. `graph index --report` produces byte-identical reports on two machines for the same commit. (Same machine: identical. Two machines: untested.)
+4. Our secret scanner catches everything Entire's redaction misses, in both transcripts and metadata. (Not built yet.)
 
 ## 11. Graph decisions
 
