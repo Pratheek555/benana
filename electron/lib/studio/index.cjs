@@ -618,6 +618,7 @@ function handlers(deps) {
       return mod?.repoDir ? repo.checkpoints(mod.repoDir) : { ok: false, items: [], error: 'No repository yet.' };
     },
     'studio:files': ({ id }) => repo.files(repoOf(id)),
+    'studio:checkpoint': ({ id, checkpointId }) => repo.checkpoint(repoOf(id), checkpointId),
     'studio:file': ({ id, path: rel }) => repo.readFile(repoOf(id), rel),
     'studio:diff': ({ id, sha }) => repo.diff(repoOf(id), sha),
     'studio:lessons': () => lessons(),

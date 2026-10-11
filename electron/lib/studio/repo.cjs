@@ -99,6 +99,14 @@ async function checkpoints(dir) {
   try { return { ok: true, items: JSON.parse(res.out) }; } catch { return { ok: false, items: [], error: 'Unrecognized checkpoint output.' }; }
 }
 
+// One checkpoint's metadata (agent, model, tokens, files). Never the transcript.
+async function checkpoint(dir, id) {
+  if (!/^[0-9A-Z]{26}$/.test(id || '')) throw new Error('Unknown checkpoint.');
+  const res = await exec('entire', ['checkpoint', 'explain', id, '--json'], dir, { timeoutMs: 30000 });
+  if (!res.ok) return { ok: false, error: (res.err || res.out).trim().slice(0, 400) || 'Entire could not read this checkpoint.' };
+  try { return { ok: true, ...JSON.parse(res.out) }; } catch { return { ok: false, error: 'Unrecognized checkpoint output.' }; }
+}
+
 async function history(dir) {
   return (await git(dir, 'log', '--format=%h %s%n%(trailers:key=Entire-Checkpoint)', '-20')).out.trim();
 }
@@ -130,4 +138,4 @@ async function build(dir, name) {
   return { ok, jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000), assets };
 }
 
-module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, history, files, readFile, diff, build };
+module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, history, files, readFile, diff, build };
