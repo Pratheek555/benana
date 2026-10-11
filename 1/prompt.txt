@@ -1,0 +1,1 @@
+update the readme with proper images of the application explaining what we do instead of a simple install guide
