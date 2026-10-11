@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4N96PMQ8CQVMP0F01WQJVZA",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/hackathon/CONTRACTS.md",
+    "electron/lib/game/index.cjs",
+    "electron/lib/game/server.cjs",
+    "electron/lib/studio/index.cjs",
+    "electron/lib/studio/prompts.cjs",
+    "electron/main.cjs",
+    "src/components/game/GamePane.jsx",
+    "src/components/game/game.css",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/InsightsPage.jsx",
+    "src/components/studio/shared.jsx",
+    "src/demo/bridge.js"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 124,
+    "cache_creation_tokens": 192895,
+    "cache_read_tokens": 8757387,
+    "output_tokens": 76168,
+    "api_call_count": 62
+  }
+}
