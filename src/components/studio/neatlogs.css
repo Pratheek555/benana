@@ -34,7 +34,7 @@
 .studio .neatlogs-page .nl-kpis strong { display: block; margin: 6px 0 3px; color: var(--text); font-size: 22px; font-weight: 570; letter-spacing: -.025em; }
 .studio .neatlogs-page .nl-kpis small { color: var(--text-3); font-size: 11px; }
 
-.studio .neatlogs-page :is(.nl-browser, .nl-rail, .nl-trace-view) { min-width: 0; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); overflow: hidden; }
+.studio .neatlogs-page :is(.nl-browser, .nl-trace-view) { min-width: 0; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); overflow: hidden; }
 .studio .neatlogs-page .nl-browser-head { justify-content: space-between; gap: 16px; min-height: 57px; padding: 0 14px 0 17px; border-bottom: 1px solid var(--line); }
 .studio .neatlogs-page .nl-browser-head > div { gap: 8px; }
 .studio .neatlogs-page .nl-browser-head h2 { font-size: 13.5px; font-weight: 600; }
@@ -123,24 +123,28 @@
 .studio .neatlogs-page.inspecting { display: flex; flex-direction: column; gap: 0; padding-bottom: 22px; overflow: hidden; }
 .studio .neatlogs-page.inspecting .nl-header { margin-bottom: 16px; }
 .studio .neatlogs-page.inspecting .nl-connection-detail { margin-top: -9px; margin-bottom: 14px; }
-.studio .neatlogs-page.inspecting .nl-focus { display: grid; flex: 1 1 0; grid-template-columns: 264px minmax(0,1fr); gap: 14px; min-height: 0; }
+.studio .neatlogs-page.inspecting .nl-focus { display: grid; flex: 1 1 0; grid-template-columns: 236px minmax(0,1fr); gap: 20px; min-height: 0; }
 
-.studio .neatlogs-page .nl-rail { display: flex; flex-direction: column; min-height: 0; }
-.studio .neatlogs-page .nl-rail-head { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 12px 0 8px; border-bottom: 1px solid var(--line); }
-.studio .neatlogs-page .nl-rail-head > span { display: grid; place-items: center; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--raised); color: var(--text-3); font-size: 10px; }
-.studio .neatlogs-page .nl-back { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: 12px; font-weight: 520; }
-.studio .neatlogs-page .nl-back:hover { background: var(--hover); color: var(--text); }
-.studio .neatlogs-page .nl-rail-search { padding: 10px; border-bottom: 1px solid var(--line); }
+.studio .neatlogs-page .nl-rail { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.studio .neatlogs-page .nl-back { display: inline-flex; align-self: flex-start; align-items: center; gap: 7px; height: 28px; margin: 0 0 8px -6px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-3); font-size: 12px; }
+.studio .neatlogs-page .nl-back:hover { background: rgba(255,255,255,.04); color: var(--text); }
+.studio .neatlogs-page .nl-rail-search { margin-bottom: 6px; }
 .studio .neatlogs-page .nl-rail-search .nl-search { max-width: none; }
-.studio .neatlogs-page .nl-rail-list { flex: 1; min-height: 0; margin: 0; padding: 6px; overflow-y: auto; list-style: none; }
-.studio .neatlogs-page .nl-rail-list button { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text-3); font-size: 10.5px; text-align: left; }
-.studio .neatlogs-page .nl-rail-list button:hover { background: rgba(255,255,255,.03); }
-.studio .neatlogs-page .nl-rail-list button.active { background: var(--nl-cyan-soft); box-shadow: 2px 0 0 var(--nl-cyan) inset; }
-.studio .neatlogs-page .nl-rail-name { display: flex; justify-content: space-between; gap: 8px; color: var(--text); font-size: 12px; font-weight: 540; }
-.studio .neatlogs-page .nl-rail-name time { flex: none; color: var(--text-3); font-family: var(--mono); font-size: 10px; font-weight: 400; }
-.studio .neatlogs-page .nl-rail-meta { display: flex; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; }
-.studio .neatlogs-page .nl-rail-empty { padding: 16px 10px; color: var(--text-3); font-size: 11.5px; line-height: 1.6; }
-.studio .neatlogs-page .nl-rail-empty button { padding: 0; border: 0; background: none; color: var(--nl-cyan); }
+.studio .neatlogs-page .nl-rail-search .nl-search input { border-color: transparent; background: rgba(255,255,255,.035); }
+.studio .neatlogs-page .nl-rail-search .nl-search input:focus { border-color: var(--line-strong); }
+.studio .neatlogs-page .nl-rail-list { flex: 1; min-height: 0; margin-right: -6px; padding-right: 6px; overflow-y: auto; }
+.studio .neatlogs-page .nl-rail-list section { padding-top: 14px; }
+.studio .neatlogs-page .nl-rail-list h3 { margin: 0 0 3px; padding: 0 8px; color: var(--text-3); font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio .neatlogs-page .nl-rail-list ol { margin: 0; padding: 0; list-style: none; }
+.studio .neatlogs-page .nl-rail-list button { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); font-size: 12.5px; text-align: left; }
+.studio .neatlogs-page .nl-rail-list button:hover { background: rgba(255,255,255,.035); color: var(--text); }
+.studio .neatlogs-page .nl-rail-list button.active { background: rgba(255,255,255,.07); color: var(--text); }
+.studio .neatlogs-page .nl-rail-list button > span { display: flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.studio .neatlogs-page .nl-rail-list small { color: var(--text-3); font-size: 11px; }
+.studio .neatlogs-page .nl-rail-list button.failed > span::after { content: ""; align-self: center; width: 5px; height: 5px; border-radius: 50%; background: var(--bad); }
+.studio .neatlogs-page .nl-rail-list time { flex: none; color: var(--text-3); font-family: var(--mono); font-size: 10.5px; }
+.studio .neatlogs-page .nl-rail-empty { padding: 14px 8px; color: var(--text-3); font-size: 11.5px; line-height: 1.6; }
+.studio .neatlogs-page .nl-rail-empty button { padding: 0; border: 0; background: none; color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 
 .studio .neatlogs-page .nl-trace-view { display: flex; flex-direction: column; min-height: 0; }
 .studio .neatlogs-page .nl-tv-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 18px 14px 22px; border-bottom: 1px solid var(--line); }

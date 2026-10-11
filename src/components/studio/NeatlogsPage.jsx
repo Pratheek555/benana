@@ -353,6 +353,13 @@ export default function NeatlogsPage({ mods, onOpenMod }) {
     const haystack = [session.mod.name, ROLE[session.role] || session.role, session.model, session.sessionId, session.attemptN ? `attempt ${session.attemptN}` : "spec"].filter(Boolean).join(" ").toLowerCase();
     return (!query.trim() || haystack.includes(query.trim().toLowerCase())) && (role === "all" || session.role === role) && (traceFilter === "all" || status === traceFilter);
   });
+  // The rail lists each mod once, with its sessions in run order beneath it.
+  const railGroups = [...filtered.reduce((groups, session) => {
+    if (!groups.has(session.mod.id)) groups.set(session.mod.id, { mod: session.mod, sessions: [] });
+    groups.get(session.mod.id).sessions.unshift(session);
+    return groups;
+  }, new Map()).values()];
+  const railOrder = railGroups.flatMap((group) => group.sessions);
 
   // Esc closes the trace; arrow keys (or j/k) step through the session rail.
   React.useEffect(() => {
@@ -362,12 +369,12 @@ export default function NeatlogsPage({ mods, onOpenMod }) {
       if (event.key === "Escape") { setSelectedKey(null); return; }
       const step = event.key === "ArrowDown" || event.key === "j" ? 1 : event.key === "ArrowUp" || event.key === "k" ? -1 : 0;
       if (!step) return;
-      const next = filtered[filtered.findIndex((session) => session.key === selected.key) + step];
+      const next = railOrder[railOrder.findIndex((session) => session.key === selected.key) + step];
       if (next) { event.preventDefault(); setSelectedKey(next.key); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, filtered]);
+  }, [selected, railOrder]);
 
   React.useEffect(() => {
     railRef.current?.querySelector(".active")?.scrollIntoView({ block: "nearest" });
@@ -406,18 +413,22 @@ export default function NeatlogsPage({ mods, onOpenMod }) {
       {selected ? (
         <div className="nl-focus">
           <aside className="nl-rail" aria-label="Agent sessions">
-            <div className="nl-rail-head"><button className="nl-back" onClick={() => setSelectedKey(null)}><Icon name="back" size={14} />All sessions</button><span>{filtered.length}</span></div>
+            <button className="nl-back" onClick={() => setSelectedKey(null)}><Icon name="back" size={14} />Sessions</button>
             <div className="nl-rail-search">{search}</div>
-            <ol className="nl-rail-list" ref={railRef}>
-              {filtered.map((session) => {
-                const status = statusFor(session, lookups[session.key] || IDLE);
-                return <li key={session.key}><button className={session.key === selected.key ? "active" : ""} aria-current={session.key === selected.key} onClick={() => setSelectedKey(session.key)}>
-                  <span className="nl-rail-name">{session.mod.name}<time>{fmtDuration(sessionMs(session)) || (session.endedAt ? "" : "Running")}</time></span>
-                  <span className="nl-rail-meta"><span className={`nl-trace-status ${status.key}`} title={status.label}><i /></span>{sessionLabel(session)}</span>
-                </button></li>;
-              })}
-              {!filtered.length && <li className="nl-rail-empty">No sessions match. <button onClick={clearFilters}>Clear filters</button></li>}
-            </ol>
+            <div className="nl-rail-list" ref={railRef}>
+              {railGroups.map(({ mod, sessions: modSessions }) => (
+                <section key={mod.id}>
+                  <h3>{mod.name}</h3>
+                  <ol>{modSessions.map((session) => (
+                    <li key={session.key}><button className={`${session.key === selected.key ? "active" : ""}${session.ok === false ? " failed" : ""}`} aria-current={session.key === selected.key} onClick={() => setSelectedKey(session.key)} title={session.ok === false ? "Session failed" : undefined}>
+                      <span>{ROLE[session.role] || session.role}{session.attemptN && <small>{session.attemptN}</small>}</span>
+                      <time>{fmtDuration(sessionMs(session)) || (session.endedAt ? "" : "Running")}</time>
+                    </button></li>
+                  ))}</ol>
+                </section>
+              ))}
+              {!filtered.length && <p className="nl-rail-empty">No sessions match. <button onClick={clearFilters}>Clear filters</button></p>}
+            </div>
           </aside>
           <TraceView session={selected} lookup={lookups[selected.key] || IDLE} configured={configured} onRetry={() => check(selected)} onClose={() => setSelectedKey(null)} onOpenMod={onOpenMod} />
         </div>
