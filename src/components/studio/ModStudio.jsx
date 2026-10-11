@@ -7,7 +7,7 @@ import InsightsPage from "./InsightsPage.jsx";
 import NeatlogsPage from "./NeatlogsPage.jsx";
 import EntirePage from "./EntirePage.jsx";
 import BenchPage from "./BenchPage.jsx";
-import { Icon } from "./shared.jsx";
+import { ErrorBoundary, Icon } from "./shared.jsx";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./studio.css";
@@ -276,6 +276,7 @@ export default function ModStudio({ onOpenWorkspace }) {
       </nav>
 
       <main className="studio-main">
+        <ErrorBoundary key={page}>
         <header className="context-bar">
           <div className="breadcrumb"><span>Benana</span><i>/</i><strong>{currentPage?.label}</strong></div>
           <div className="context-state">
@@ -306,6 +307,7 @@ export default function ModStudio({ onOpenWorkspace }) {
         {page === "insights" && <InsightsPage mods={mods} lessons={lessons} />}
         {page === "neatlogs" && <NeatlogsPage mods={mods} onOpenMod={openMod} />}
         {page === "entire" && <EntirePage mods={mods} onOpenMod={openMod} />}
+        </ErrorBoundary>
       </main>
     </div>
   );
