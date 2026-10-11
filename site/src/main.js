@@ -2,6 +2,7 @@ import { inject } from '@vercel/analytics';
 
 inject();
 import { createWorld } from './world/index.js';
+import { createDust } from './dust.js';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const scenes = [...document.querySelectorAll('.scene')];
@@ -159,15 +160,38 @@ themeBtn.addEventListener('click', () => {
 for (const ev of ['copy', 'cut', 'selectstart', 'dragstart', 'contextmenu']) document.addEventListener(ev, (e) => e.preventDefault());
 document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && ['c', 'x', 'a', 's'].includes(e.key.toLowerCase())) e.preventDefault(); });
 
+// Copy breaks into dust and re-forms from it between scenes (falls back to CSS fades).
+const dust = preview ? null : createDust({ reducedMotion });
+if (dust) document.body.classList.add('dust-mode');
+
+function swapScenes(i, prev) {
+  if (!dust) {
+    scenes.forEach((s, k) => {
+      s.classList.toggle('on', k === i);
+      s.classList.toggle('out', k === prev);
+    });
+    if (prev >= 0) setTimeout(() => { if (active !== prev) scenes[prev].classList.remove('out'); }, 900);
+    return;
+  }
+  dust.flush();
+  if (prev >= 0) {
+    dust.breakApart(scenes[prev], { duration: 1300 });
+    scenes[prev].classList.remove('on');
+  }
+  scenes.forEach((s, k) => { if (k !== i) s.classList.remove('on'); });
+  const fx = dust.assemble(scenes[i], {
+    duration: 1350,
+    delay: prev >= 0 ? 220 : 0,
+    done: () => { if (active === i) scenes[i].classList.add('on'); },
+  });
+  if (!fx) scenes[i].classList.add('on');
+}
+
 function show(i) {
   if (i === active) return;
   const prev = active;
   active = i;
-  scenes.forEach((s, k) => {
-    s.classList.toggle('on', k === i);
-    s.classList.toggle('out', k === prev);
-  });
-  if (prev >= 0) setTimeout(() => { if (active !== prev) scenes[prev].classList.remove('out'); }, 900);
+  swapScenes(i, prev);
   ticks.forEach((t, k) => t.classList.toggle('on', k === i));
   document.body.dataset.scene = String(i);
   world?.setShot(i);

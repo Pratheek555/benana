@@ -122,7 +122,8 @@ img, svg { -webkit-user-drag: none; user-drag: none; }
 }
 
 /* ---------- split-text reveal (masked rise, blur-in, per-char stagger) ---------- */
-.w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0.06em 0.02em 0.14em; margin: -0.06em -0.02em -0.14em; }
+/* Room below the baseline for descenders (g, y, p) inside the reveal mask. */
+.w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0.06em 0.04em 0.3em; margin: -0.06em -0.04em -0.3em; }
 .c { display: inline-block; will-change: transform, filter, opacity; transform: translate3d(0, 108%, 0) rotate(8deg); opacity: 0; filter: blur(10px); transform-origin: 0% 100%; }
 .sp { display: inline-block; width: 0.26em; }
 .scene.on .c {
@@ -187,3 +188,12 @@ body.loading .loader { opacity: 1; transition-delay: 0.35s; }
 .wordmark, .headline, .sub, .kicker, .brand, .link, .login { transition: text-shadow 0.25s ease, color 0.25s ease; }
 .wordmark:hover, .headline:hover { text-shadow: 0 0 24px rgba(255, 214, 10, 0.55), 0 0 60px rgba(255, 214, 10, 0.25); }
 .sub:hover, .kicker:hover, .brand:hover, .link:hover, .login:hover { text-shadow: 0 0 14px rgba(255, 214, 10, 0.6); }
+
+/* ---------- dust mode: text is revealed by the particle layer (dust.js) ---------- */
+.dust { position: fixed; inset: 0; z-index: 6; width: 100vw; height: 100vh; pointer-events: none; }
+.dust-mode .w { overflow: visible; padding: 0; margin: 0; vertical-align: baseline; }
+.dust-mode .c, .dust-mode [data-fade] { transform: none !important; filter: none !important; opacity: 1; transition: none !important; }
+.dust-mode .scene { visibility: hidden; }
+.dust-mode .scene.on { visibility: visible; }
+.dust-mode .scene.on .wordmark, .dust-mode .scene.on .headline, .dust-mode .scene.on .sub, .dust-mode .scene.on .kicker { animation: dust-settle 0.35s ease-out; }
+@keyframes dust-settle { from { opacity: 0.6; } to { opacity: 1; } }
