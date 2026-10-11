@@ -1,0 +1,112 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4NAGXRXYY93CK83FQECB5K9",
+  "session_id": "58893bc4-adfc-4157-b2f9-af9ca9fb54a4",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-11T11:10:47.5928874Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "electron/lib/neatlogs.cjs",
+    "electron/lib/studio/index.cjs",
+    "electron/lib/studio/prompts.cjs",
+    "electron/lib/studio/repo.cjs",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/NeatlogsPage.jsx",
+    "src/components/studio/TestPanel.jsx",
+    "src/components/studio/studio.css",
+    "tests/runtime.test.cjs",
+    "tests/studio-turns.test.cjs"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "f8144e18d230",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 184,
+    "cache_creation_tokens": 154747,
+    "cache_read_tokens": 11169849,
+    "output_tokens": 61418,
+    "api_call_count": 92
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01VV12wqNx2wnLqsUEE3go8r",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "run"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "f8144e18d230",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 299,
+        "end": 300,
+        "entry_ids": [
+          "238ff630-8b2d-4bf0-a09e-953d07c3a7f4"
+        ],
+        "tool_use_id": "toolu_01VV12wqNx2wnLqsUEE3go8r"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01VV12wqNx2wnLqsUEE3go8r"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: run",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-11T11:10:47.3853968Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 332,
+    "human_removed": 3040,
+    "total_committed": 0,
+    "total_lines_changed": 3443,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 3847,
+      "user_lines_removed": 3210,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "electron/lib/neatlogs.cjs": 46,
+        "electron/lib/studio/index.cjs": 44,
+        "electron/lib/studio/prompts.cjs": 161,
+        "electron/lib/studio/repo.cjs": 10,
+        "src/components/studio/BuildPage.jsx": 24,
+        "src/components/studio/TestPanel.jsx": 27,
+        "src/components/studio/studio.css": 3219,
+        "src/components/studio/traces.jsx": 289,
+        "tests/runtime.test.cjs": 26,
+        "tests/studio-turns.test.cjs": 1
+      },
+      "user_removed_per_file": {
+        "electron/lib/neatlogs.cjs": 4,
+        "electron/lib/studio/index.cjs": 12,
+        "electron/lib/studio/prompts.cjs": 161,
+        "electron/lib/studio/repo.cjs": 8,
+        "src/components/studio/BuildPage.jsx": 3,
+        "src/components/studio/TestPanel.jsx": 82,
+        "src/components/studio/studio.css": 2940
+      }
+    }
+  ]
+}
