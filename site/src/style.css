@@ -27,6 +27,9 @@ body { margin: 0; color: var(--ink); background: var(--bg); font-family: var(--s
     linear-gradient(180deg, rgba(0, 0, 0, 0.32) 0%, rgba(0, 0, 0, 0) 22%, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.38) 100%);
   transition: background 1.2s var(--ease-out);
 }
+:root[data-theme='dark'] .veil { background:
+    radial-gradient(110% 80% at 50% 55%, rgba(0, 0, 0, 0) 35%, rgba(20, 0, 0, 0.55) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0) 24%, rgba(0, 0, 0, 0) 60%, rgba(10, 0, 0, 0.5) 100%); }
 body[data-scene]:not([data-scene='0']) .veil { background:
     radial-gradient(90% 70% at 50% 50%, rgba(0, 0, 0, 0.38) 0%, rgba(0, 0, 0, 0.08) 60%, rgba(0, 0, 0, 0.45) 100%),
     linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0) 22%); }
@@ -54,16 +57,27 @@ body[data-scene]:not([data-scene='0']) .veil { background:
   opacity: 0; transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-out); pointer-events: none;
 }
 .link[data-soon]:hover::after { opacity: 1; transform: translate(-50%, 0); }
-.login { justify-self: end; color: var(--ink); }
-
-/* ---------- glow on hover (all text) ---------- */
-.glow { transition: color 0.35s var(--ease-out), text-shadow 0.5s var(--ease-out); }
-.glow:hover {
-  color: #fff;
-  text-shadow: 0 0 6px rgba(255, 255, 255, 0.85), 0 0 18px rgba(255, 228, 120, 0.75), 0 0 42px rgba(255, 214, 10, 0.55), 0 0 90px rgba(255, 214, 10, 0.35);
+.right { justify-self: end; display: flex; align-items: center; gap: clamp(14px, 1.8vw, 26px); }
+.login { color: var(--ink); }
+.theme {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px 0 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.28); background: rgba(10, 10, 10, 0.18); color: var(--ink);
+  font: 500 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+  -webkit-backdrop-filter: blur(10px) saturate(1.3); backdrop-filter: blur(10px) saturate(1.3);
+  transition: border-color 0.3s var(--ease-out), background 0.3s var(--ease-out);
 }
-.sub b { color: var(--ink); font-weight: 600; transition: color 0.35s var(--ease-out); }
-.sub:hover b { color: var(--bee); }
+.theme:hover { border-color: rgba(255, 255, 255, 0.55); background: rgba(10, 10, 10, 0.3); }
+.theme:focus-visible { outline: 2px solid var(--bee); outline-offset: 3px; }
+.theme svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.theme .i-moon { fill: currentColor; stroke: none; }
+:root[data-theme='light'] .theme .i-moon, :root[data-theme='dark'] .theme .i-sun { display: none; }
+body.switching::before { opacity: 1 !important; transition: opacity 0.45s var(--ease-out); }
+
+.sub b { color: var(--ink); font-weight: 600; }
+
+/* No text selection or copying anywhere on the page. */
+html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+img, svg { -webkit-user-drag: none; user-drag: none; }
 
 /* ---------- stage: scenes stack in place; scroll swaps them ---------- */
 .stage { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
@@ -85,7 +99,6 @@ body[data-scene]:not([data-scene='0']) .veil { background:
   padding-right: 0.02em;
 }
 .wordmark { filter: drop-shadow(0 10px 50px rgba(0, 0, 0, 0.35)); }
-.wordmark.glow:hover { text-shadow: none; filter: drop-shadow(0 0 18px rgba(255, 240, 180, 0.9)) drop-shadow(0 0 60px rgba(255, 214, 10, 0.6)); }
 .kicker { margin: clamp(10px, 1.6vw, 22px) 0 0; font: 500 clamp(11px, 0.95vw, 14px)/1 var(--mono); letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-dim); }
 
 .headline {
@@ -102,7 +115,6 @@ body[data-scene]:not([data-scene='0']) .veil { background:
   font: 500 13px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: #111;
   background: var(--bee); cursor: not-allowed; box-shadow: 0 10px 40px rgba(255, 214, 10, 0.25);
 }
-.cta.glow:hover { color: #111; text-shadow: none; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5), 0 0 30px rgba(255, 214, 10, 0.7), 0 0 80px rgba(255, 214, 10, 0.45); }
 
 /* ---------- split-text reveal (masked rise, blur-in, per-char stagger) ---------- */
 .w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0.06em 0.02em 0.14em; margin: -0.06em -0.02em -0.14em; }
@@ -118,19 +130,12 @@ body[data-scene]:not([data-scene='0']) .veil { background:
   transition: transform 0.55s var(--ease-in), opacity 0.45s var(--ease-in), filter 0.5s var(--ease-in);
   transition-delay: calc(var(--d, 0) * 0.25ms);
 }
-/* Once letters have landed, release the masks so hover glow isn't clipped to word boxes. */
-.scene.settled .w { overflow: visible; }
-/* Each char also glows on its own, so a hover sweeps light across a headline. */
-.headline .c { transition-property: transform, opacity, filter, text-shadow, color; }
-.scene.on .headline .c:hover { color: #fff; text-shadow: 0 0 10px #fff, 0 0 28px rgba(255, 214, 10, 0.9), 0 0 60px rgba(255, 214, 10, 0.6); transition-delay: 0ms; }
-
 [data-fade] { opacity: 0; transform: translate3d(0, 18px, 0); filter: blur(6px); }
 .scene.on [data-fade] {
   opacity: 1; transform: none; filter: blur(0);
-  transition: opacity 0.9s var(--ease-out), transform 1s var(--ease-out), filter 0.9s var(--ease-out), text-shadow 0.5s var(--ease-out), color 0.35s var(--ease-out), box-shadow 0.5s var(--ease-out);
+  transition: opacity 0.9s var(--ease-out), transform 1s var(--ease-out), filter 0.9s var(--ease-out);
   transition-delay: calc(var(--fd, 450) * 1ms);
 }
-.scene.on [data-fade]:hover { transition-delay: 0ms; }
 .scene.out [data-fade] { opacity: 0; transform: translate3d(0, -12px, 0); filter: blur(6px); transition: all 0.4s var(--ease-in); }
 
 /* ---------- progress rail + scroll hint ---------- */

@@ -1,4 +1,4 @@
-import { createWorld } from './world.js';
+import { createWorld } from './world/index.js';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const scenes = [...document.querySelectorAll('.scene')];
@@ -36,16 +36,58 @@ const rail = document.querySelector('.rail');
 scenes.forEach(() => { spacer.appendChild(document.createElement('div')); rail.appendChild(document.createElement('i')); });
 const ticks = [...rail.children];
 
+// ---------- world + light/dark (Overworld / Nether) ----------
+const root = document.documentElement;
+const preview = new URLSearchParams(location.search).has('preview');
+const themeBtn = document.querySelector('.theme');
+const themeLabel = document.querySelector('.theme-label');
 let world = null;
-try {
-  // ?preview renders at low resolution, for headless screenshots on CPU-only machines.
-  world = createWorld(document.getElementById('world'), { reducedMotion, preview: new URLSearchParams(location.search).has('preview') });
-} catch (e) {
-  // No WebGL: the text still works on the dark background.
-  console.warn('WebGL unavailable', e);
+
+function mountWorld(theme) {
+  // A fresh canvas per world: a WebGL context can't be cleanly handed to a second renderer.
+  const old = document.getElementById('world');
+  const canvas = document.createElement('canvas');
+  canvas.id = 'world';
+  canvas.setAttribute('aria-hidden', 'true');
+  old.replaceWith(canvas);
+  try {
+    world = createWorld(canvas, { theme, reducedMotion, preview });
+    world.setShot(Math.max(0, active));
+  } catch (e) {
+    world = null; // No WebGL: the copy still works on the dark background.
+    console.warn('WebGL unavailable', e);
+  }
 }
 
-let active = -1;
+function labelTheme(theme) {
+  themeLabel.textContent = theme === 'dark' ? 'nether' : 'overworld';
+  themeBtn.setAttribute('aria-label', theme === 'dark' ? 'switch to the overworld' : 'switch to the nether');
+}
+
+let switching = false;
+themeBtn.addEventListener('click', () => {
+  if (switching) return;
+  switching = true;
+  const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.body.classList.add('switching');
+  setTimeout(() => {
+    world?.dispose();
+    root.dataset.theme = next;
+    try { localStorage.setItem('benana-theme', next); } catch { /* private mode */ }
+    labelTheme(next);
+    // Let the fade paint before the (synchronous) world build.
+    requestAnimationFrame(() => setTimeout(() => {
+      mountWorld(next);
+      document.body.classList.remove('switching');
+      switching = false;
+    }, 30));
+  }, 480);
+});
+
+// ---------- no copying ----------
+for (const ev of ['copy', 'cut', 'selectstart', 'dragstart', 'contextmenu']) document.addEventListener(ev, (e) => e.preventDefault());
+document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && ['c', 'x', 'a', 's'].includes(e.key.toLowerCase())) e.preventDefault(); });
+
 function show(i) {
   if (i === active) return;
   const prev = active;
@@ -53,11 +95,7 @@ function show(i) {
   scenes.forEach((s, k) => {
     s.classList.toggle('on', k === i);
     s.classList.toggle('out', k === prev);
-    s.classList.remove('settled');
   });
-  // Masks stay on while letters rise in, then come off so glows can spread.
-  const landed = Math.max(0, ...[...scenes[i].querySelectorAll('.c')].map((c) => Number(c.style.getPropertyValue('--d')) || 0)) + 1100;
-  setTimeout(() => { if (active === i) scenes[i].classList.add('settled'); }, reducedMotion ? 0 : landed);
   if (prev >= 0) setTimeout(() => { if (active !== prev) scenes[prev].classList.remove('out'); }, 900);
   ticks.forEach((t, k) => t.classList.toggle('on', k === i));
   document.body.dataset.scene = String(i);
@@ -79,6 +117,10 @@ window.addEventListener('keydown', (e) => {
   const next = Math.max(0, Math.min(scenes.length - 1, active + step));
   window.scrollTo({ top: next * window.innerHeight, behavior: reducedMotion ? 'auto' : 'smooth' });
 });
+
+let active = -1;
+labelTheme(root.dataset.theme);
+mountWorld(root.dataset.theme);
 
 // Fade the world in from black, then reveal the wordmark.
 requestAnimationFrame(() => {
