@@ -1,3 +1,6 @@
+import { inject } from '@vercel/analytics';
+
+inject();
 import { createWorld } from './world/index.js';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
