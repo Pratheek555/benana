@@ -1,0 +1,3 @@
+I asked it to build a mod where create a mod which provides explosive arrows + cooldown, arrows explode on impact, with a per player 5s cooldown.
+
+now I don't think the agent in game tested this mod cleanly, he got no access to arrows nor shot anything, our simple mods like character accelerator works nice but once complicated mods are asked it fails
