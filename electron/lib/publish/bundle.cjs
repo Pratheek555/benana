@@ -12,6 +12,26 @@ const secrets = require('./secrets.cjs');
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
+// Before publishing, drop what readers don't need and what describes the creator's machine:
+// thinking-block signatures (opaque model data) and the agent's embedded system prompt
+// (local environment: memory paths, settings). The conversation itself is kept.
+const DROP_KEYS = new Set(['signature', 'systemPrompt']);
+function stripTranscript(text) {
+  const clean = (v) => {
+    if (Array.isArray(v)) return v.map(clean);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const [k, val] of Object.entries(v)) if (!DROP_KEYS.has(k)) out[k] = clean(val);
+      return out;
+    }
+    return v;
+  };
+  return String(text).split('\n').map((line) => {
+    if (!line.trim()) return line;
+    try { return JSON.stringify(clean(JSON.parse(line))); } catch { return line; }
+  }).join('\n');
+}
+
 function entire(args, cwd) {
   return new Promise((resolve) => {
     execFile(process.env.BENANA_ENTIRE || 'entire', args, { cwd, timeout: 180000, maxBuffer: 64 * 1024 * 1024 },
@@ -47,11 +67,12 @@ async function build({ repoDir, version, previous = null, jarPath, sessions = []
     const metaClean = sanitize(meta.out, identity);
     write(`checkpoints/${id}/metadata.json`, metaClean.text);
     const sessionIds = (m.sessions || []).map((s) => s.session_id);
-    const include = sessionIds.some((sid) => sessions.includes(sid));
+    // sessions: list of session IDs to publish transcripts for, or '*' for every session.
+    const include = sessions === '*' || sessionIds.some((sid) => sessions.includes(sid));
     if (include) {
       const t = await execute(['checkpoint', 'explain', id, '--transcript'], repoDir);
       if (!t.ok) throw new Error(`Could not read transcript for checkpoint ${id}`);
-      const clean = sanitize(t.out, identity);
+      const clean = sanitize(stripTranscript(t.out), identity);
       write(`checkpoints/${id}/transcript.jsonl`, clean.text);
       suspicious.push(...clean.suspicious.map((x) => ({ checkpointId: id, file: 'transcript.jsonl', ...x })));
     }
@@ -103,4 +124,4 @@ async function build({ repoDir, version, previous = null, jarPath, sessions = []
   return { ok: !blocked, manifest, outDir };
 }
 
-module.exports = { build, checkpointsIn };
+module.exports = { build, checkpointsIn, stripTranscript };
