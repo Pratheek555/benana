@@ -8,10 +8,12 @@ const RESTART_CODE = 75;
 let child = null;
 
 function run() {
+  const env = { ...process.env, BENANA_DEV: '1', BENANA_RESTARTABLE: '1' };
+  delete env.ELECTRON_RUN_AS_NODE;
   child = spawn(electron, ['.'], {
     cwd: path.resolve(__dirname, '..'),
     stdio: 'inherit',
-    env: { ...process.env, BENANA_DEV: '1', BENANA_RESTARTABLE: '1' },
+    env,
   });
   child.on('exit', (code) => {
     if (code === RESTART_CODE) {

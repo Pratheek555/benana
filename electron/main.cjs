@@ -217,12 +217,14 @@ const handlers = {
 };
 
 // Never build or playtest with a pipeline that no longer matches the code on disk.
-const createMod = handlers['studio:create'];
-handlers['studio:create'] = (payload) => {
-  const { stale, changed } = code.state();
-  if (stale) throw new Error(`Benana's code changed since launch (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ', …' : ''}). Restart Benana to load it, then build.`);
-  return createMod(payload);
-};
+for (const channel of ['studio:create', 'studio:revise']) {
+  const buildMod = handlers[channel];
+  handlers[channel] = (payload) => {
+    const { stale, changed } = code.state();
+    if (stale) throw new Error(`Benana's code changed since launch (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ', …' : ''}). Restart Benana to load it, then build.`);
+    return buildMod(payload);
+  };
+}
 
 for (const [channel, fn] of Object.entries(handlers)) {
   ipcMain.handle(channel, async (_e, payload) => {

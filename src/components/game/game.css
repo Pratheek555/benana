@@ -177,6 +177,35 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.game-demo {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(8, 9, 10, 0.82);
+  backdrop-filter: blur(6px);
+  color: #ececee;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.game-demo.error {
+  color: #ff9a9d;
+}
+.game-demo button {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
 .game-error {
   padding: 8px 14px;
   border-top: 1px solid rgba(229, 72, 77, 0.3);

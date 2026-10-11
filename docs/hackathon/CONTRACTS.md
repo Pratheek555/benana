@@ -84,12 +84,15 @@ await game.stop()
 await game.deployPlugin({ jarPath, emit })
 // Removes previously deployed studio jars, copies jarPath, restarts, waits for the bot.
 // Deploys are queued, so a manual switch (IPC `studio:load { id }`) never overlaps a pipeline deploy.
+// Every deploy wipes the saved world, so each mod starts on untouched terrain.
 // -> { loaded: boolean, plugin: string|null, errors: string[], logTail: string[] }
+await game.resetWorld({ emit })     // wipes the world and restarts with the same mod installed (queued with deploys; IPC `studio:reset-world`)
 await game.runCommand('time set day')   // -> console output string
 
 game.mcpConfig({ runId, verdictFile, testPlanFile })   // -> object to write as the Claude `--mcp-config` file
 game.playtesterTools                                    // -> string[] for Claude `--allowedTools`
 game.playtestPrompt(testPlan)                           // -> prompt for the playtester session
+game.demoPrompt(mod) / game.demoTools                // showcase session behind the "Run mod" button (IPC `studio:demo { id }`); no verdict
 game.readVerdict(verdictFile, testPlan)                 // -> verdict (see above); unreported plan checks count as blocked
 game.mockVerdict(testPlan, attempt)                     // mock only: attempt 1 fails the first check, attempt 2+ passes
 ```

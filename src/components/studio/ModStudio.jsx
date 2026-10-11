@@ -1,5 +1,5 @@
 import React from "react";
-import { call, on, ago } from "../../api.js";
+import { call, on, ago, isDemo } from "../../api.js";
 import BuildPage from "./BuildPage.jsx";
 import ModsPage from "./ModsPage.jsx";
 import InsightsPage from "./InsightsPage.jsx";
@@ -11,11 +11,11 @@ import "@fontsource-variable/geist-mono";
 import "./studio.css";
 
 const PAGES = [
-  ["build", "Build"],
-  ["mods", "Mods"],
-  ["insights", "Insights"],
-  ["neatlogs", "Neatlogs"],
-  ["entire", "Entire"],
+  { id: "build", label: "Build" },
+  { id: "mods", label: "Mods" },
+  { id: "insights", label: "Insights" },
+  { id: "neatlogs", label: "Neatlogs" },
+  { id: "entire", label: "Entire" },
 ];
 
 const ICONS = {
@@ -145,6 +145,7 @@ export default function ModStudio({ onOpenWorkspace }) {
 
   const server = game?.server || "stopped";
   const bot = game?.bot === "online" ? "online" : "offline";
+  const currentPage = PAGES.find((item) => item.id === page);
 
   return (
     <div className="studio">
@@ -163,16 +164,18 @@ export default function ModStudio({ onOpenWorkspace }) {
         </button>
 
         <div className="nav">
-          {PAGES.map(([key, label]) => (
+          <span className="side-label nav-label">Workspace</span>
+          {PAGES.map(({ id, label }) => (
             <button
-              key={key}
-              className={`nav-item ${page === key ? "active" : ""}`}
-              onClick={() => setPage(key)}
-              aria-current={page === key ? "page" : undefined}
+              key={id}
+              className={`nav-item ${page === id ? "active" : ""}`}
+              onClick={() => setPage(id)}
+              aria-current={page === id ? "page" : undefined}
+              title={label}
             >
-              <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS[key]}</svg>
-              {label}
-              {key === "build" && running && <span className="live-dot" title="A mod is building" />}
+              <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS[id]}</svg>
+              <span className="nav-text">{label}</span>
+              {id === "build" && running && <span className="live-dot" title="A mod is building" />}
             </button>
           ))}
         </div>
@@ -209,12 +212,24 @@ export default function ModStudio({ onOpenWorkspace }) {
           </div>
           <button className="nav-item" onClick={onOpenWorkspace} title="Open the repository workspace">
             <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS.workspace}</svg>
-            Repository workspace
+            <span className="nav-text">Repository workspace</span>
           </button>
         </div>
       </nav>
 
       <main className="studio-main">
+        <header className="context-bar">
+          <div className="breadcrumb"><span>Benana</span><i>/</i><strong>{currentPage?.label}</strong></div>
+          <div className="context-state">
+            {isDemo && <span className="sample-badge">Sample data</span>}
+            <span className={`context-runtime ${server === "running" && bot === "online" ? "ok" : ""}`}>
+              <i />{server === "running" ? (bot === "online" ? "Runtime ready" : "Runtime online") : "Runtime stopped"}
+            </span>
+            <button className="context-workspace" onClick={onOpenWorkspace} title="Open the repository workspace" aria-label="Open the repository workspace">
+              <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS.workspace}</svg>
+            </button>
+          </div>
+        </header>
         <CodeBanner building={Boolean(running)} />
         {error && <div className="alert page-alert">{error}</div>}
         {page === "build" && (

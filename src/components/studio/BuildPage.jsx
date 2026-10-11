@@ -13,6 +13,8 @@ import {
   modSpend,
   phaseIndex,
   shortModel,
+  turnAttempts,
+  turnsOf,
 } from "./shared.jsx";
 
 const EXAMPLES = [
@@ -30,6 +32,13 @@ const STEP_DETAIL = {
   playtest: "An AI player runs every check in-game",
   fix: "Patch failures from the evidence, up to 3 attempts",
   done: "Report the result",
+};
+
+// A follow-up message changes the existing plugin, so the repository step is already done.
+const REVISION_DETAIL = {
+  spec: "Update the plugin spec and test plan for your change",
+  repo: "Already set up",
+  build: "Change the existing plugin",
 };
 
 export default function BuildPage({ mod, running, lessons, onCreated, onWatch, onNew, onOpenCode }) {
@@ -122,11 +131,22 @@ function Welcome({ lessons, onPick }) {
 }
 
 function Composer({ mod, running, prompt, setPrompt, onCreated, onWatch }) {
-  const [seed, setSeed] = React.useState(false);
+  const [seedOn, setSeed] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const ref = React.useRef(null);
+  // One chat is one mod: with a mod open, a message changes that mod. Only a new chat starts a new mod.
+  const seed = seedOn && !mod;
   const canStart = !busy && !running && (seed || prompt.trim().length >= 8);
+  const placeholder = running
+    ? mod?.running
+      ? "Building… ask for changes when it finishes"
+      : "One mod builds at a time. Describe the next one…"
+    : mod
+      ? mod.repoDir
+        ? `Ask for a change to ${mod.name}…`
+        : "Add detail and try building again…"
+      : "A golden sword that launches mobs into the sky…";
 
   React.useLayoutEffect(() => {
     const el = ref.current;
@@ -140,9 +160,14 @@ function Composer({ mod, running, prompt, setPrompt, onCreated, onWatch }) {
     setBusy(true);
     setError("");
     try {
-      const created = await call("studio:create", { prompt, seed });
-      setPrompt("");
-      onCreated(created.id);
+      if (mod) {
+        await call("studio:revise", { id: mod.id, prompt });
+        setPrompt("");
+      } else {
+        const created = await call("studio:create", { prompt, seed });
+        setPrompt("");
+        onCreated(created.id);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -171,10 +196,8 @@ function Composer({ mod, running, prompt, setPrompt, onCreated, onWatch }) {
           rows={1}
           value={prompt}
           disabled={seed}
-          aria-label="Describe a mod"
-          placeholder={
-            running ? "One mod builds at a time. Describe the next one…" : mod ? "Describe another mod…" : "A golden sword that launches mobs into the sky…"
-          }
+          aria-label={mod ? "Ask for a change" : "Describe a mod"}
+          placeholder={placeholder}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -184,13 +207,23 @@ function Composer({ mod, running, prompt, setPrompt, onCreated, onWatch }) {
           }}
         />
         <div className="chat-input-bar">
-          <label className="toggle" title="Attempt 1 starts from a labeled buggy fixture. The playtester and fixer still run for real.">
-            <input type="checkbox" checked={seed} onChange={(e) => setSeed(e.target.checked)} />
-            <span className="switch" />
-            Seeded bug
-          </label>
-          <span className="input-hint">{running ? "Waiting for the current build" : "Enter to build · Shift+Enter for a new line"}</span>
-          <button className="send" disabled={!canStart} onClick={start} aria-label="Build and playtest" title="Build and playtest">
+          {!mod && (
+            <label className="toggle" title="Attempt 1 starts from a labeled buggy fixture. The playtester and fixer still run for real.">
+              <input type="checkbox" checked={seedOn} onChange={(e) => setSeed(e.target.checked)} />
+              <span className="switch" />
+              Seeded bug
+            </label>
+          )}
+          <span className="input-hint">
+            {running ? "Waiting for the current build" : `Enter to ${mod?.repoDir ? "apply the change" : "build"} · Shift+Enter for a new line`}
+          </span>
+          <button
+            className="send"
+            disabled={!canStart}
+            onClick={start}
+            aria-label={mod?.repoDir ? "Apply the change and playtest" : "Build and playtest"}
+            title={mod?.repoDir ? "Apply the change and playtest" : "Build and playtest"}
+          >
             {busy ? <span className="spinner dark" /> : <Icon name="send" size={16} />}
           </button>
         </div>
@@ -206,8 +239,9 @@ function Dock({ mod }) {
   const verdict = latestVerdict(mod);
   const total = mod.testPlan?.checks.length || 0;
   const done = (verdict?.checks || []).length;
-  const attempt = mod.attempts.at(-1);
-  const since = attempt?.startedAt || mod.updatedAt || mod.createdAt;
+  // Scoped to the current turn, so a follow-up doesn't start by showing the previous turn's attempt and clock.
+  const attempt = turnAttempts(mod).at(-1);
+  const since = attempt?.startedAt || turnsOf(mod).at(-1).at || mod.updatedAt || mod.createdAt;
   const who =
     mod.phase === "playtest" ? "The AI player is testing in-game" : mod.phase === "fix" ? "The fixer is patching the plugin" : `${label} in progress`;
   return (
@@ -252,12 +286,21 @@ function useFeed(mod) {
   return feed;
 }
 
+// One chat holds every turn of a mod: the opening request, then each change the user asked for. `k` is the chat turn an item belongs to.
 function buildThread(mod, feed) {
-  const items = [{ type: "user", key: "user" }, { type: "plan", key: "plan" }];
+  const turns = turnsOf(mod);
+  const items = [{ type: "user", key: "user", k: 0, text: turns[0].prompt }, { type: "plan", key: "plan", k: 0 }];
   let turn = null;
+  let k = 0;
   feed.forEach((f, i) => {
     const key = `${f.at}-${i}`;
     if (f.kind === "session") return;
+    if (f.kind === "user") {
+      turn = null;
+      k = f.turn ?? k + 1;
+      items.push({ type: "user", key, k, text: f.text }, { type: "plan", key: `${key}-plan`, k });
+      return;
+    }
     if (f.role === "benana") {
       turn = null;
       if (f.kind === "phase") items.push({ type: "phase", key, f });
@@ -266,18 +309,18 @@ function buildThread(mod, feed) {
       return;
     }
     if (f.kind === "plan") {
-      items.push({ type: "testplan", key, bare: turn?.role === "spec" });
+      items.push({ type: "testplan", key, k, bare: turn?.role === "spec" });
       turn = null;
       return;
     }
     const id = `${f.role}:${f.attempt || 0}`;
     if (!turn || turn.id !== id) {
-      turn = { type: "turn", key, id, role: f.role, attempt: f.attempt || null, entries: [] };
+      turn = { type: "turn", key, id, k, role: f.role, attempt: f.attempt || null, entries: [] };
       items.push(turn);
     }
     turn.entries.push(f);
   });
-  if (!feed.some((f) => f.kind === "plan") && mod.testPlan) items.splice(2, 0, { type: "testplan", key: "tp" });
+  if (!feed.some((f) => f.kind === "plan") && mod.testPlan) items.splice(2, 0, { type: "testplan", key: "tp", k: 0 });
   if (!mod.running && ["passed", "failed", "stopped"].includes(mod.status)) items.push({ type: "result", key: "result" });
   return items;
 }
@@ -296,18 +339,22 @@ function Thread({ mod, onOpenCode }) {
             case "user":
               return (
                 <div key={it.key} className="msg-user">
-                  <div className="bubble">{mod.prompt}</div>
+                  <div className="bubble">{it.text}</div>
                 </div>
               );
             case "plan":
               return (
                 <Turn key={it.key} role="benana" title="Benana" meta="Plan">
-                  <p className="prose">I'll build this as a Paper plugin and test it with an AI player. This list updates as each step finishes.</p>
-                  <PipelineChecklist mod={mod} />
+                  <p className="prose">
+                    {turnsOf(mod)[it.k]?.revision
+                      ? "I'll update the spec, change the existing plugin, and have the AI player test it again. This list updates as each step finishes."
+                      : "I'll build this as a Paper plugin and test it with an AI player. This list updates as each step finishes."}
+                  </p>
+                  <PipelineChecklist mod={mod} k={it.k} />
                 </Turn>
               );
             case "testplan":
-              return <TestPlanChecklist key={it.key} mod={mod} bare={it.bare} />;
+              return <TestPlanChecklist key={it.key} mod={mod} k={it.k} bare={it.bare} />;
             case "phase":
               return <PhaseLine key={it.key} f={it.f} mod={mod} />;
             case "note":
@@ -360,14 +407,14 @@ function Turn({ role, title, meta, children }) {
   );
 }
 
-function sessionFor(mod, role, attemptN) {
-  if (role === "spec") return mod.sessions.find((s) => s.role === "spec");
+function sessionFor(mod, role, attemptN, k) {
+  if (role === "spec") return mod.sessions.find((s) => s.role === "spec" && (s.turn ?? 0) === k);
   const a = mod.attempts.find((x) => x.n === attemptN);
   return a?.sessions.filter((s) => s.role === role).at(-1);
 }
 
 function AgentTurn({ turn, mod, live }) {
-  const s = sessionFor(mod, turn.role, turn.attempt);
+  const s = sessionFor(mod, turn.role, turn.attempt, turn.k);
   const meta = [
     turn.attempt ? `attempt ${turn.attempt}` : null,
     s?.model ? shortModel(s.model) : null,
@@ -509,30 +556,37 @@ function PhaseLine({ f, mod }) {
   );
 }
 
-function PipelineChecklist({ mod }) {
-  const current = phaseIndex(mod);
-  const passed = mod.status === "passed";
-  const failed = ["failed", "stopped"].includes(mod.status);
-  const fixSkipped = passed && !mod.attempts.some((a) => a.role === "fixer");
+function PipelineChecklist({ mod, k }) {
+  const turns = turnsOf(mod);
+  const turn = turns[k];
+  // Only the latest turn follows the mod's live state; earlier turns keep the result and phase they ended in.
+  const live = k === turns.length - 1;
+  const status = live ? mod.status : turn.status;
+  const current = phaseIndex(live ? mod : { phase: turn.endPhase });
+  const passed = status === "passed";
+  const failed = ["failed", "stopped"].includes(status);
+  const fixSkipped = passed && !turnAttempts(mod, k).some((a) => a.role === "fixer");
+  const detail = turn.revision ? { ...STEP_DETAIL, ...REVISION_DETAIL } : STEP_DETAIL;
   const doneCount = PHASES.filter((_, i) => passed || i < current).length;
   return (
     <div className="checklist">
       <div className="checklist-head">
-        <strong>Build plan</strong>
+        <strong>{turn.revision ? "Change plan" : "Build plan"}</strong>
         <span className="meta">
           {doneCount}/{PHASES.length}
         </span>
       </div>
       <ul>
         {PHASES.map(([key, label], i) => {
-          let state = i < current ? "done" : i === current ? (failed ? "failed" : mod.running ? "active" : "done") : "todo";
+          let state = i < current ? "done" : i === current ? (failed ? "failed" : live && mod.running ? "active" : "done") : "todo";
           if (passed) state = "done";
           if (key === "fix" && fixSkipped) state = "skipped";
+          if (key === "repo" && turn.revision) state = "skipped";
           return (
             <li key={key} className={state}>
               <StepIcon state={state} />
               <span className="step-label">{label}</span>
-              <span className="step-detail">{state === "skipped" ? "Not needed, passed first try" : STEP_DETAIL[key]}</span>
+              <span className="step-detail">{state === "skipped" && key === "fix" ? "Not needed, passed first try" : detail[key]}</span>
             </li>
           );
         })}
@@ -549,11 +603,15 @@ function StepIcon({ state }) {
   return <span className="step-icon" />;
 }
 
-function TestPlanChecklist({ mod, bare }) {
-  const verdict = latestVerdict(mod);
+function TestPlanChecklist({ mod, k, bare }) {
+  const turns = turnsOf(mod);
+  const live = k === turns.length - 1;
+  const verdict = latestVerdict(mod, k);
   const byId = new Map((verdict?.checks || []).map((c) => [c.id, c]));
-  const checks = mod.testPlan?.checks || [];
-  const testing = mod.running && mod.phase === "playtest";
+  // Each turn shows the plan it was tested against, not the mod's current one.
+  const checks = turns[k].checks || (live ? mod.testPlan?.checks : null) || [];
+  const summary = turns[k].summary || (live ? mod.spec?.summary : null);
+  const testing = live && mod.running && mod.phase === "playtest";
   const nextId = testing ? checks.find((c) => !byId.has(c.id))?.id : null;
   const passing = checks.filter((c) => byId.get(c.id)?.status === "pass").length;
   if (!checks.length) return null;
@@ -583,7 +641,7 @@ function TestPlanChecklist({ mod, bare }) {
   if (bare) return <div className="turn-cont">{list}</div>;
   return (
     <Turn role="spec" title="Spec agent" meta="Test plan">
-      {mod.spec?.summary && <p className="prose">{mod.spec.summary}</p>}
+      {summary && <p className="prose">{summary}</p>}
       {list}
     </Turn>
   );
@@ -593,8 +651,10 @@ function ResultCard({ mod, onOpenCode }) {
   const passed = mod.status === "passed";
   const verdict = latestVerdict(mod);
   const checks = verdict?.checks || [];
-  const lessons = mod.attempts.filter((a) => a.lesson);
-  const n = mod.attempts.length;
+  // The result is for the latest turn, so count only its attempts.
+  const attempts = turnAttempts(mod);
+  const lessons = attempts.filter((a) => a.lesson);
+  const n = attempts.length;
   return (
     <div className={`result-card ${mod.status}`}>
       <div className="result-top">

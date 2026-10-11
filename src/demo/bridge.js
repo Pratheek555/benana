@@ -275,7 +275,7 @@ const data = {
 Object.assign(data, studioSample);
 
 async function invoke(channel, payload = {}) {
-  if (channel === "studio:create")
+  if (channel === "studio:create" || channel === "studio:revise")
     return {
       ok: false,
       error: "Builds run in the desktop app. This preview shows finished sample runs.",

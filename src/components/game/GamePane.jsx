@@ -25,7 +25,8 @@ function describe(a) {
 }
 
 // Live view of the test bot inside the local Paper server. Owner: Track A.
-// With a mod (the chat the user is in), it offers to load that mod's latest build onto the server.
+// With a mod (the chat the user is in) it keeps the server on that mod's build and a fresh world, and offers
+// "Run mod" (an AI player shows what the mod does) and "Reset world" (back to untouched terrain).
 export default function GamePane({ showLog = true, mod = null, building = false }) {
   const [status, setStatus] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
@@ -33,46 +34,81 @@ export default function GamePane({ showLog = true, mod = null, building = false 
   const [lines, setLines] = React.useState([]);
   const [actions, setActions] = React.useState([]);
   const [demo, setDemo] = React.useState(false);
+  const [modDemo, setModDemo] = React.useState({ modId: null, running: false, summary: "", error: null });
+  const [dismissed, setDismissed] = React.useState(false);
+  const synced = React.useRef(null);
 
   React.useEffect(() => {
     call("game:status").then(setStatus).catch((e) => setError(e.message));
+    call("studio:demo-state").then((s) => setModDemo((prev) => ({ ...prev, ...s }))).catch(() => {});
     const offs = [
       on("game:status", setStatus),
       on("game:log", (l) => setLines((prev) => [...prev.slice(-199), l])),
       on("game:action", (a) => setActions((prev) => [...prev.slice(-29), a])),
+      on("studio:demo", (d) => {
+        setModDemo({ summary: "", error: null, ...d });
+        if (d.running) setDismissed(false);
+      }),
     ];
     return () => offs.forEach((off) => off());
   }, []);
 
-  const toggle = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      setStatus(await call(running ? "game:stop" : "game:start"));
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const running = status && status.server !== "stopped";
   const recent = actions.filter((a) => a.done).slice(-3);
-  const deployed = status?.deployed?.plugin || null;
   const deploying = status?.deploying || null;
-  const canLoad = mod?.loadable && !deploying && deployed !== mod.name;
+  const resetting = Boolean(status?.resetting);
+  const reloading = Boolean(deploying) || resetting;
+  const deployed = status?.deployed || null;
+  const matches = Boolean(
+    mod && deployed && mod.jar && (deployed.jar ? deployed.jar === mod.jar : deployed.plugin === mod.name),
+  );
+  const canLoad = Boolean(mod?.loadable) && !reloading && !matches;
+  const demoRunning = modDemo.running && modDemo.modId === mod?.id;
+  const demoNote = !dismissed && !demoRunning && modDemo.modId === mod?.id ? modDemo : null;
+  const locked = busy || building || reloading;
 
-  const loadMod = async () => {
+  const attempt = async (fn) => {
     setBusy(true);
     setError("");
     try {
-      await call("studio:load", { id: mod.id });
+      return await fn();
     } catch (e) {
       setError(e.message);
     } finally {
       setBusy(false);
     }
   };
+
+  const loadMod = () => attempt(() => call("studio:load", { id: mod.id }));
+
+  const toggle = () =>
+    attempt(async () => {
+      if (running) setStatus(await call("game:stop"));
+      else if (canLoad) await call("studio:load", { id: mod.id });
+      else setStatus(await call("game:start"));
+    });
+
+  const runMod = () =>
+    attempt(async () => {
+      setDismissed(false);
+      await call("studio:demo", { id: mod.id });
+    });
+
+  const stopDemo = () => attempt(() => call("studio:demo-stop"));
+
+  const resetWorld = () => attempt(() => call("studio:reset-world"));
+
+  // Opening a chat puts that mod, on a fresh world, in the live view.
+  React.useEffect(() => {
+    synced.current = null;
+    setDismissed(false);
+  }, [mod?.id]);
+  React.useEffect(() => {
+    if (!mod?.loadable || mod.running || building || busy || reloading || matches || status?.server !== "running") return;
+    if (synced.current === mod.id) return;
+    synced.current = mod.id;
+    loadMod();
+  }, [mod?.id, mod?.loadable, mod?.running, building, busy, reloading, matches, status?.server]);
 
   return (
     <section className="game-pane">
@@ -87,47 +123,102 @@ export default function GamePane({ showLog = true, mod = null, building = false 
           <span className={`game-dot ${status?.bot || "offline"}`} />
           Bot {(LABEL[status?.bot] || "unknown").toLowerCase()}
         </span>
-        <span
-          className={`game-mod ${mod && deployed === mod.name ? "match" : ""}`}
-          title="The studio mod loaded on the server"
-        >
-          {deploying ? `Loading ${deploying}…` : deployed || "No mod"}
+        <span className={`game-mod ${matches ? "match" : ""}`} title="The studio mod loaded on the server">
+          {resetting ? "Resetting world…" : deploying ? `Loading ${deploying}…` : deployed?.plugin || "No mod"}
         </span>
         <span className="game-spacer" />
         {canLoad && (
           <button
             className="game-btn load"
-            disabled={busy || building}
-            title={building ? "A mod is building. Switch after it finishes." : `Load ${mod.name}'s latest build onto the server`}
+            disabled={locked}
+            title={building ? "A mod is building. Switch after it finishes." : `Load ${mod.name}'s latest build onto a fresh world`}
             onClick={loadMod}
           >
             Load {mod.name}
           </button>
         )}
-        {status?.bot === "online" && (
-          <button
-            className="game-btn ghost"
-            onClick={() =>
-              call("game:demo", { on: !demo })
-                .then((r) => setDemo(r.demo))
-                .catch((e) => setError(e.message))
-            }
-          >
-            {demo ? "Stop demo" : "Demo hits"}
-          </button>
+        {mod ? (
+          <>
+            {status?.bot === "online" && (
+              <button
+                className="game-btn ghost"
+                disabled={locked || demoRunning}
+                title="Wipe the world back to untouched terrain and restart the mod"
+                onClick={resetWorld}
+              >
+                Reset world
+              </button>
+            )}
+            {demoRunning ? (
+              <button className="game-btn" disabled={busy} onClick={stopDemo}>
+                Stop demo
+              </button>
+            ) : (
+              <button
+                className="game-btn"
+                disabled={locked || !mod.loadable}
+                title={
+                  building
+                    ? "A mod is building. Run it after it finishes."
+                    : mod.loadable
+                      ? `Watch an AI player show what ${mod.name} does`
+                      : `${mod.name} has no build yet`
+                }
+                onClick={runMod}
+              >
+                Run mod
+              </button>
+            )}
+          </>
+        ) : (
+          status?.bot === "online" && (
+            <button
+              className="game-btn ghost"
+              onClick={() =>
+                call("game:demo", { on: !demo })
+                  .then((r) => setDemo(r.demo))
+                  .catch((e) => setError(e.message))
+              }
+            >
+              {demo ? "Stop demo" : "Demo hits"}
+            </button>
+          )
         )}
-        <button className={`game-btn ${canLoad ? "ghost" : ""}`} disabled={busy || Boolean(deploying)} onClick={toggle}>
+        <button className={`game-btn ${mod ? "ghost" : ""}`} disabled={busy || reloading} onClick={toggle}>
           {busy ? "Working…" : running ? "Stop" : "Start game"}
         </button>
       </header>
       <div className="game-view">
-        {status?.viewerUrl ? (
+        {status?.viewerUrl && !reloading ? (
           <iframe title="Bot view" src={status.viewerUrl} />
         ) : (
           <div className="game-empty">
-            {status?.server === "starting"
-              ? "Starting the Paper server…"
-              : "Start the game to watch the AI player."}
+            {resetting
+              ? "Resetting the world…"
+              : deploying
+                ? `Loading ${deploying} on a fresh world…`
+                : status?.server === "starting"
+                  ? "Starting the Paper server…"
+                  : mod && canLoad
+                    ? `Start the game to load ${mod.name} on a fresh world.`
+                    : "Start the game to watch the AI player."}
+          </div>
+        )}
+        {(demoRunning || demoNote) && (
+          <div className={`game-demo ${demoNote?.error ? "error" : ""}`}>
+            {demoRunning ? (
+              <>
+                <span className="spinner" />
+                <span>Showing what {mod.name} does…</span>
+              </>
+            ) : (
+              <>
+                <span>{demoNote.error ? `Demo failed: ${demoNote.error}` : demoNote.summary || "Demo finished."}</span>
+                <button aria-label="Dismiss" onClick={() => setDismissed(true)}>
+                  ×
+                </button>
+              </>
+            )}
           </div>
         )}
         {recent.length > 0 && (
@@ -141,9 +232,7 @@ export default function GamePane({ showLog = true, mod = null, building = false 
           </div>
         )}
       </div>
-      {(error || status?.error) && (
-        <div className="game-error">{error || status.error}</div>
-      )}
+      {(error || status?.error) && <div className="game-error">{error || status.error}</div>}
       {showLog && (
         <pre className="game-log">
           {lines

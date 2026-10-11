@@ -30,6 +30,8 @@ select {
 }
 button {
   color: inherit;
+  background: #1d1f24;
+  border: 1px solid rgba(255, 255, 255, 0.11);
 }
 .workspace {
   height: 100%;
@@ -273,8 +275,9 @@ button {
 .avatar {
   width: 28px;
   height: 28px;
-  border: 1px solid #ddd9d1;
-  background: #faf9f6;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #24262c;
+  color: #e8c45a;
   border-radius: 8px;
   display: grid;
   place-items: center;
@@ -284,24 +287,24 @@ button {
 .message-role {
   font-size: 11px;
   font-weight: 700;
-  color: #74726d;
+  color: #858b96;
 }
 .message p {
   font-size: 14px;
   line-height: 1.6;
   margin: 5px 0;
-  color: #383936;
+  color: #aaaeb7;
 }
 .message.tool details {
-  border: 1px solid #ebe8e2;
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 8px;
-  background: #faf9f7;
+  background: #121316;
   padding: 8px 10px;
 }
 .message.tool summary {
   font-size: 12px;
   cursor: pointer;
-  color: #676660;
+  color: #aaaeb7;
 }
 .message code,
 .instruction,
@@ -353,7 +356,8 @@ button {
 }
 .agent-select select {
   border: 0;
-  background: #f2f0eb;
+  background: #1d1f24;
+  color: #f2f0e9;
   border-radius: 6px;
   padding: 5px 7px;
   outline: none;
@@ -397,7 +401,7 @@ button {
 .welcome-copy > p {
   font-size: 16px;
   line-height: 1.6;
-  color: #676660;
+  color: #aaaeb7;
 }
 .suggestions {
   display: grid;
@@ -406,8 +410,9 @@ button {
   margin-top: 24px;
 }
 .suggestions button {
-  background: #faf9f6;
-  border: 1px solid #e7e3dd;
+  background: #17181c;
+  color: #aaaeb7;
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 10px;
   padding: 13px;
   text-align: left;
@@ -505,7 +510,7 @@ button {
 }
 .empty-state strong {
   display: block;
-  color: #55544f;
+  color: #aaaeb7;
 }
 .file-row {
   display: flex;
@@ -602,9 +607,9 @@ button {
 .failure-card {
   max-width: 740px;
   margin: 5px auto 24px;
-  border: 1px solid #efd1d8;
+  border: 1px solid rgba(226, 112, 117, 0.26);
   border-radius: 12px;
-  background: #fffafb;
+  background: #17181c;
   overflow: hidden;
 }
 .failure-head {
@@ -616,7 +621,7 @@ button {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: #fce3e8;
+  background: rgba(226, 112, 117, 0.12);
   color: #b5415c;
   display: grid;
   place-items: center;
@@ -629,14 +634,14 @@ button {
 .failure-head p,
 .recovery p {
   margin: 0;
-  color: #6b6863;
+  color: #aaaeb7;
   font-size: 12px;
   line-height: 1.5;
 }
 .evidence-list {
   border-top: 1px solid #f0dfe3;
   border-bottom: 1px solid #f0dfe3;
-  background: #fff;
+  background: #121316;
   padding: 5px 16px;
 }
 .evidence-list > div {
@@ -653,7 +658,7 @@ button {
   display: block;
   margin-top: 5px;
   font-size: 11px;
-  color: #464541;
+  color: #d7d9df;
 }
 .evidence-list small {
   display: block;
@@ -680,8 +685,8 @@ button {
 .instruction span {
   display: block;
   padding: 6px 8px;
-  background: #f5f3ef;
-  color: #77736c;
+  background: #121316;
+  color: #858b96;
   font-family: "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -693,16 +698,16 @@ button {
 .change-preview .before {
   text-decoration: line-through;
   color: #a06772;
-  background: #fff5f6;
+  background: rgba(226, 112, 117, 0.09);
 }
 .change-preview .after {
-  color: #327047;
-  background: #f2fbf4;
+  color: #77c89b;
+  background: rgba(77, 167, 122, 0.09);
 }
 .instruction {
   line-height: 1.5;
   padding: 0 8px 8px;
-  background: white;
+  background: #17181c;
 }
 .instruction span {
   margin: 0 -8px 8px;
@@ -713,10 +718,10 @@ button {
   display: flex;
   gap: 10px;
   padding: 13px;
-  background: #f0f8f2;
-  border: 1px solid #cee5d4;
+  background: rgba(77, 167, 122, 0.09);
+  border: 1px solid rgba(77, 167, 122, 0.26);
   border-radius: 10px;
-  color: #34724a;
+  color: #77c89b;
 }
 .success-card p {
   margin: 2px 0;
@@ -841,6 +846,14 @@ button {
   border-radius: 8px;
   padding: 8px 10px;
 }
+.graph-tools button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #1d1f24;
+  color: #f2f0e9;
+  border-color: rgba(255, 255, 255, 0.11);
+  cursor: pointer;
+}
 .entire-graph-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 210px;
@@ -864,11 +877,11 @@ button {
   flex-wrap: wrap;
   padding: 9px 20px;
   border-bottom: 1px solid #ece9e3;
-  background: #faf9f7;
+  background: #121316;
 }
 .attempt-timeline span {
   font-size: 10px;
-  color: #77756f;
+  color: #858b96;
   text-transform: uppercase;
   letter-spacing: .08em;
 }
@@ -880,8 +893,9 @@ button {
   font-size: 10px;
 }
 .attempt-timeline button.active {
-  border-color: #7668f8;
-  color: #5648d6;
+  border-color: #e8c45a;
+  background: #e8c45a;
+  color: #191608;
 }
 .patch-preview {
   display: grid;
@@ -979,17 +993,42 @@ button {
 .graph-page .scrub {
   padding: 10px;
 }
+.graph-page .tab {
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: #1d1f24;
+  color: #aaaeb7;
+  border-color: rgba(255, 255, 255, 0.11);
+  cursor: pointer;
+}
+.graph-page .tab + .tab {
+  margin-left: 4px;
+}
+.graph-page .tab.on {
+  background: #e8c45a;
+  color: #191608;
+  border-color: #e8c45a;
+}
 .graph-page .card {
   position: absolute;
   right: 15px;
   top: 55px;
-  background: white;
+  background: #17181c;
+  color: #f2f0e9;
   padding: 12px;
   width: 240px;
-  border: 1px solid #ddd;
+  border: 1px solid rgba(255, 255, 255, 0.09);
 }
 .graph-page .x {
   float: right;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #f2f0e9;
+  border-color: rgba(255, 255, 255, 0.11);
+  cursor: pointer;
 }
 .runtime {
   height: 100%;
@@ -1009,7 +1048,7 @@ button {
   font-size: 24px;
 }
 .runtime-card p {
-  color: #74716b;
+  color: #aaaeb7;
   line-height: 1.5;
 }
 .runtime-card .primary {
@@ -1247,4 +1286,206 @@ select:focus-visible {
   .key-hint {
     display: none;
   }
+}
+
+:root {
+  font-family: "Geist Variable", "Segoe UI", system-ui, sans-serif;
+  color: #f2f0e9;
+  background: #0d0e10;
+}
+.workspace,
+.conversation,
+.page,
+.runtime {
+  background: #0d0e10;
+  color: #f2f0e9;
+}
+.sidebar,
+.inspector,
+.source-panel {
+  background: #121316;
+  color: #aaaeb7;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.repo-mark,
+.brand,
+.new-task,
+.primary,
+.runtime-card .primary,
+.modal .btn:last-child {
+  background: #e8c45a;
+  color: #191608;
+}
+.sidebar nav button,
+.recent button,
+.repo,
+.source {
+  color: #aaaeb7;
+}
+.sidebar nav button:hover,
+.sidebar nav button.active,
+.recent button:hover,
+.recent button.active,
+.source.active {
+  background: #1d1f24;
+  color: #f2f0e9;
+}
+.nav-count,
+.badge,
+.demo-label {
+  background: #24262c;
+  color: #aaaeb7;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.demo-label {
+  color: #d8bd6d;
+}
+.repo small,
+.recent small,
+.recent-label,
+.eyebrow,
+.run-stats,
+.muted,
+.faint,
+.section-note,
+.trace-meta,
+.page > header p,
+.runtime-card small {
+  color: #858b96;
+}
+.foot,
+.conversation-head,
+.inspector-tabs,
+.attempt-timeline,
+.integration-row {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.messages {
+  padding-top: 32px;
+  padding-bottom: 36px;
+}
+.message,
+.welcome-copy {
+  color: #aaaeb7;
+}
+.welcome-copy {
+  max-width: 720px;
+  padding: clamp(28px, 5vw, 56px);
+}
+.welcome-copy h1,
+.conversation h1,
+.page h1,
+.runtime-card h1 {
+  color: #f2f0e9;
+  letter-spacing: -0.03em;
+}
+.composer,
+.context-card,
+.trace-card,
+.plain-card,
+.card-list article,
+.stats-grid article,
+.node-details,
+.runtime-card,
+.modal,
+.graph-node,
+.source.active,
+.failure-card,
+.success-card {
+  background: #17181c;
+  color: #f2f0e9;
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: none;
+}
+.composer {
+  margin-bottom: 18px;
+  border-radius: 11px;
+}
+.composer:focus-within,
+.project-setup input:focus {
+  border-color: rgba(232, 196, 90, 0.5);
+  box-shadow: 0 0 0 3px rgba(232, 196, 90, 0.1);
+}
+.composer textarea,
+.setting input,
+.project-setup input,
+.graph-tools input {
+  background: transparent;
+  color: #f2f0e9;
+  border-color: rgba(255, 255, 255, 0.11);
+}
+.composer textarea::placeholder,
+.project-setup input::placeholder {
+  color: #707681;
+}
+.composer-row > button,
+.row-actions button,
+.run-actions button,
+.analyze,
+.path-input button,
+.modal .btn,
+.attempt-timeline button {
+  background: #1d1f24;
+  color: #aaaeb7;
+  border-color: rgba(255, 255, 255, 0.11);
+}
+.composer-row > button:last-child {
+  background: #e8c45a;
+  color: #191608;
+}
+.inspector-tabs button,
+.context-card p,
+.trace-card p,
+.plain-card,
+.card-list p,
+.graph-node small,
+.recovery p,
+.failure-head p {
+  color: #aaaeb7;
+}
+.inspector-tabs button.active {
+  color: #f2f0e9;
+  border-color: #e8c45a;
+}
+.file-row,
+.check-row,
+.evidence-list,
+.attempt-timeline {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.evidence-list,
+.change-preview strong,
+.instruction span,
+.patch-preview,
+.span-row {
+  background: #121316;
+}
+.diff,
+.change-preview,
+.instruction {
+  border-color: rgba(255, 255, 255, 0.09);
+}
+.relationship-graph,
+.graph-page .graph {
+  background: #111216;
+  background-image: none;
+  border-color: rgba(255, 255, 255, 0.09);
+}
+.toast {
+  background: #e8c45a;
+  color: #191608;
+}
+.modal-back {
+  background: rgba(0, 0, 0, 0.72);
+}
+.modal pre {
+  background: #0d0e10;
+  color: #aaaeb7;
+}
+button:focus-visible,
+a:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline-color: #e8c45a;
 }

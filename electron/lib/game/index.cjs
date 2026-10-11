@@ -26,7 +26,7 @@ const TOOLS = ['game_setup', 'reset_arena', ...BOT_TOOLS, 'server_log', 'report_
 const playtesterTools = TOOLS.map((t) => `mcp__minecraft__${t}`);
 
 // deployed: the studio mod whose jar is in the server's plugins folder; deploying: the one being swapped in.
-let state = { server: 'stopped', bot: 'offline', viewerUrl: null, controlUrl: null, version: VERSION, mock: mock(), error: null, deployed: null, deploying: null };
+let state = { server: 'stopped', bot: 'offline', viewerUrl: null, controlUrl: null, version: VERSION, mock: mock(), error: null, deployed: null, deploying: null, resetting: false };
 let emitter = () => {};
 
 function setState(patch) {
@@ -270,18 +270,47 @@ async function deployNow({ jarPath, emit }) {
   }
 }
 
+// Resets the world to its beginning (fresh flat terrain, plugin state cleared) with the loaded mod still installed.
+// Queued with deploys so it never restarts the server under one.
+function resetWorld(args = {}) {
+  const run = deployQueue.then(() => resetNow(args));
+  deployQueue = run.catch(() => {});
+  return run;
+}
+
+async function resetNow({ emit } = {}) {
+  if (emit) emitter = emit;
+  setState({ resetting: true });
+  try {
+    demo(false);
+    if (mock()) return { loaded: true, plugin: state.deployed?.plugin || null, errors: [], logTail: ['[mock] world reset'] };
+    return await rebootFresh();
+  } finally {
+    setState({ resetting: false });
+  }
+}
+
 async function swapPlugin(jarPath) {
   if (!fs.existsSync(jarPath)) return { loaded: false, plugin: null, errors: [`Jar not found: ${jarPath}`], logTail: [] };
   if (mock()) return { loaded: true, plugin: path.basename(jarPath, '.jar'), errors: [], logTail: ['[mock] plugin enabled'] };
+  return rebootFresh(jarPath);
+}
+
+// Stops the game, wipes the saved world so each mod starts on untouched terrain (earlier mods leave craters
+// that arena resets never reach), optionally installs a studio jar, and boots a fresh server.
+async function rebootFresh(jarPath) {
   systemNode();
   await startControl();
   await stopHost();
   await server.stop();
   setState({ server: 'stopped', bot: 'offline', viewerUrl: null });
-  const dir = server.pluginsDir();
-  fs.mkdirSync(dir, { recursive: true });
-  for (const f of fs.readdirSync(dir)) if (/^studio-.*\.jar$/.test(f)) fs.rmSync(path.join(dir, f));
-  fs.copyFileSync(jarPath, path.join(dir, `studio-${path.basename(jarPath)}`));
+  server.wipeWorld();
+  if (jarPath) {
+    const dir = server.pluginsDir();
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of fs.readdirSync(dir)) if (/^studio-.*\.jar$/.test(f)) fs.rmSync(path.join(dir, f));
+    fs.copyFileSync(jarPath, path.join(dir, `studio-${path.basename(jarPath)}`));
+  }
   const since = Date.now();
   await bootGame();
   const lines = server.logSince(since);
@@ -328,6 +357,29 @@ function playtestPrompt(testPlan) {
     '',
     'Test plan:',
     JSON.stringify(testPlan, null, 2),
+  ].join('\n');
+}
+
+// A showcase for the user watching the live view: no verdicts, no pass/fail, just the mod doing its thing.
+const DEMO_TOOLS = TOOLS.filter((t) => t !== 'report_check' && t !== 'finish').map((t) => `mcp__minecraft__${t}`);
+
+function demoPrompt({ testPlan, spec }) {
+  return [
+    'You are showing a user what a Minecraft mod can do. A person is watching the bot through a live camera while you drive it with the `minecraft` tools. This is a demo, not a test: do not judge anything.',
+    `Mod: ${testPlan.modName}: ${testPlan.summary}`,
+    ...(spec?.behavior?.length ? ['Behavior:', ...spec.behavior.map((b) => `- ${b}`)] : []),
+    '',
+    'Do this:',
+    '1. `reset_arena`, then `game_setup` with the commands that give the bot what it needs and put targets in view (see the setup commands and checks below; reuse the ones from the most illustrative check).',
+    '2. `equip` the mod item, then show the main behavior working 2 or 3 times: `attack` for melee, `shoot` for bows and throwables, `use_item` or `chat` for right-click items and commands. Include a limit the mod has (like a cooldown) only if it is quick to show.',
+    '3. Between actions call `wait_ticks` with 30 to 40 so the viewer can follow what happened. Summon targets 3 blocks in front of the bot for melee and 8-10 blocks away for ranged.',
+    'Never use NoAI mobs, and summon mobs with {PersistenceRequired:1b}. Stay under 20 tool calls. Do not call report_check or finish and do not edit files.',
+    'Finish with ONE plain sentence for the user describing what they just saw.',
+    '',
+    'Setup commands from the test plan:',
+    JSON.stringify(testPlan.setup || [], null, 2),
+    'Checks (for ideas on how to exercise the mod):',
+    JSON.stringify(testPlan.checks || [], null, 2),
   ].join('\n');
 }
 
@@ -402,6 +454,6 @@ function handlers(emit) {
 }
 
 module.exports = {
-  VERSION, status, start, stop, deployPlugin, runCommand, runTool,
-  mcpConfig, playtesterTools, playtestPrompt, readVerdict, mockVerdict, handlers,
+  VERSION, status, start, stop, deployPlugin, resetWorld, runCommand, runTool,
+  mcpConfig, playtesterTools, playtestPrompt, demoTools: DEMO_TOOLS, demoPrompt, readVerdict, mockVerdict, handlers,
 };
