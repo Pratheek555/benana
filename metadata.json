@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4NANX5WZMJQ31WQ62T0F4VS",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/components/game/game.css",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/ModStudio.jsx",
+    "src/components/studio/Split.jsx",
+    "src/components/studio/TestPanel.jsx",
+    "src/components/studio/neatlogs.css",
+    "src/components/studio/studio.css"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 28,
+    "cache_creation_tokens": 59231,
+    "cache_read_tokens": 2523519,
+    "output_tokens": 6901,
+    "api_call_count": 14
+  }
+}
