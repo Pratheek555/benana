@@ -17,7 +17,7 @@ import {
   phaseIndex,
   shortModel,
   turnAttempts,
-  turnsOf,
+  turnsOf, turnAt,
 } from "./shared.jsx";
 
 const EXAMPLES = [
@@ -361,7 +361,7 @@ function Thread({ mod, onOpenCode }) {
               return (
                 <Turn key={it.key} role="benana" title="Benana" meta="Plan">
                   <p className="prose">
-                    {turnsOf(mod)[it.k]?.revision
+                    {turnAt(mod, it.k)?.revision
                       ? "I'll update the spec, change the existing plugin, and have the AI player test it again. This list updates as each step finishes."
                       : "I'll build this as a Paper plugin and test it with an AI player. This list updates as each step finishes."}
                   </p>
@@ -670,7 +670,7 @@ function PhaseLine({ f, mod }) {
 
 function PipelineChecklist({ mod, k }) {
   const turns = turnsOf(mod);
-  const turn = turns[k];
+  const turn = turnAt(mod, k);
   // Only the latest turn follows the mod's live state; earlier turns keep the result and phase they ended in.
   const live = k === turns.length - 1;
   const status = live ? mod.status : turn.status;
@@ -718,11 +718,12 @@ function StepIcon({ state }) {
 function TestPlanChecklist({ mod, k, bare }) {
   const turns = turnsOf(mod);
   const live = k === turns.length - 1;
+  const turn = turnAt(mod, k);
   const verdict = latestVerdict(mod, k);
   const byId = new Map((verdict?.checks || []).map((c) => [c.id, c]));
   // Each turn shows the plan it was tested against, not the mod's current one.
-  const checks = turns[k].checks || (live ? mod.testPlan?.checks : null) || [];
-  const summary = turns[k].summary || (live ? mod.spec?.summary : null);
+  const checks = turn.checks || (live ? mod.testPlan?.checks : null) || [];
+  const summary = turn.summary || (live ? mod.spec?.summary : null);
   const testing = live && mod.running && mod.phase === "playtest";
   const nextId = testing ? checks.find((c) => !byId.has(c.id))?.id : null;
   const passing = checks.filter((c) => byId.get(c.id)?.status === "pass").length;
