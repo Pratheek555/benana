@@ -1,0 +1,5 @@
+[Assistant quote](t3-citation://v1/1aa8d2bb-6397-4621-8dce-2bd19b02f426/aff97e02-a1a0-43c3-8cab-c4fddce7edaa/message%3Aprovider%3AclaudeAgent%3Anative-item%3Add3a0e49-ef1b-4eb5-8a7f-cba9d10a7a2d?text=One+manual+step%3A+stop+and+rerun+npm+run+dev+once.+The+app+you+have+open+is+still+on+the+old+launch+command%2C+so+the+banner+and+button+can%27t+work+until+this+restart%3B+after+that%2C+it%27s+the+in-app+button.&start=1720&end=1919&prefix=ght+text+on+a+light+background.+&suffix=+Both+commits+%2817e4a8d%2C+dd2ffbd%29) how to stop it?
+
+---
+
+give me the command to stop it
