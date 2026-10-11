@@ -1,6 +1,6 @@
 import React from "react";
 import { call } from "../../api.js";
-import { Empty, ROLE, allSessions, fmtDuration, fmtMoney, sessionMs } from "./shared.jsx";
+import { Empty, PageHead, ROLE, SectionHead, allSessions, fmtDuration, fmtMoney, sessionMs, shortModel } from "./shared.jsx";
 
 const CHECK_LIMIT = 25;
 
@@ -12,6 +12,7 @@ export default function NeatlogsPage({ mods, onOpenMod }) {
   const sessions = React.useMemo(() => allSessions(mods), [mods]);
   const linked = sessions.filter((s) => s.sessionId);
   const selected = sessions.find((s) => s.key === selectedKey) || null;
+  const checked = Object.keys(evidence).length;
   const matched = Object.values(evidence).filter((e) => e?.matched).length;
 
   React.useEffect(() => {
@@ -41,53 +42,56 @@ export default function NeatlogsPage({ mods, onOpenMod }) {
   };
 
   const ev = selected ? evidence[selected.key] : null;
+  const state = !status ? "idle" : status.configured === false ? "idle" : status.ok ? "passed" : "failed";
 
   return (
-    <div className="neatlogs">
-      <section className="card connect">
-        <div>
-          <span className={`status-dot ${status?.ok ? "running" : status?.configured === false ? "off" : status ? "failed" : "offline"}`} />
-          <strong>
-            {!status
-              ? "Checking Neatlogs…"
-              : status.configured === false
-                ? "Neatlogs is not configured"
-                : status.ok
-                  ? "Connected to Neatlogs"
-                  : "Neatlogs is unreachable"}
-          </strong>
-        </div>
-        <p className="muted-line">
-          {status?.configured === false
-            ? "Add NEATLOGS_API_KEY and NEATLOGS_PROJECT_ID to .env. Benana then links each session to its trace here."
-            : status?.error || "Every builder, playtester, and fixer session is traced by the Neatlogs hooks in its mod repository."}
-        </p>
-        <button className="btn-ghost" onClick={checkAll} disabled={checking || !linked.length}>
-          {checking ? "Checking traces…" : `Check ${Math.min(linked.length, CHECK_LIMIT)} traces`}
+    <div className="view">
+      <PageHead title="Neatlogs" sub="Every builder, playtester, and fixer session, linked to its trace.">
+        <button className="btn" onClick={checkAll} disabled={checking || !linked.length || checked >= linked.length}>
+          {checking ? "Checking traces…" : checked >= linked.length && linked.length ? "All traces checked" : `Check ${Math.min(linked.length - checked, CHECK_LIMIT)} traces`}
         </button>
-      </section>
+      </PageHead>
 
-      <section className="stats compact">
-        <div className="stat">
+      <div className="connection">
+        <span className={`dot ${state}`} />
+        <strong>
+          {!status
+            ? "Checking Neatlogs…"
+            : status.configured === false
+              ? "Neatlogs is not configured"
+              : status.ok
+                ? "Connected"
+                : "Unreachable"}
+        </strong>
+        <span className="meta">
+          {status?.configured === false
+            ? "Add NEATLOGS_API_KEY and NEATLOGS_PROJECT_ID to .env to link sessions to traces."
+            : status?.error || "Neatlogs hooks in each mod repository trace every agent session."}
+        </span>
+      </div>
+
+      <section className="kpis three">
+        <div className="kpi">
           <span>Agent sessions</span>
           <strong>{sessions.length}</strong>
+          <small>across {mods.length} mods</small>
         </div>
-        <div className="stat">
+        <div className="kpi">
           <span>With a session ID</span>
           <strong>{linked.length}</strong>
           <small>Neatlogs can attribute these</small>
         </div>
-        <div className="stat pass">
-          <span>Trace matched</span>
-          <strong>{matched}</strong>
-          <small>of {Object.keys(evidence).length} checked</small>
+        <div className="kpi">
+          <span>Traces matched</span>
+          <strong>{checked ? matched : "—"}</strong>
+          <small>{checked ? `of ${checked} checked` : "Not checked yet"}</small>
         </div>
       </section>
 
       <div className="split">
-        <section className="card table-card">
+        <section className="panel">
           {sessions.length ? (
-            <table className="plain-table sessions">
+            <table className="table selectable">
               <thead>
                 <tr>
                   <th>Mod</th>
@@ -104,21 +108,22 @@ export default function NeatlogsPage({ mods, onOpenMod }) {
                   const e = evidence[s.key];
                   return (
                     <tr key={s.key} className={s.key === selectedKey ? "selected" : ""} onClick={() => setSelectedKey(s.key)}>
-                      <td>{s.mod.name}</td>
+                      <td className="strong">{s.mod.name}</td>
                       <td>{s.attemptN ? `Attempt ${s.attemptN}` : "Spec"}</td>
                       <td>{ROLE[s.role] || s.role}</td>
-                      <td className="mono">{s.model}</td>
+                      <td className="mono muted">{shortModel(s.model)}</td>
                       <td className="num">{fmtDuration(sessionMs(s)) || "—"}</td>
                       <td className="num">{fmtMoney(s.usage?.costUsd)}</td>
                       <td>
                         {!s.sessionId ? (
-                          <span className="tag off">No session ID</span>
+                          <span className="muted">No session ID</span>
                         ) : e ? (
-                          <span className={`tag ${e.matched ? "neatlogs" : "off"}`}>
+                          <span className={`partner-link static neatlogs ${e.matched ? "" : "off"}`}>
+                            <i />
                             {e.matched ? `${e.traces.length} trace${e.traces.length === 1 ? "" : "s"}` : "No trace"}
                           </span>
                         ) : (
-                          <span className="muted-line">Not checked</span>
+                          <span className="muted">Not checked</span>
                         )}
                       </td>
                     </tr>
@@ -131,21 +136,18 @@ export default function NeatlogsPage({ mods, onOpenMod }) {
           )}
         </section>
 
-        <aside className="card detail-card">
+        <aside className="panel pad detail-card">
           {!selected && <Empty>Select a session to see its trace.</Empty>}
           {selected && (
             <>
-              <div className="section-head">
-                <div>
-                  <h4>{ROLE[selected.role] || selected.role}</h4>
-                  <p className="muted-line">
-                    {selected.mod.name} · {selected.attemptN ? `attempt ${selected.attemptN}` : "spec"} · {selected.model}
-                  </p>
-                </div>
+              <SectionHead title={ROLE[selected.role] || selected.role}>
                 <button className="link" onClick={() => onOpenMod(selected.mod.id)}>
                   Open mod
                 </button>
-              </div>
+              </SectionHead>
+              <p className="meta">
+                {selected.mod.name} · {selected.attemptN ? `attempt ${selected.attemptN}` : "spec"} · {shortModel(selected.model)}
+              </p>
               <dl className="facts stacked">
                 <div>
                   <dt>Session ID</dt>
@@ -162,15 +164,16 @@ export default function NeatlogsPage({ mods, onOpenMod }) {
                   </dd>
                 </div>
               </dl>
-              {ev?.error && <div className="studio-error">{ev.error}</div>}
-              {ev && !ev.error && <p className="muted-line">{ev.matchReason || (ev.matched ? "Trace matched." : "No trace yet.")}</p>}
+              {!ev && <Empty>Looking up the trace…</Empty>}
+              {ev?.error && <div className="alert">{ev.error}</div>}
+              {ev && !ev.error && <p className="meta">{ev.matchReason || (ev.matched ? "Trace matched." : "No trace yet.")}</p>}
               {ev?.traces?.map((t, i) => (
                 <div className="trace" key={t.traceId || t.trace_id || i}>
                   <div className="trace-head">
                     <strong>{t.traceName || t.name || "trace"}</strong>
-                    {t.durationMs != null && <small>{fmtDuration(t.durationMs)}</small>}
+                    {t.durationMs != null && <span className="meta">{fmtDuration(t.durationMs)}</span>}
                   </div>
-                  <small className="mono">{t.traceId || t.trace_id || t.id}</small>
+                  <small className="mono muted">{t.traceId || t.trace_id || t.id}</small>
                   <ol className="spans">
                     {(t.spans || []).slice(0, 25).map((sp, j) => {
                       const failed = sp.status === "error" || sp.status_code === "ERROR";

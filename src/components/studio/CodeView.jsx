@@ -96,7 +96,7 @@ export default function CodeView({ mod, initialSha }) {
       {view === "files" ? (
         <div className="code-split">
           <nav className="file-tree" aria-label="Files">
-            {filesError && <div className="studio-error">{filesError}</div>}
+            {filesError && <div className="alert">{filesError}</div>}
             {!files && !filesError && <Empty>Loading files…</Empty>}
             {files &&
               groupByDir(files).map(([dir, list]) => (

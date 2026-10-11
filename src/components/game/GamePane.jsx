@@ -61,12 +61,17 @@ export default function GamePane({ showLog = true }) {
   return (
     <section className="game-pane">
       <header className="game-bar">
-        <strong>Minecraft {status?.version || ""}</strong>
-        <span className={`game-dot ${status?.server || "stopped"}`} />
-        <span>Server: {LABEL[status?.server] || "Unknown"}</span>
-        <span className={`game-dot ${status?.bot || "offline"}`} />
-        <span>Bot: {LABEL[status?.bot] || "Unknown"}</span>
-        {status?.mock && <span className="game-tag">Mock runtime</span>}
+        <strong>Live view</strong>
+        {status?.version && <span className="game-meta">Minecraft {status.version}</span>}
+        <span className="game-state">
+          <span className={`game-dot ${status?.server || "stopped"}`} />
+          Server {(LABEL[status?.server] || "unknown").toLowerCase()}
+        </span>
+        <span className="game-state">
+          <span className={`game-dot ${status?.bot || "offline"}`} />
+          Bot {(LABEL[status?.bot] || "unknown").toLowerCase()}
+        </span>
+        <span className="game-spacer" />
         {status?.bot === "online" && (
           <button
             className="game-btn ghost"

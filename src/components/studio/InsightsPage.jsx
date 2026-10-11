@@ -1,6 +1,6 @@
 import React from "react";
 import { fmtTokens } from "../../api.js";
-import { Empty, ROLE, allSessions, fmtDuration, fmtMoney, sessionMs } from "./shared.jsx";
+import { Empty, PageHead, ROLE, SectionHead, allSessions, fmtDuration, fmtMoney, sessionMs, shortModel } from "./shared.jsx";
 
 const FAILURE = {
   build: "Did not compile",
@@ -92,14 +92,15 @@ export default function InsightsPage({ mods, lessons }) {
   const totalRoleCost = Object.values(s.byRole).reduce((n, r) => n + r.cost, 0) || 1;
 
   return (
-    <div className="insights">
-      <section className="stats">
+    <div className="view">
+      <PageHead title="Insights" sub="Pass rates, spend, and what the agents learned across every mod." />
+
+      <section className="kpis">
         <Stat label="Mods built" value={s.mods} sub={`${s.passed} passed`} />
         <Stat
           label="Pass rate"
           value={s.passRate == null ? "—" : `${Math.round(s.passRate * 100)}%`}
-          sub={`${s.finished} finished`}
-          tone="pass"
+          sub={`of ${s.finished} finished`}
         />
         <Stat
           label="First-try passes"
@@ -111,33 +112,28 @@ export default function InsightsPage({ mods, lessons }) {
         <Stat label="Total spend" value={fmtMoney(s.spend)} sub={`${fmtTokens(s.tokens.in + s.tokens.out)} tokens`} />
       </section>
 
-      <section className="card chart-card">
-        <div className="section-head">
-          <div>
-            <h4>Mods per day</h4>
-            <p className="muted-line">Last 14 days, colored by outcome</p>
-          </div>
+      <section className="panel pad">
+        <SectionHead title="Mods per day">
           <div className="legend">
             <span className="lg passed">Passed</span>
             <span className="lg failed">Failed</span>
             <span className="lg running">Running</span>
           </div>
-        </div>
+        </SectionHead>
+        <p className="meta">Last 14 days, by outcome</p>
         <DailyBars days={s.days} />
       </section>
 
       <div className="insight-grid">
-        <section className="card">
-          <div className="section-head">
-            <h4>Spend by agent role</h4>
-          </div>
-          <table className="plain-table">
+        <section className="panel pad">
+          <SectionHead title="Spend by agent role" />
+          <table className="table">
             <thead>
               <tr>
                 <th>Role</th>
                 <th className="num">Sessions</th>
                 <th className="num">Tokens</th>
-                <th>Share</th>
+                <th>Share of spend</th>
                 <th className="num">Cost</th>
               </tr>
             </thead>
@@ -162,11 +158,9 @@ export default function InsightsPage({ mods, lessons }) {
           {!Object.keys(s.byRole).length && <Empty>Sessions appear here as agents run.</Empty>}
         </section>
 
-        <section className="card">
-          <div className="section-head">
-            <h4>Models</h4>
-          </div>
-          <table className="plain-table">
+        <section className="panel pad">
+          <SectionHead title="Models" />
+          <table className="table">
             <thead>
               <tr>
                 <th>Model</th>
@@ -178,7 +172,7 @@ export default function InsightsPage({ mods, lessons }) {
             <tbody>
               {Object.entries(s.byModel).map(([model, m]) => (
                 <tr key={model}>
-                  <td className="mono">{model}</td>
+                  <td className="mono">{shortModel(model)}</td>
                   <td className="num">{m.sessions}</td>
                   <td className="num">{m.timed ? fmtDuration(m.ms / m.timed) : "—"}</td>
                   <td className="num">{fmtMoney(m.cost)}</td>
@@ -189,45 +183,39 @@ export default function InsightsPage({ mods, lessons }) {
           {!Object.keys(s.byModel).length && <Empty>No model usage yet.</Empty>}
         </section>
 
-        <section className="card">
-          <div className="section-head">
-            <h4>Why attempts failed</h4>
-          </div>
-          <Bars
-            rows={Object.entries(s.failureKinds).map(([k, n]) => [FAILURE[k] || k, n])}
-            empty="No failed attempts yet."
-          />
-          <div className="section-head">
-            <h4>Attempts needed to pass</h4>
-          </div>
+        <section className="panel pad">
+          <SectionHead title="Why attempts failed" />
+          <Bars rows={Object.entries(s.failureKinds).map(([k, n]) => [FAILURE[k] || k, n])} empty="No failed attempts yet." />
+          <SectionHead title="Attempts needed to pass" />
           <Bars
             rows={[1, 2, 3].map((n) => [`${n} attempt${n === 1 ? "" : "s"}`, s.attemptsToPass[n] || 0])}
             empty="No passing mods yet."
           />
         </section>
 
-        <section className="card">
-          <div className="section-head">
-            <h4>Partner coverage</h4>
+        <section className="panel pad">
+          <SectionHead title="Partner coverage" />
+          <div className="coverage-row">
+            <Coverage tone="entire" label="Entire checkpoints" value={s.checkpointCommits} sub={`${s.entireMods} of ${s.mods} repositories`} />
+            <Coverage
+              tone="neatlogs"
+              label="Neatlogs sessions"
+              value={s.linkedSessions}
+              sub={`of ${s.sessions.length} · ${s.neatlogsMods} mods traced`}
+            />
           </div>
-          <Coverage label="Entire checkpoints" value={s.checkpointCommits} sub={`${s.entireMods} of ${s.mods} mod repositories`} />
-          <Coverage
-            label="Neatlogs sessions"
-            value={s.linkedSessions}
-            sub={`of ${s.sessions.length} sessions · ${s.neatlogsMods} mods traced`}
-          />
-          <div className="section-head">
-            <h4>Lessons the fixer wrote</h4>
-            <span className="count">{lessons.length}</span>
-          </div>
+          <SectionHead title="Lessons the fixer wrote" count={lessons.length} />
           {lessons.length ? (
             <ul className="lesson-list">
-              {lessons.slice().reverse().map((l) => (
-                <li key={l.at}>
-                  <span>{l.lesson}</span>
-                  <small>{l.mod}</small>
-                </li>
-              ))}
+              {lessons
+                .slice()
+                .reverse()
+                .map((l) => (
+                  <li key={l.at}>
+                    <p>{l.lesson}</p>
+                    <small>{l.mod}</small>
+                  </li>
+                ))}
             </ul>
           ) : (
             <Empty>Lessons appear after a fix passes.</Empty>
@@ -238,9 +226,9 @@ export default function InsightsPage({ mods, lessons }) {
   );
 }
 
-function Stat({ label, value, sub, tone }) {
+function Stat({ label, value, sub }) {
   return (
-    <div className={`stat ${tone || ""}`}>
+    <div className="kpi">
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{sub}</small>
@@ -248,42 +236,98 @@ function Stat({ label, value, sub, tone }) {
   );
 }
 
+const SERIES = [
+  ["passed", "Passed"],
+  ["failed", "Failed"],
+  ["running", "Running"],
+];
+
 function DailyBars({ days }) {
-  const W = 760;
+  const [hover, setHover] = React.useState(null);
+  const [W, setW] = React.useState(760);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setW(Math.max(320, Math.round(entry.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const H = 180;
+  const TOP = 10;
+  const LEFT = 28;
   const max = Math.max(1, ...days.map((d) => d.passed + d.failed + d.running));
-  const slot = W / days.length;
-  const bar = slot * 0.56;
+  const slot = (W - LEFT) / days.length;
+  const bar = Math.min(26, slot * 0.5);
+  const gap = 2;
+  const ticks = max <= 4 ? Array.from({ length: max }, (_, i) => i + 1) : [Math.round(max / 2), max];
+  const yOf = (v) => TOP + H - (v / max) * H;
+  const hovered = hover == null ? null : days[hover];
+
   return (
-    <svg className="daily" viewBox={`0 0 ${W} ${H + 26}`} role="img" aria-label="Mods per day by outcome">
-      {[0.25, 0.5, 0.75, 1].map((f) => (
-        <line key={f} x1="0" x2={W} y1={H - H * f} y2={H - H * f} className="grid" />
-      ))}
-      {days.map((d, i) => {
-        const x = i * slot + (slot - bar) / 2;
-        let y = H;
-        return (
-          <g key={d.key}>
-            {[
-              ["passed", d.passed],
-              ["failed", d.failed],
-              ["running", d.running],
-            ].map(([kind, n]) => {
-              if (!n) return null;
-              const h = (n / max) * H;
-              y -= h;
-              return <rect key={kind} className={kind} x={x} y={y} width={bar} height={h} rx="3" />;
-            })}
-            {(i % 2 === 0 || i === days.length - 1) && (
-              <text x={x + bar / 2} y={H + 18} textAnchor="middle">
-                {d.key.slice(5).replace("-", "/")}
-              </text>
-            )}
+    <div className="chart" ref={ref}>
+      <svg className="daily" width={W} height={TOP + H + 26} role="img" aria-label="Mods per day by outcome">
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={LEFT} x2={W} y1={yOf(t)} y2={yOf(t)} className="grid" />
+            <text x={LEFT - 10} y={yOf(t)} textAnchor="end" dominantBaseline="middle" className="tick">
+              {t}
+            </text>
           </g>
-        );
-      })}
-    </svg>
+        ))}
+        <line x1={LEFT} x2={W} y1={TOP + H} y2={TOP + H} className="axis" />
+        {days.map((d, i) => {
+          const x0 = LEFT + i * slot;
+          const x = x0 + (slot - bar) / 2;
+          const segs = SERIES.map(([k]) => [k, d[k]]).filter(([, n]) => n);
+          let y = TOP + H;
+          return (
+            <g key={d.key} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+              <rect className="hit" x={x0} y="0" width={slot} height={TOP + H + 26} />
+              {hover === i && <rect className="hover-band" x={x0 + 2} y={TOP} width={slot - 4} height={H} rx="4" />}
+              {segs.map(([kind, n], j) => {
+                const h = Math.max(2, (n / max) * H - (j > 0 ? gap : 0));
+                y -= h + (j > 0 ? gap : 0);
+                return j === segs.length - 1 ? (
+                  <path key={kind} className={kind} d={roundedTop(x, y, bar, h, 4)} />
+                ) : (
+                  <rect key={kind} className={kind} x={x} y={y} width={bar} height={h} />
+                );
+              })}
+              {(i % 2 === 1 || i === days.length - 1) && (
+                <text x={x + bar / 2} y={TOP + H + 18} textAnchor="middle" className="tick">
+                  {label(d.key)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {hovered && (
+        <div className="tooltip" style={{ left: LEFT + (hover + 0.5) * slot }}>
+          <strong>{label(hovered.key)}</strong>
+          {SERIES.map(([k, name]) => (
+            <span key={k}>
+              <i className={k} />
+              {name}
+              <b>{hovered[k]}</b>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
+}
+
+const label = (key) => {
+  const [, m, d] = key.split("-");
+  return new Date(2000, Number(m) - 1, Number(d)).toLocaleDateString([], { month: "short", day: "numeric" });
+};
+
+function roundedTop(x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h);
+  return `M${x},${y + h}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h}Z`;
 }
 
 function Bars({ rows, empty }) {
@@ -292,9 +336,9 @@ function Bars({ rows, empty }) {
   if (!total) return <Empty>{empty}</Empty>;
   return (
     <ul className="hbars">
-      {rows.map(([label, n]) => (
-        <li key={label}>
-          <span>{label}</span>
+      {rows.map(([name, n]) => (
+        <li key={name}>
+          <span>{name}</span>
           <span className="meter">
             <i style={{ width: `${(n / max) * 100}%` }} />
           </span>
@@ -305,12 +349,13 @@ function Bars({ rows, empty }) {
   );
 }
 
-function Coverage({ label, value, sub }) {
+function Coverage({ label: name, value, sub, tone }) {
   return (
     <div className="coverage">
-      <strong>{value}</strong>
+      <span className={`partner-dot ${tone}`} />
       <div>
-        <span>{label}</span>
+        <strong>{value}</strong>
+        <span>{name}</span>
         <small>{sub}</small>
       </div>
     </div>

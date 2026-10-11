@@ -1,63 +1,76 @@
 import React from "react";
-import { call, on } from "../../api.js";
+import { call, on, ago } from "../../api.js";
 import BuildPage from "./BuildPage.jsx";
 import ModsPage from "./ModsPage.jsx";
 import InsightsPage from "./InsightsPage.jsx";
 import NeatlogsPage from "./NeatlogsPage.jsx";
 import EntirePage from "./EntirePage.jsx";
+import { Icon } from "./shared.jsx";
 import "./studio.css";
 
 const PAGES = [
-  { key: "build", label: "Build", title: "Build a mod", sub: "Describe it, watch the AI player test it, and follow every fix." },
-  { key: "mods", label: "Mods", title: "Mods", sub: "Every mod Benana built, with its plugin code and attempt history." },
-  { key: "insights", label: "Insights", title: "Insights", sub: "Pass rates, spend, and what the agents learned across all mods." },
-  { key: "neatlogs", label: "Neatlogs", title: "Neatlogs traces", sub: "Every agent session, linked to its trace." },
-  { key: "entire", label: "Entire", title: "Entire checkpoints", sub: "Each commit linked to the agent session that produced it." },
+  ["build", "Build"],
+  ["mods", "Mods"],
+  ["insights", "Insights"],
+  ["neatlogs", "Neatlogs"],
+  ["entire", "Entire"],
 ];
 
 const ICONS = {
-  build: <path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3zM3 7.5l9 4.5 9-4.5M12 12v9" />,
+  build: <path d="M10 2.5 3.5 6v8L10 17.5l6.5-3.5V6L10 2.5zM3.5 6 10 9.5 16.5 6M10 9.5v8" />,
   mods: (
     <>
-      <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
-      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
-      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
-      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+      <rect x="3" y="3" width="5.5" height="5.5" rx="1.2" />
+      <rect x="11.5" y="3" width="5.5" height="5.5" rx="1.2" />
+      <rect x="3" y="11.5" width="5.5" height="5.5" rx="1.2" />
+      <rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1.2" />
     </>
   ),
-  insights: <path d="M4 20h16M8 16v-5M12 16V7M16 16v-8" />,
+  insights: <path d="M3 16.5h14M6 13V9.5M10 13V5M14 13V8" />,
   neatlogs: (
     <>
-      <circle cx="6" cy="6" r="2.2" />
-      <circle cx="18" cy="6" r="2.2" />
-      <circle cx="12" cy="18" r="2.2" />
-      <path d="M8 7l2.8 9M16 7l-2.8 9M8.2 6h7.6" />
+      <circle cx="5" cy="5" r="1.8" />
+      <circle cx="15" cy="5" r="1.8" />
+      <circle cx="10" cy="15" r="1.8" />
+      <path d="M6.5 6.3 9 13.4M13.5 6.3 11 13.4M6.8 5h6.4" />
     </>
   ),
-  entire: <path d="M12 3 3 8l9 5 9-5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5" />,
-  workspace: <path d="M4 6h16M4 12h10M4 18h7" />,
+  entire: <path d="M10 2.5 3 6.5l7 4 7-4-7-4zM3 10.5l7 4 7-4M3 14l7 4 7-4" />,
+  workspace: <path d="M3.5 5h13M3.5 10h9M3.5 15h6" />,
 };
 
 export default function ModStudio({ onOpenWorkspace }) {
   const [page, setPage] = React.useState("build");
   const [mods, setMods] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState(null);
+  const [composing, setComposing] = React.useState(true);
   const [lessons, setLessons] = React.useState([]);
   const [game, setGame] = React.useState(null);
   const [error, setError] = React.useState("");
-  const current = PAGES.find((p) => p.key === page);
   const mod = mods.find((m) => m.id === selectedId) || null;
-  const running = mods.some((m) => m.running);
+  const running = mods.find((m) => m.running) || null;
+
+  const watchMod = (id) => {
+    setSelectedId(id);
+    setComposing(false);
+    setPage("build");
+  };
   const openMod = (id) => {
     setSelectedId(id);
     setPage("mods");
+  };
+  const newMod = () => {
+    setComposing(true);
+    setPage("build");
   };
 
   React.useEffect(() => {
     call("studio:list")
       .then((list) => {
         setMods(list);
-        setSelectedId((id) => id || list[0]?.id || null);
+        const live = list.find((m) => m.running);
+        setSelectedId((id) => id || live?.id || list[0]?.id || null);
+        if (live) setComposing(false);
       })
       .catch((e) => setError(e.message));
     call("studio:lessons").then(setLessons).catch(() => {});
@@ -72,53 +85,98 @@ export default function ModStudio({ onOpenWorkspace }) {
     return () => offs.forEach((off) => off());
   }, []);
 
+  const server = game?.server || "stopped";
+  const bot = game?.bot === "online" ? "online" : "offline";
+
   return (
     <div className="studio">
-      <nav className="rail" aria-label="Mod Studio">
-        <div className="rail-brand" title="Benana Mod Studio">B</div>
-        {PAGES.map((p) => (
-          <button
-            key={p.key}
-            className={`rail-item ${page === p.key ? "active" : ""}`}
-            onClick={() => setPage(p.key)}
-            aria-current={page === p.key ? "page" : undefined}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">{ICONS[p.key]}</svg>
-            <span>{p.label}</span>
-            {p.key === "build" && running && <i className="rail-live" />}
-          </button>
-        ))}
-        <button className="rail-item rail-foot" onClick={onOpenWorkspace} title="Open the repository workspace">
-          <svg viewBox="0 0 24 24" aria-hidden="true">{ICONS.workspace}</svg>
-          <span>Repo</span>
+      <nav className="side" aria-label="Mod Studio">
+        <div className="logo">
+          <span className="brand-mark">B</span>
+          <span>
+            <strong>Benana</strong>
+            <small>Mod Studio</small>
+          </span>
+        </div>
+
+        <button className="new-mod" onClick={newMod}>
+          <Icon name="plus" size={14} />
+          New mod
         </button>
+
+        <div className="nav">
+          {PAGES.map(([key, label]) => (
+            <button
+              key={key}
+              className={`nav-item ${page === key ? "active" : ""}`}
+              onClick={() => setPage(key)}
+              aria-current={page === key ? "page" : undefined}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS[key]}</svg>
+              {label}
+              {key === "build" && running && <span className="live-dot" title="A mod is building" />}
+            </button>
+          ))}
+        </div>
+
+        <div className="side-section">
+          <span className="side-label">Recent</span>
+          <div className="recents">
+            {mods.slice(0, 8).map((m) => (
+              <button
+                key={m.id}
+                className={`recent-item ${page === "build" && !composing && m.id === selectedId ? "active" : ""}`}
+                onClick={() => watchMod(m.id)}
+                title={m.prompt}
+              >
+                <span className={`dot ${m.running ? "running" : m.status}`} />
+                <span className="recent-name">{m.name}</span>
+                <small>{ago(m.createdAt)}</small>
+              </button>
+            ))}
+            {!mods.length && <p className="side-empty">Mods you build appear here.</p>}
+          </div>
+        </div>
+
+        <div className="side-foot">
+          <div className="runtime-status">
+            <div>
+              <span className={`dot ${server === "running" ? "passed" : server === "starting" ? "running" : "idle"}`} />
+              Paper {game?.version || "server"}
+              <small>{server === "running" ? "Running" : server === "starting" ? "Starting" : "Stopped"}</small>
+            </div>
+            <div>
+              <span className={`dot ${bot === "online" ? "passed" : "idle"}`} />
+              Test bot
+              <small>{bot === "online" ? "In game" : "Offline"}</small>
+            </div>
+            {game?.mock && <span className="mock-note">Mock runtime</span>}
+          </div>
+          <button className="nav-item" onClick={onOpenWorkspace} title="Open the repository workspace">
+            <svg viewBox="0 0 20 20" aria-hidden="true">{ICONS.workspace}</svg>
+            Repository workspace
+          </button>
+        </div>
       </nav>
 
-      <div className="studio-body">
-        <header className="studio-top">
-          <div>
-            <h1>{current.title}</h1>
-            <p>{current.sub}</p>
-          </div>
-          <div className="top-status">
-            <span className={`status-dot ${game?.server || "stopped"}`} />
-            <span>{game?.server === "running" ? "Server running" : game?.server === "starting" ? "Server starting" : "Server stopped"}</span>
-            <span className="sep" />
-            <span className={`status-dot ${game?.bot === "online" ? "running" : "offline"}`} />
-            <span>{game?.bot === "online" ? "Bot in game" : "Bot offline"}</span>
-            {game?.mock && <span className="tag mock">Mock runtime</span>}
-          </div>
-        </header>
-        {error && <div className="studio-error page-error">{error}</div>}
-
+      <main className="studio-main">
+        {error && <div className="alert page-alert">{error}</div>}
         {page === "build" && (
-          <BuildPage mods={mods} mod={mod} setSelectedId={setSelectedId} lessons={lessons} onSeeMods={() => setPage("mods")} />
+          <BuildPage
+            mod={composing ? null : mod}
+            running={running}
+            lessons={lessons}
+            onCreated={watchMod}
+            onWatch={watchMod}
+            onNew={newMod}
+            onOpenCode={openMod}
+          />
         )}
-        {page === "mods" && <ModsPage mods={mods} mod={mod} setSelectedId={setSelectedId} onBuild={() => setPage("build")} />}
+        {page === "mods" && <ModsPage mods={mods} mod={mod} setSelectedId={setSelectedId} onBuild={newMod} onWatch={watchMod} />}
         {page === "insights" && <InsightsPage mods={mods} lessons={lessons} />}
         {page === "neatlogs" && <NeatlogsPage mods={mods} onOpenMod={openMod} />}
         {page === "entire" && <EntirePage mods={mods} onOpenMod={openMod} />}
-      </div>
+      </main>
     </div>
   );
 }
