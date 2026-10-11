@@ -1,0 +1,11 @@
+is it a better idea to make our own mcp server and give tools for it to give better outputs?
+
+---
+
+let's walkthrough on the complications we could face when building a real mod?
+- i feel like the ai agent testing is currently the bottleneck
+ideating on what we could do, do not change code
+
+---
+
+[Assistant quote](t3-citation://v1/1aa8d2bb-6397-4621-8dce-2bd19b02f426/96a2ec87-bb4b-4a24-b470-a5d9e7bfc33b/message%3Aprovider%3AclaudeAgent%3Anative-item%3A45083894-2b6e-46c9-8796-d359a3ee1409?text=With+the+2026-10-12+deadline+close%2C+do+you+want+the+demo+to+show+faster+testing%2C+or+more+reliable+mods%3F&start=6286&end=6389&prefix=es+whether+F+or+A+matters+more.+&suffix=+) yes, we need to able to show more reliable mods

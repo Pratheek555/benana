@@ -1,0 +1,107 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4N96PMQ8CQVMP0F01WQJVZA",
+  "session_id": "bf34b932-05b2-4896-812c-4dfadf053e2f",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-11T10:47:54.1571945Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "save_step_count": 3,
+  "files_touched": [
+    "docs/hackathon/CONTRACTS.md",
+    "electron/lib/game/index.cjs",
+    "electron/lib/game/server.cjs",
+    "electron/lib/studio/index.cjs",
+    "electron/lib/studio/prompts.cjs",
+    "electron/main.cjs",
+    "src/components/game/GamePane.jsx",
+    "src/components/game/game.css",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/InsightsPage.jsx",
+    "src/components/studio/shared.jsx",
+    "src/demo/bridge.js"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-sonnet-5-5",
+  "turn_id": "dc0b078553ab",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 12,
+    "cache_creation_tokens": 25186,
+    "cache_read_tokens": 205916,
+    "output_tokens": 6813,
+    "api_call_count": 6
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-11T10:47:54.1023193Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 259,
+    "human_modified": 7008,
+    "human_removed": 0,
+    "total_committed": 551,
+    "total_lines_changed": 7523,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 1404,
+      "user_lines_removed": 1148,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "docs/hackathon/CONTRACTS.md": 141,
+        "electron/lib/game/index.cjs": 459,
+        "electron/lib/game/server.cjs": 8,
+        "electron/lib/studio/index.cjs": 438,
+        "src/components/game/GamePane.jsx": 132,
+        "src/components/game/game.css": 226
+      },
+      "user_removed_per_file": {
+        "docs/hackathon/CONTRACTS.md": 138,
+        "electron/lib/game/index.cjs": 407,
+        "electron/lib/game/server.cjs": 1,
+        "electron/lib/studio/index.cjs": 362,
+        "src/components/game/GamePane.jsx": 43,
+        "src/components/game/game.css": 197
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 2248,
+      "user_lines_removed": 2056,
+      "agent_lines_added": 1404,
+      "agent_lines_removed": 1148,
+      "user_added_per_file": {
+        "electron/lib/studio/index.cjs": 91,
+        "electron/lib/studio/prompts.cjs": 161,
+        "electron/main.cjs": 261,
+        "src/components/studio/BuildPage.jsx": 756,
+        "src/components/studio/InsightsPage.jsx": 365,
+        "src/components/studio/shared.jsx": 9,
+        "src/demo/bridge.js": 605
+      },
+      "user_removed_per_file": {
+        "electron/lib/studio/index.cjs": 28,
+        "electron/lib/studio/prompts.cjs": 101,
+        "electron/main.cjs": 259,
+        "src/components/studio/BuildPage.jsx": 697,
+        "src/components/studio/InsightsPage.jsx": 363,
+        "src/components/studio/shared.jsx": 3,
+        "src/demo/bridge.js": 605
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 3783,
+      "agent_lines_removed": 3176
+    }
+  ]
+}
