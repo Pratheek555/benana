@@ -64,7 +64,13 @@ We use the CLI and only read metadata by default.
 - **Metadata:** `entire checkpoint explain <id> --json`. It returns branch, files touched, session count, sessions, tasks and strategy, with no transcript bytes.
 - **Changelog:** `entire graph commit <rev>` or `entire graph diff --base <v1> --head <v2>` between versions. Shows added, removed and signature-changed symbols with dependent counts.
 - **Transcripts:** `checkpoint explain --transcript` is used only when the creator has opted in for that repo, or in an open report case with the creator notified (§7).
-- **Trees:** the code graph built from a version's commit tree (`entire graph snapshot --head`, cached with `entire graph index`). Each version gets a stored code map, so buyers and reviewers can see what the mod touches without cloning it. **(verify)** that the graph index is stable across machines.
+- **Code graph (entire-graph v0.4.0):** full semantic analysis for Java, which is what our plugins are written in. Relations include CALLS, IMPORTS, EXTENDS, IMPLEMENTS, OVERRIDES, READS_FIELD and WRITES_FIELD. Each version gets its own code map:
+  - `entire graph index --head --report GRAPH_REPORT.md` writes a report that renders the same bytes for the same commit. The report is hashed and stored with the version, so the code map can be checked.
+  - `entire graph diff --base <v1> --head <v2>` gives the changelog, with dependent counts on signature changes.
+  - `entire graph search --query "..."` gives remixers the relevant code and its covering test.
+  - `entire graph impact --symbol <name>` gives reviewers the blast radius of a change before they read any code.
+  - The plugin reports `no_egress=true`, so the same analysis runs offline in a buyer's environment.
+  **(verify)** that the report is byte-identical on two machines for the same commit.
 - **Provenance per version:** the checkpoints reachable from the version's commit form that version's history. Only checkpoints linked to published versions are shown.
 
 ## 7. Transcript and privacy rules
@@ -93,7 +99,7 @@ We use the CLI and only read metadata by default.
 1. Session pushing can be turned off after publish without losing local history. (The flag exists; toggling after publish is untested.)
 2. Publishing can push only the checkpoints for public versions. (Untested. Depends on how checkpoints are stored as refs.)
 3. A moderator can read one checkpoint remote without access to the whole repo. (`repo grant` exists; untested.)
-4. `graph index` produces the same code map on two machines for the same commit.
+4. `graph index --report` produces byte-identical reports on two machines for the same commit.
 5. Redaction of secrets in transcripts is thorough enough to publish opt-in transcripts. (Not verified.)
 
 ## 11. Not in launch
