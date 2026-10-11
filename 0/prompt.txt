@@ -1,0 +1,26 @@
+can we revamp the build UI to be something like the chatUI we have like for t3Code and one the right we show the agent testing it, we want to beautifully show in the UI on how the server logs are working smoothy and when neatlogs is used in realtime and entire also [Image: image.png; ref=image_7582b2f9-961c-46c9-9f57-20ae5bb62500] 
+
+[Image: image.png; ref=image_595d8618-4478-4f22-aeb8-410a9572640d] all the test plan and everything should be shown as checklists being ticked in the chat like t3Code has 
+
+from now on do not push anything to main without my permission
+
+<t3_context version="1">
+<context kind="image" id="image_7582b2f9-961c-46c9-9f57-20ae5bb62500">
+name: image.png
+mimeType: image/png
+sizeBytes: 398796
+attachmentId: 7a34f124-5ce9-4903-927e-80ef4a13fd98-e08eb0ac-63b7-4bc9-bbf3-29214ae79156
+</context>
+<context kind="image" id="image_595d8618-4478-4f22-aeb8-410a9572640d">
+name: image.png
+mimeType: image/png
+sizeBytes: 64880
+attachmentId: 7a34f124-5ce9-4903-927e-80ef4a13fd98-aba50c3a-b9a1-4777-adbb-820b59f7a463
+</context>
+</t3_context>
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\7a34f124-5ce9-4903-927e-80ef4a13fd98-531bc35d-2713-42d7-9558-771aa65b7329.png]
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\7a34f124-5ce9-4903-927e-80ef4a13fd98-e08eb0ac-63b7-4bc9-bbf3-29214ae79156.png]
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\7a34f124-5ce9-4903-927e-80ef4a13fd98-aba50c3a-b9a1-4777-adbb-820b59f7a463.png]
