@@ -1,0 +1,5 @@
+all i saw was an iron golem, it did generate the asset but failed to show that in the agent tested preview. Please look into it
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\61f5d70e-1c51-4787-8580-0d4c0ecc4032-1d5e2da0-3068-446a-9869-74e6db669914.png]
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\61f5d70e-1c51-4787-8580-0d4c0ecc4032-a226c73e-d36c-48a7-8593-1b9f2ee6c012.png]
