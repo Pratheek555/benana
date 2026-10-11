@@ -126,6 +126,53 @@ Rules that follow (decided: transcripts ship at launch):
 - Search and impact views are not part of launch.
 - Fixer context and symbol-level intent matching are Studio and intent-graph changes. They are tracked here but built on separate branches.
 
-## 12. Not in launch
+## 13. API (Supabase)
+
+The marketplace runs on Supabase project `benana-waitlist` (ref `rqoponeauoiodaanbjxe`, region `ap-south-1`). Schema: `supabase/migrations/20261011120000_marketplace.sql`. Most calls go straight to PostgREST and Storage; row-level security enforces the rules, so there is no custom server at launch.
+
+### Auth
+
+- GitHub sign-in through Supabase Auth. **Setup needed:** a GitHub OAuth app, with its client ID and secret entered under Authentication → Providers → GitHub.
+- Desktop (Studio): PKCE flow. The Studio opens the system browser to Supabase's GitHub sign-in with `redirect_to=benana://auth/callback`; Electron registers the `benana://` protocol, exchanges the code for a session, and stores it in the OS keychain.
+- A profile row is created on first sign-in (`handle_new_user` trigger), with the GitHub login.
+
+### Publish (Studio → marketplace)
+
+1. Build the bundle (`electron/lib/publish/bundle.cjs`). Stop if `ok` is false and show the gate findings.
+2. Show the creator the preview: chosen transcripts, metadata, changelog, jar hash, and the warning that downloads cannot be recalled.
+3. First publish only: `POST /rest/v1/listings` `{ slug, name, summary, source_repo_url }`.
+4. Upload the jar: `POST /storage/v1/object/jars/{uid}/{listing_id}/{n}/{file}.jar` (10 MB max, owner folder only).
+5. Upload the bundle files: `POST /storage/v1/object/bundles/{uid}/{listing_id}/{n}/...`.
+6. `POST /rest/v1/versions` `{ listing_id, number, jar_path, jar_sha256, jar_bytes, bundle_path, bundle_manifest_sha256, commit_sha, playtest_summary }`.
+7. `POST /rest/v1/version_checkpoints` with one row per checkpoint `{ version_id, checkpoint_id, has_transcript }`.
+8. Push the chosen checkpoint refs to the source repo (`electron/lib/publish/refs.cjs`).
+
+If steps 4–8 fail, the version row is not created or is deleted, and uploaded files under that version's folder are removed.
+
+### Browse (site and Studio)
+
+- Listings: `GET /rest/v1/listings?status=eq.live&select=*,versions(*),listing_stats(*)&order=created_at.desc`
+- One listing: `GET /rest/v1/listings?slug=eq.{slug}&select=*,versions(*,version_checkpoints(*)),reviews(*,review_replies(*))`
+- Jar and bundle files: public Storage URLs under `jars/` and `bundles/`.
+
+### Community
+
+- Vote: `POST /rest/v1/votes` `{ listing_id }`. Unvote: `DELETE /rest/v1/votes?listing_id=eq.{id}`. Refused for accounts under 7 days old and for the listing's owner.
+- Review: `POST /rest/v1/reviews` `{ listing_id, stars, body }`. One per account per listing; owners cannot review their own.
+- Reply: `POST /rest/v1/review_replies` `{ review_id, body }`. Listing owner only.
+- Report: `POST /rest/v1/reports` `{ listing_id, category, reason }`. One per account per listing; the third report hides the listing.
+
+### Moderation
+
+- Moderators are rows in `moderators` (team only, added with SQL).
+- Reinstate or remove: `PATCH /rest/v1/listings?id=eq.{id}` `{ status }`, plus `POST /rest/v1/moderation_actions` with the reason.
+- Hide a review: `PATCH /rest/v1/reviews?id=eq.{id}` `{ status: "hidden", hidden_reason }`.
+- Owners cannot reinstate a hidden listing (enforced by trigger).
+
+### Tested
+
+`scripts/test-marketplace-rls.mjs` runs 24 checks against the live project with throwaway users and deletes them afterwards. All 24 pass (2026-10-11).
+
+## 14. Not in launch
 
 Payments, verification sandbox, paid listings, team organizations, and mobile.
