@@ -69,6 +69,9 @@ function load() {
     try {
       const mod = JSON.parse(fs.readFileSync(modFile(id), 'utf8'));
       if (!['passed', 'failed', 'stopped'].includes(mod.status)) mod.status = 'stopped';
+      // Attempts left "running" by an interrupted app are closed, so the timeline never shows ghost runs.
+      for (const a of mod.attempts || []) if (a.status === 'running') { a.status = 'stopped'; a.failure ||= { kind: 'interrupted', summary: 'The app stopped before this attempt finished.' }; }
+      if (mod.repoDir) repo.lockSessionPush?.(mod.repoDir);
       // Mods saved before chats had turns: their one request is the first turn.
       mod.turns ||= [{ prompt: mod.prompt, at: mod.createdAt, summary: mod.spec?.summary, checks: mod.testPlan?.checks, endPhase: mod.phase }];
       const last = mod.turns.at(-1);
@@ -314,6 +317,11 @@ async function runAttempt(mod, turnIndex, n, previous) {
   const did = attempt.role === 'fixer' ? `fix ${mod.name} from playtest evidence` : attempt.revision ? `change ${mod.name}: ${turn.prompt.replace(/\s+/g, ' ').slice(0, 72)}` : `implement ${mod.name}`;
   attempt.commit = await repo.commit(mod.repoDir, `Attempt ${n} (${attempt.role}): ${did}`);
   feed(mod, { attempt: n, role: 'benana', kind: 'note', text: `Committed ${attempt.commit.sha.slice(0, 7)}${attempt.commit.checkpoint ? `, Entire checkpoint ${attempt.commit.checkpoint}` : ''}` });
+  // An agent commit without a checkpoint has no record of the work behind it: say so, don't hide it.
+  if (!attempt.commit.checkpoint && mod.partners?.entire?.enabled) {
+    attempt.provenanceMissing = true;
+    feed(mod, { attempt: n, role: 'benana', kind: 'failure', text: `Entire did not link commit ${attempt.commit.sha.slice(0, 7)} to the agent session, so this attempt has no checkpoint.` });
+  }
 
   setPhase(mod, 'deploy', `Attempt ${n}: deploying to the Paper server`);
   attempt.deploy = await game.deployPlugin({ jarPath: attempt.build.jar, packPath: assets?.zip || null, emit });
