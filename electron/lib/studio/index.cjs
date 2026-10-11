@@ -7,6 +7,7 @@ const game = require('../game/index.cjs');
 const neatlogs = require('../neatlogs.cjs');
 const repo = require('./repo.cjs');
 const entire = require('../entire.cjs');
+const marketplace = require('../marketplace/index.cjs');
 const prompts = require('./prompts.cjs');
 const bench = require('./bench.cjs');
 const { runClaude, MODELS } = require('./claude.cjs');
@@ -639,6 +640,16 @@ function handlers(deps) {
     // Builds the task's request through the normal pipeline, then grades the result with the hidden checks.
     'studio:bench-run': ({ taskId }) => create({ prompt: bench.task(taskId).prompt, bench: { taskId, lessonsBefore: lessons().length } }),
     'studio:partners': async () => ({ neatlogs: await neatlogs.status() }),
+    // Marketplace: rows in Supabase, files on this machine. The service key stays in the main process.
+    'market:list': () => marketplace.list(),
+    'market:publish': async ({ id, metadataOnly = false }) => {
+      const mod = mods.get(id);
+      if (!mod) throw new Error('Unknown mod.');
+      if (active?.modId === id) throw new Error('This mod is building. Publish after it finishes.');
+      const sessions = metadataOnly ? [] : '*';
+      return marketplace.publish(mod, { sessions, log: (text) => feed(mod, { role: 'benana', kind: 'note', text }) });
+    },
+    'market:status': () => ({ configured: marketplace.configured(), storeDir: marketplace.storeDir }),
   };
 }
 

@@ -3,6 +3,7 @@ import { beginDrag } from "./Split.jsx";
 import { call, on, ago, isDemo } from "../../api.js";
 import BuildPage from "./BuildPage.jsx";
 import ModsPage from "./ModsPage.jsx";
+import MarketplacePage from "./MarketplacePage.jsx";
 import InsightsPage from "./InsightsPage.jsx";
 import NeatlogsPage from "./NeatlogsPage.jsx";
 import EntirePage from "./EntirePage.jsx";
@@ -15,6 +16,7 @@ import "./studio.css";
 const PAGES = [
   { id: "build", label: "Build" },
   { id: "mods", label: "Mods" },
+  { id: "marketplace", label: "Marketplace" },
   { id: "bench", label: "Bench" },
   { id: "insights", label: "Insights" },
   { id: "neatlogs", label: "Neatlogs" },
@@ -302,6 +304,7 @@ export default function ModStudio({ onOpenWorkspace }) {
             onOpenCode={openMod}
           />
         )}
+        {page === "marketplace" && <MarketplacePage mods={mods} />}
         {page === "mods" && <ModsPage mods={mods} mod={mod} setSelectedId={setSelectedId} onBuild={newMod} onWatch={watchMod} />}
         {page === "bench" && <BenchPage mods={mods} lessons={lessons} running={running} onWatch={watchMod} onOpenMod={openMod} />}
         {page === "insights" && <InsightsPage mods={mods} lessons={lessons} />}

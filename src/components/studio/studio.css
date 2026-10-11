@@ -3758,3 +3758,25 @@ body.is-resizing { user-select: none; }
 .studio .gw-query code { overflow: hidden; font: 11px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .studio .gw-query span { color: var(--text-3); font-size: 11px; }
 .studio .gw-query:hover { border-color: var(--entire); }
+
+/* ---------- Marketplace ---------- */
+.studio .mk-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; gap: 14px; flex: 1; min-height: 0; }
+.studio .mk-list, .studio .mk-detail, .studio .mk-publish { min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px; }
+.studio .mk-row { display: grid; gap: 2px; width: 100%; margin-bottom: 6px; padding: 9px 10px; border: 1px solid transparent; border-radius: 9px; background: none; text-align: left; }
+.studio .mk-row:hover { background: var(--hover); }
+.studio .mk-row.active { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+.studio .mk-row span, .studio .mk-row small { color: var(--text-3); font-size: 11.5px; }
+.studio .mk-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.studio .mk-head h2 { margin: 0; font-size: 18px; }
+.studio .mk-muted { color: var(--text-3); font-size: 12.5px; }
+.studio .mk-ok { color: var(--good-text); font-size: 12.5px; }
+.studio .mk-err { color: var(--bad-text); font-size: 12.5px; }
+.studio .mk-versions, .studio .mk-cps { margin: 0 0 14px; padding: 0; list-style: none; font-size: 12.5px; }
+.studio .mk-versions li, .studio .mk-cps li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.studio .mk-card { margin-bottom: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+.studio .mk-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.studio .mk-card .btn { margin-top: 8px; }
+.studio .mk-blocked { margin-top: 10px; padding: 10px; border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); border-radius: 8px; background: var(--bad-soft); color: var(--bad-text); font-size: 12px; }
+.studio .mk-blocked ul { margin: 6px 0; padding-left: 16px; }
+.studio .mk-blocked .btn { margin-top: 6px; }
+@media (max-width: 1250px) { .studio .mk-layout { grid-template-columns: 200px minmax(0, 1fr); } .studio .mk-publish { grid-column: 1 / -1; } }

@@ -47,7 +47,8 @@ function playtestOf(mod) {
 }
 
 // Publish the mod's current commit as a new version. Returns { ok, skipped?, blocked?, listing, version }.
-async function publish(mod, { log = () => {} } = {}) {
+// sessions: '*' (all), an array of session IDs to include transcripts for, or [] for metadata only.
+async function publish(mod, { log = () => {}, sessions = '*' } = {}) {
   if (!configured()) throw new Error('Marketplace is not configured (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, BENANA_PUBLISHER_ID).');
   if (!mod.repoDir) throw new Error(`${mod.name} has no repository yet.`);
   const jar = jarOf(mod);
@@ -64,10 +65,10 @@ async function publish(mod, { log = () => {} } = {}) {
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(out, { recursive: true });
   log(`${mod.name} v${number}: building the evidence bundle and running the secret gate`);
-  const built = await bundle.build({ repoDir: mod.repoDir, version: head, previous: prev?.commit_sha || null, jarPath: jar, sessions: '*', outDir: path.join(out, 'bundle') });
+  const built = await bundle.build({ repoDir: mod.repoDir, version: head, previous: prev?.commit_sha || null, jarPath: jar, sessions, outDir: path.join(out, 'bundle') });
   if (!built.ok) {
     fs.rmSync(out, { recursive: true, force: true });
-    return { ok: false, blocked: true, gate: built.manifest.gate };
+    return { ok: false, blocked: true, gate: built.manifest.gate, metadataOnlyPossible: built.manifest.gate.suspicious.every((x) => x.file === 'transcript.jsonl') && built.manifest.gate.findings.length === 0 };
   }
 
   // The jar and the source (as a git bundle carrying this version's checkpoint refs).
