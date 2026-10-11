@@ -3,9 +3,18 @@
   "checkpoint_id": "01M4M94C1GN6YYC1XP1JC6WMDZ",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 2,
+  "checkpoints_count": 5,
   "files_touched": [
-    "src/components/game/GamePane.jsx"
+    "src/components/game/GamePane.jsx",
+    "src/components/game/game.css",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/CodeView.jsx",
+    "src/components/studio/EntirePage.jsx",
+    "src/components/studio/InsightsPage.jsx",
+    "src/components/studio/ModStudio.jsx",
+    "src/components/studio/ModsPage.jsx",
+    "src/components/studio/NeatlogsPage.jsx",
+    "src/components/studio/shared.jsx"
   ],
   "sessions": [
     {
@@ -14,13 +23,20 @@
       "compact_transcript": "/0/transcript.jsonl",
       "content_hash": "/0/content_hash.txt",
       "prompt": "/0/prompt.txt"
+    },
+    {
+      "metadata": "/1/metadata.json",
+      "transcript": "/1/full.jsonl",
+      "compact_transcript": "/1/transcript.jsonl",
+      "content_hash": "/1/content_hash.txt",
+      "prompt": "/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 346,
-    "cache_creation_tokens": 537707,
-    "cache_read_tokens": 31353095,
-    "output_tokens": 183320,
-    "api_call_count": 173
+    "input_tokens": 448,
+    "cache_creation_tokens": 912786,
+    "cache_read_tokens": 38912085,
+    "output_tokens": 260910,
+    "api_call_count": 225
   }
 }

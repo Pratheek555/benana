@@ -1,0 +1,106 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4M94C1GN6YYC1XP1JC6WMDZ",
+  "session_id": "b5918d43-8e26-4ba2-a32f-ee4d9c60c5a7",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-11T01:27:15.2441932Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "save_step_count": 1,
+  "files_touched": [
+    "src/components/game/GamePane.jsx",
+    "src/components/game/game.css",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/CodeView.jsx",
+    "src/components/studio/EntirePage.jsx",
+    "src/components/studio/InsightsPage.jsx",
+    "src/components/studio/ModStudio.jsx",
+    "src/components/studio/ModsPage.jsx",
+    "src/components/studio/NeatlogsPage.jsx",
+    "src/components/studio/shared.jsx"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-haiku-5-5",
+  "turn_id": "172688614f46",
+  "checkpoint_transcript_start": 490,
+  "transcript_lines_at_start": 490,
+  "compact_transcript_start": 64,
+  "token_usage": {
+    "input_tokens": 102,
+    "cache_creation_tokens": 375079,
+    "cache_read_tokens": 7558990,
+    "output_tokens": 77590,
+    "api_call_count": 52
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_013ncAaoKCgdDY1ZESiaBV23",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "dataviz"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "172688614f46",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 552,
+        "end": 553,
+        "entry_ids": [
+          "a0b23220-066c-454d-af56-edef3ad4d7d7"
+        ],
+        "tool_use_id": "toolu_013ncAaoKCgdDY1ZESiaBV23"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_013ncAaoKCgdDY1ZESiaBV23"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: dataviz",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-11T01:27:14.7957876Z",
+    "agent_lines": 0,
+    "agent_removed": 707,
+    "human_added": 571,
+    "human_modified": 1244,
+    "human_removed": 0,
+    "total_committed": 1682,
+    "total_lines_changed": 3624,
+    "agent_percentage": 19.508830022075056,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 1653,
+      "user_lines_removed": 1101,
+      "agent_lines_added": 1111,
+      "agent_lines_removed": 821,
+      "user_added_per_file": {
+        "src/components/studio/studio.css": 1653
+      },
+      "user_removed_per_file": {
+        "src/components/studio/studio.css": 1101
+      }
+    }
+  ]
+}
