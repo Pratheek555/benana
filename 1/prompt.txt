@@ -1,0 +1,9 @@
+when trying to do npm run dev
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\39c8d23c-7621-4256-965b-7a6dca8a1e5e-eacdd338-629d-4a90-bb7a-9a2337951c82.png]
+
+---
+
+i have can you check the fault
+
+[Attached image "image.png" is saved at: C:\Users\prath\.t3\userdata\attachments\39c8d23c-7621-4256-965b-7a6dca8a1e5e-f38d7cae-67b3-4b35-bcda-3fe3203a1d29.png]
