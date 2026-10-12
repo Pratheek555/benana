@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4R3M4H6001582AXK75XMHDP",
+  "session_id": "787f8685-2d8c-4c20-a3ca-5922debbb144",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-12T13:07:57.97808Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "electron/lib/neatlogs.cjs",
+    "electron/lib/studio/prompts.cjs",
+    "src/components/game/GamePane.jsx",
+    "src/components/game/game.css"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "2e256c6b90d0",
+  "checkpoint_transcript_start": 545,
+  "transcript_lines_at_start": 545,
+  "compact_transcript_start": 89,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-12T13:07:57.799594Z",
+    "agent_lines": 58,
+    "agent_removed": 72,
+    "human_added": 280,
+    "human_modified": 861,
+    "human_removed": 0,
+    "total_committed": 1199,
+    "total_lines_changed": 1325,
+    "agent_percentage": 9.811320754716983,
+    "metric_version": 2
+  }
+}
