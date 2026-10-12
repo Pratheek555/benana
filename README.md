@@ -1,6 +1,10 @@
 # Benana Mod Studio
 
-Describe a Minecraft mod in one sentence. Benana writes it as a Paper plugin, starts a Minecraft server inside the app, and sends an AI player in to test it. When the playtest fails, a fixer agent reads the in-game evidence, patches the plugin, and the AI player tests it again.
+Describe a Minecraft mod in one sentence. Benana writes it as a Paper plugin, starts a Minecraft server inside the app, and sends an AI player in to test it. When the playtest fails, a fixer agent reads the in-game evidence, patches the plugin, and the AI player tests it again. Finished mods go on a marketplace hosted on Entire, where anyone can remix them from any checkpoint, and a CFO backed by cfo.ai tells creators what a mod costs and what to charge for it.
+
+[![Watch the 70-second launch video](docs/images/launch-video.png)](launch-video/out/benana-launch.mp4)
+
+**[Watch the launch video](launch-video/out/benana-launch.mp4)** (70 s, 1080p). Every shot of the app and the game is a real recording; see [How the launch video was made](#how-the-launch-video-was-made).
 
 ![Benana Mod Studio: the agent's report on the left, the live game, server log, Neatlogs traces and Entire checkpoints on the right](docs/images/build.png)
 
@@ -50,6 +54,24 @@ Each agent commit in a mod repository carries an `Entire-Checkpoint` trailer tha
 
 ![The Entire page: ArrowTracer's six commits, alternating fixer attempts and playtests, each linked to a checkpoint](docs/images/entire.png)
 
+## Marketplace, hosted on Entire
+
+The **Marketplace** lists published mods with their version, checkpoint count, remixes and playtest result. A published version is pushed to an Entire repository together with only the checkpoints behind it, so each listing shows the agent history that produced the mod.
+
+![The ExplosiveArrows listing: two checkpoints recorded by Entire, hosted on Entire at /et/benana-market/explosive-arrows, playtest passed, and a Remix v2 button](docs/images/marketplace.png)
+
+**Remix** starts a new mod from any published checkpoint. Benana clones the listing from Entire, checks out that checkpoint's commit, and seeds the new mod with the parent's spec, test plan, attempts and lessons. The next agent starts where the last one finished, and the remix is published as its own listing.
+
+![A remix of ExplosiveArrows v2 at checkpoint 01M4MQJW8T, cloned from Entire, with the parent's four test checks inherited](docs/images/remix.png)
+
+The publishing, privacy and remix design, including what was tested against the Entire CLI, is in [docs/marketplace/SPEC.md](docs/marketplace/SPEC.md).
+
+## Creator CFO, powered by cfo.ai
+
+The **CFO** page keeps books for every mod from the agents' recorded usage: build cost, money spent on fix attempts, first-try pass rate, and how many sales at $1.99 pay a mod back. **Ask your CFO** answers pricing, budget and runway questions by calling the creator's cfo.ai model over its MCP server, and shows each cfo.ai call it made. **Quote a mod before you build it** estimates a new idea's cost from the most similar past builds and how often they needed fixes, so creators can check whether a mod is worth building first.
+
+![The CFO page: $13.01 recorded spend, 21% on rework, 53% passed first try, a cfo.ai answer pricing ThunderHammer at $1.99 (pays back in 2 sales), and a $2.29 quote for a dragon pet mod](docs/images/cfo.png)
+
 ## Insights
 
 The **Insights** page tracks build outcomes, pass rate, first-try passes, and spend broken down by agent role and model.
@@ -59,8 +81,38 @@ The **Insights** page tracks build outcomes, pass rate, first-try passes, and sp
 ## Partner tools
 
 - **Neatlogs** traces every agent session (see above).
-- **Entire** checkpoints every attempt (see above). This repository has Entire enabled too.
-- **cfo.ai** holds the business plan: [docs/hackathon/cfo-plan.md](docs/hackathon/cfo-plan.md).
+- **Entire** checkpoints every attempt and hosts the marketplace (see above). This repository has Entire enabled too.
+- **cfo.ai** answers the CFO page's questions over MCP (see above) and holds the business plan: [docs/hackathon/cfo-plan.md](docs/hackathon/cfo-plan.md).
+
+## Built in public
+
+Benana was built in public on X under #neatHack. People were asking about it while it was being built, for example [PressX asking which Minecraft versions Benana supports](https://x.com/PressX_Global/status/2109273926962483588) (1.21.4 today, more versions coming, and there's a waitlist).
+
+## How the launch video was made
+
+The launch video is a [Remotion](https://www.remotion.dev) project in [`launch-video/`](launch-video). The motion graphics are React components. The app and game footage are real recordings, captured by scripts while the agents worked.
+
+| Path | What it is |
+|---|---|
+| [`src/Launch.jsx`](launch-video/src/Launch.jsx) | The 70-second edit: the pain of modding by hand, the build, getting stuck and fixing itself, the marketplace, building in public, the CFO, and the outro |
+| [`src/scenes/`](launch-video/src/scenes) | One component per beat, using real data: ArrowTracer's failed check (1.3 blocks measured vs 6–14 expected), ExplosiveArrows' Entire checkpoint IDs, and the CFO page's numbers |
+| [`src/Logo.jsx`](launch-video/src/Logo.jsx) | The Benana logo: a pixel banana that assembles itself block by block, plus the wordmark |
+| [`src/timeline.json`](launch-video/src/timeline.json) | The cut points in seconds, shared by the video and the music so cuts land on the beat |
+| [`music.cjs`](launch-video/music.cjs) | Writes the soundtrack (`public/music.wav`) from code: 120 BPM, a ticking intro, a drop on the logo, a breakdown while the agent is stuck |
+| [`obs.mjs`](launch-video/obs.mjs) | Drives OBS over obs-websocket: sets up 1080p scenes for the app window and the Minecraft client, then starts and stops named recordings |
+| [`scrollto.mjs`](launch-video/scrollto.mjs), [`win.mjs`](launch-video/win.mjs) | Drive the dev app over the DevTools protocol (`BENANA_CDP_PORT`) during a recording |
+| [`cut.sh`](launch-video/cut.sh) | Cuts and speeds up the raw recordings in `footage/` into the clips in `public/footage/` |
+| [`public/logos/`](launch-video/public/logos) | Partner logos for Neatlogs, Entire and cfo.ai |
+
+```sh
+cd launch-video
+npm ci
+node music.cjs            # regenerate the soundtrack
+npx remotion studio       # preview and edit
+npx remotion render Launch out/benana-launch.mp4
+```
+
+Recording needs OBS with its websocket server turned on (port 4455) and the dev app started with `BENANA_CDP_PORT=9333`.
 
 ## Run it
 
