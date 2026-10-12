@@ -138,7 +138,7 @@ function EntireSummary({ entire, number, slug, onOpenMod }) {
           <ul className="mk-cp-list" role="listbox" aria-label="Checkpoints">
             {cps.map((c) => (
               <li key={c.id}>
-                <button role="option" aria-selected={c.id === cp?.id} className={c.id === cp?.id ? "active" : ""} onClick={() => setSelected(c.id)}>
+                <button role="option" aria-selected={c.id === cp?.id} className={c.id === cp?.id ? "active" : ""} onClick={() => setSelected(c.id)} title={c.summary?.intent ? `${c.summary.intent}\n\n${c.summary.outcome || ""}` : `${c.agent || "agent"}${c.model ? ` · ${c.model}` : ""}`}>
                   <code>{c.id.slice(0, 12)}…</code>
                   <span>{c.agent || "agent"}{c.model ? ` · ${c.model}` : ""}</span>
                   <small>{c.createdAt ? new Date(c.createdAt).toLocaleString() : ""}</small>
@@ -148,6 +148,14 @@ function EntireSummary({ entire, number, slug, onOpenMod }) {
           </ul>
           {cp && (
             <div className="mk-cp-detail">
+              {cp.summary && (
+                <div className="mk-summary">
+                  <span className="ent-label">What happened</span>
+                  <p><strong>Intent.</strong> {cp.summary.intent}</p>
+                  <p><strong>Outcome.</strong> {cp.summary.outcome}</p>
+                  {cp.summary.learnings && <p className="mk-muted">{cp.summary.learnings}</p>}
+                </div>
+              )}
               <dl>
                 <dt>Checkpoint</dt><dd><code>{cp.id}</code></dd>
                 <dt>Commit</dt><dd><code>{cp.commit ? cp.commit.slice(0, 10) : "not linked"}</code></dd>
@@ -189,10 +197,11 @@ function PublishCard({ mod, published, onPublished }) {
   const [result, setResult] = React.useState(null);
   const [log, setLog] = React.useState([]);
 
+  const [summaries, setSummaries] = React.useState(false);
   const run = (metadataOnly) => {
     setBusy(true);
     setResult(null);
-    call("market:publish", { id: mod.id, metadataOnly })
+    call("market:publish", { id: mod.id, metadataOnly, withSummaries: summaries })
       .then((r) => { setResult(r); onPublished(); })
       .catch((e) => setResult({ ok: false, error: e.message }))
       .finally(() => setBusy(false));
@@ -208,6 +217,10 @@ function PublishCard({ mod, published, onPublished }) {
         <Status status={mod.status} />
       </div>
       <p className="mk-muted">{mod.spec?.summary || mod.prompt}</p>
+      <label className="mk-opt">
+        <input type="checkbox" checked={summaries} onChange={(e) => setSummaries(e.target.checked)} />
+        Write AI summaries for hover text <span className="mk-muted">(uses your summarizer credits)</span>
+      </label>
       {published && <p className="mk-ok">Published as v{published.versions?.[0]?.number}{published.versions?.[0]?.playtest_status ? ` · playtest ${published.versions[0].playtest_status}` : ""}</p>}
       <button className="btn solid" disabled={busy} onClick={() => run(false)}>{busy ? "Publishing…" : published ? "Publish update" : "Publish with transcripts"}</button>
 

@@ -681,12 +681,12 @@ function handlers(deps) {
     },
     // Marketplace: rows in Supabase, files on this machine. The service key stays in the main process.
     'market:list': () => marketplace.list(),
-    'market:publish': async ({ id, metadataOnly = false }) => {
+    'market:publish': async ({ id, metadataOnly = false, withSummaries = false }) => {
       const mod = mods.get(id);
       if (!mod) throw new Error('Unknown mod.');
       if (active?.modId === id) throw new Error('This mod is building. Publish after it finishes.');
       const sessions = metadataOnly ? [] : '*';
-      return marketplace.publish(mod, { sessions, log: (text) => feed(mod, { role: 'benana', kind: 'note', text }) });
+      return marketplace.publish(mod, { sessions, withSummaries, log: (text) => feed(mod, { role: 'benana', kind: 'note', text }) });
     },
     'market:status': () => ({ configured: marketplace.configured(), storeDir: marketplace.storeDir }),
     'market:open-checkpoint': async ({ slug, number, checkpointId }) => {

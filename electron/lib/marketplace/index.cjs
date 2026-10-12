@@ -12,6 +12,7 @@ const { dataDir, env } = require('../env.cjs');
 const { git } = require('../git.cjs');
 const bundle = require('../publish/bundle.cjs');
 const { entireSummary } = require('./entire-summary.cjs');
+const summaries = require('../publish/summaries.cjs');
 
 const storeDir = path.join(dataDir, 'marketplace');
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
@@ -50,7 +51,7 @@ function playtestOf(mod) {
 
 // Publish the mod's current commit as a new version. Returns { ok, skipped?, blocked?, listing, version }.
 // sessions: '*' (all), an array of session IDs to include transcripts for, or [] for metadata only.
-async function publish(mod, { log = () => {}, sessions = '*' } = {}) {
+async function publish(mod, { log = () => {}, sessions = '*', withSummaries = false } = {}) {
   if (!configured()) throw new Error('Marketplace is not configured (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, BENANA_PUBLISHER_ID).');
   if (!mod.repoDir) throw new Error(`${mod.name} has no repository yet.`);
   const jar = jarOf(mod);
@@ -90,6 +91,14 @@ async function publish(mod, { log = () => {}, sessions = '*' } = {}) {
   }
   const play = playtestOf(mod);
   const m = built.manifest;
+  // Opt-in AI summaries: generated on this machine with the creator's summarizer, sanitized and scanned.
+  let entire = entireSummary(path.join(out, 'bundle'), { repoDir: mod.repoDir });
+  if (withSummaries && entire) {
+    log(`${mod.name}: writing summaries for ${m.checkpoints.length} checkpoint${m.checkpoints.length === 1 ? '' : 's'} (uses your summarizer credits)`);
+    const got = await summaries.summariesFor(mod.repoDir, m.checkpoints.map((c) => c.id));
+    entire = { ...entire, checkpoints: entire.checkpoints.map((c) => ({ ...c, summary: got.summaries[c.id] || null })) };
+    for (const d of got.dropped) log(`${mod.name}: summary for ${d.checkpointId.slice(0, 10)} not published (${d.reason})`);
+  }
   const manifestSha = sha256(fs.readFileSync(path.join(out, 'bundle', 'manifest.json')));
   const [version] = await sb('/versions', { method: 'POST', body: JSON.stringify({
     listing_id: listing.id, number, jar_path: `local:${slug}/v${number}/${path.basename(jar)}`,
@@ -97,7 +106,7 @@ async function publish(mod, { log = () => {}, sessions = '*' } = {}) {
     bundle_manifest_sha256: manifestSha, commit_sha: head, playtest_summary: play.summary, playtest_status: play.status,
     checkpoint_count: m.checkpoints.length, tokens: m.tokens.input + m.tokens.output + m.tokens.cacheRead,
     transcripts: m.checkpoints.filter((c) => c.transcript).length,
-    entire: entireSummary(path.join(out, 'bundle'), { repoDir: mod.repoDir }),
+    entire,
   }) });
   if (m.checkpoints.length) {
     await sb('/version_checkpoints', { method: 'POST', body: JSON.stringify(m.checkpoints.map((c) => ({ version_id: version.id, checkpoint_id: c.id, has_transcript: c.transcript }))) });
