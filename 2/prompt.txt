@@ -1,0 +1,32 @@
+hey so we need to generate this type of introduction [File: David_Miller_-_Create_a_hit_mashup_with_just_one_prompt._Meet_Melty_MCP_QGRMTs.mp4; ref=file_3c5c99b8-e034-443c-b4bf-79ce16643ea8] , what all MCP tools do you need along with remotion 
+
+we are doing this as a product launch for benana so this is what i am thinking for the script:
+- initially a motion graphic to show how tedious it was to make mods before our product
+- introduce what our agent does, from videos of the agent building a mod to it generating textures and testing in the real minecraft client
+- while showing the build process we need show how we integrate neatlogs and also entire, when agent gets stuck at one point
+- later we introduce our marketplace and good motion graphics on how we built it on top of entire, mainly for entire it needs to show how we also use checkpoints so other users can build on top of it
+- then finally cfo.ai for creators to understand the feasability
+
+<t3_context version="1">
+<context kind="file" id="file_3c5c99b8-e034-443c-b4bf-79ce16643ea8">
+name: David_Miller_-_Create_a_hit_mashup_with_just_one_prompt._Meet_Melty_MCP_QGRMTs.mp4
+mimeType: video/mp4
+sizeBytes: 18387781
+attachmentId: 2582af2d-4663-4950-8ba3-1e87beb4a03e-9282fdc6-282d-483d-950b-d45b74e7035a-mp4
+</context>
+</t3_context>
+
+[Attached file "David_Miller_-_Create_a_hit_mashup_with_just_one_prompt._Meet_Melty_MCP_QGRMTs.mp4" is saved at: C:\Users\prath\.t3\userdata\attachments\2582af2d-4663-4950-8ba3-1e87beb4a03e-9282fdc6-282d-483d-950b-d45b74e7035a-mp4.mp4]
+
+---
+
+- the neatlogs key has been changes you can run a basic mod and then let me know if it's not working 
+- download the remotion yourself, i have obs installed so find a way to do it with a visually nice mod for the intro, or ffmpeg option if you think it's the best
+- leave the voices for now, use a good audio of some sort which matches the beats
+- NOTE IMPORTANT, we don't need to exactly clone the video sample I have take the best parts of it and use them based on the script i gave
+
+what else do you need to generate the launch video?
+
+---
+
+dont yse higgfiled
