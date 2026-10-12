@@ -72,7 +72,9 @@ async function create({ slug, name, summary }) {
     const file = path.join(dir, '.entire', 'settings.json');
     const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
     // Benana commits each attempt from a non-interactive process; prompting would hang the commit hook.
-    Object.assign(settings, { commit_linking: 'always', telemetry: false });
+    // Session pushing is on by default in Entire: a plain git push would send every transcript.
+    // Mods publish through the marketplace gate instead, so it stays off.
+    Object.assign(settings, { commit_linking: 'always', telemetry: false, strategy_options: { ...(settings.strategy_options || {}), push_sessions: false } });
     fs.writeFileSync(file, JSON.stringify(settings, null, 2));
     partners.entire = { enabled: true };
   } else {
@@ -81,6 +83,7 @@ async function create({ slug, name, summary }) {
 
   partners.neatlogs = await enableNeatlogs(dir);
 
+  if (partners.entire.enabled) partners.graph = await graphGuide(dir);
   await commit(dir, `Scaffold ${name} from the Benana Paper template`);
   return { dir, partners };
 }
@@ -134,6 +137,27 @@ async function entireStatus() {
   return { installed: true, version: /Entire CLI\s+(\S+)/.exec(res.out)?.[1] || res.out.trim().split('\n')[0] };
 }
 
+// entire-graph: the agent guide in CLAUDE.md/AGENTS.md teaches builder and fixer agents to query
+// the code graph (search, neighbors, impact) before reading files. Safe to run more than once.
+async function graphGuide(dir) {
+  const claude = path.join(dir, 'CLAUDE.md');
+  if (fs.existsSync(claude) && /graph-agent\.md|entire graph/.test(fs.readFileSync(claude, "utf8"))) return { ok: true, already: true };
+  const res = await exec('entire', ['graph', 'init-agents', '--repo', dir], dir, { timeoutMs: 60000 });
+  return { ok: res.ok, error: res.ok ? null : (res.err || res.out).trim().slice(0, 300) };
+}
+
+// Existing mod repos created before push_sessions was turned off.
+function lockSessionPush(dir) {
+  const file = path.join(dir, '.entire', 'settings.json');
+  try {
+    const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (settings.strategy_options?.push_sessions === false) return false;
+    settings.strategy_options = { ...(settings.strategy_options || {}), push_sessions: false };
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2));
+    return true;
+  } catch { return false; }
+}
+
 async function history(dir) {
   return (await git(dir, 'log', '--format=%h %s%n%(trailers:key=Entire-Checkpoint)', '-20')).out.trim();
 }
@@ -168,4 +192,4 @@ async function build(dir, name) {
   return { ok, jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000), assets };
 }
 
-module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, commits, entireStatus, history, files, readFile, diff, build };
+module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, commits, entireStatus, graphGuide, lockSessionPush, history, files, readFile, diff, build };

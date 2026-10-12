@@ -123,6 +123,7 @@ ${mod.spec.behavior.map((b) => `- ${b}`).join('\n')}
 The in-game playtester will run this test plan after you finish (also in playtest/test-plan.json):
 ${JSON.stringify(mod.testPlan.checks, null, 2)}
 
+Use the code graph before broad reading: \`entire graph search --query "<what you need>" --repo .\`, then \`entire graph neighbors\` or \`entire graph impact --symbol <name> --repo .\` before changing a method.
 The main class dev.benana.mod.${mod.name} already exists as a stub.
 ${assetList(mod)}${lessonList(lessons)}
 ${buildSteps(mod, 'Implement')} Finish with a short summary of what you implemented and the assets you drew.`;
@@ -146,6 +147,7 @@ ${mod.spec.behavior.map((b) => `- ${b}`).join('\n')}
 The in-game playtester will run this updated test plan after you finish (also in playtest/test-plan.json):
 ${JSON.stringify(mod.testPlan.checks, null, 2)}
 
+Use the code graph before broad reading: \`entire graph search --query "<what you need>" --repo .\`, then \`entire graph neighbors\` or \`entire graph impact --symbol <name> --repo .\` before changing a method.
 The plugin source is under src/main/java/dev/benana/mod/ and its art under art/ and pack/; \`git log\` shows how it got here.
 Read the current implementation before changing it, and keep every behavior the user did not ask to change.
 ${assetList(mod)}${lessonList(lessons)}
@@ -166,6 +168,8 @@ function fixer({ mod, attempt, previous, context }) {
 Mod: ${mod.name}: ${mod.spec.summary}
 Behavior:
 ${mod.spec.behavior.map((b) => `- ${b}`).join('\n')}
+
+Use the code graph before broad reading: \`entire graph search --query "<what you need>" --repo .\`, then \`entire graph neighbors\` or \`entire graph impact --symbol <name> --repo .\` before changing a method.
 
 Full test plan: playtest/test-plan.json. Previous verdicts: playtest/attempt-*/verdict.json.
 

@@ -2,6 +2,7 @@ import React from "react";
 import { call } from "../../api.js";
 import { shortModel, shortSha } from "./shared.jsx";
 import "./entire.css";
+import GraphWindow from "./GraphWindow.jsx";
 
 const IDLE = Object.freeze({ state: "idle" });
 
@@ -161,7 +162,7 @@ function Trail({ commit, checkpoint, sessions }) {
   );
 }
 
-function CheckpointView({ mod, branch, commit, info, lookup, commits, onRetry, onClose, onOpenMod, onSelect }) {
+function CheckpointView({ mod, branch, commit, info, lookup, commits, onRetry, onClose, onOpenMod, onOpenGraph, onSelect }) {
   const [copied, copy] = useCopy();
   const cp = lookup.item || null;
   const sessions = cp?.sessions || [];
@@ -192,6 +193,7 @@ function CheckpointView({ mod, branch, commit, info, lookup, commits, onRetry, o
         </div>
         <div className="en-cp-actions">
           {commit.checkpoint && <button className="en-icon-button" onClick={onRetry} disabled={lookup.state === "loading"} title="Refresh checkpoint" aria-label="Refresh checkpoint"><Icon name="retry" size={14} /></button>}
+          <button className="en-button" onClick={() => onOpenGraph(mod)}>View graph</button>
           <button className="en-button" onClick={() => onOpenMod(mod.id)}>Open mod <Icon name="arrow" size={14} /></button>
           <button className="en-icon-button" onClick={onClose} title="Close (Esc)" aria-label="Close commit"><Icon name="close" size={14} /></button>
         </div>
@@ -270,6 +272,7 @@ export default function EntirePage({ mods, onOpenMod }) {
   const repos = mods.filter((m) => m.repoDir);
   const [repoId, setRepoId] = React.useState(null);
   const mod = repos.find((m) => m.id === repoId) || repos[0] || null;
+  const [graphMod, setGraphMod] = React.useState(null);
   const [cli, setCli] = React.useState({ state: "loading" });
   const [logs, setLogs] = React.useState({});
   const logRequests = React.useRef({});
@@ -400,7 +403,7 @@ export default function EntirePage({ mods, onOpenMod }) {
             </div>
           </aside>
           <CheckpointView mod={mod} branch={branch} commit={selected} info={described.get(selected.sha)} lookup={(cpKey && checkpoints[cpKey]) || IDLE} commits={commits}
-            onRetry={() => selected.checkpoint && loadCheckpoint(mod, selected)} onClose={() => setSelectedSha(null)} onOpenMod={onOpenMod} onSelect={setSelectedSha} />
+            onRetry={() => selected.checkpoint && loadCheckpoint(mod, selected)} onClose={() => setSelectedSha(null)} onOpenMod={onOpenMod} onOpenGraph={setGraphMod} onSelect={setSelectedSha} />
         </div>
       ) : <>
         <section className="en-kpis" aria-label="Entire summary">
@@ -453,6 +456,7 @@ export default function EntirePage({ mods, onOpenMod }) {
           </>}
         </section>
       </>}
+      {graphMod && <GraphWindow mod={graphMod} onClose={() => setGraphMod(null)} />}
     </div>
   );
 }
