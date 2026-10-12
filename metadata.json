@@ -3,7 +3,7 @@
   "checkpoint_id": "01M4REZ9P6YB1FGAEBBCANVAW7",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 22,
+  "checkpoints_count": 23,
   "files_touched": [
     "docs/marketplace/SPEC.md",
     "electron/lib/cfo.cjs",
@@ -93,13 +93,20 @@
       "compact_transcript": "/7/transcript.jsonl",
       "content_hash": "/7/content_hash.txt",
       "prompt": "/7/prompt.txt"
+    },
+    {
+      "metadata": "/8/metadata.json",
+      "transcript": "/8/full.jsonl",
+      "compact_transcript": "/8/transcript.jsonl",
+      "content_hash": "/8/content_hash.txt",
+      "prompt": "/8/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 666,
-    "cache_creation_tokens": 693166,
-    "cache_read_tokens": 51803655,
-    "output_tokens": 284433,
-    "api_call_count": 332
+    "input_tokens": 670,
+    "cache_creation_tokens": 695904,
+    "cache_read_tokens": 51935456,
+    "output_tokens": 285366,
+    "api_call_count": 334
   }
 }
