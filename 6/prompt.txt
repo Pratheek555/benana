@@ -51,3 +51,7 @@ continue
 <status>completed</status>
 <summary>Background command "Restart, run demo again, capture frames" completed (exit code 0)</summary>
 </task-notification>
+
+---
+
+[Assistant quote](t3-citation://v1/1aa8d2bb-6397-4621-8dce-2bd19b02f426/0868e54c-da38-4ca5-a552-96ca819ce230/message%3Aprovider%3AclaudeAgent%3Anative-item%3A41c4f8d2-2fda-45fc-86cb-bd95247406c7?text=Nothing+is+committed.+Your+checkout+is+mid-merge+%28the+pull+of+origin%2Fmain%2C+conflicts+resolved+but+not+concluded%29%2C+and+git+refuses+partial+commits+during+a+merge.+Once+you+run+git+commit+to+finish+the+merge%2C+I+can+commit+my+files.+Should+I+push+after+that%3F&start=2560&end=2815&prefix=howed+%22Not+configured%22+before%29.+&suffix=+To+enable+debug-port+control+I+) fix this i will get you the proper ingest key by then
