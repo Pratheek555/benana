@@ -10,6 +10,7 @@ const path = require('node:path');
 const { dataDir, env } = require('../env.cjs');
 const { git } = require('../git.cjs');
 const bundle = require('../publish/bundle.cjs');
+const { entireSummary } = require('./entire-summary.cjs');
 
 const storeDir = path.join(dataDir, 'marketplace');
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
@@ -95,12 +96,28 @@ async function publish(mod, { log = () => {}, sessions = '*' } = {}) {
     bundle_manifest_sha256: manifestSha, commit_sha: head, playtest_summary: play.summary, playtest_status: play.status,
     checkpoint_count: m.checkpoints.length, tokens: m.tokens.input + m.tokens.output + m.tokens.cacheRead,
     transcripts: m.checkpoints.filter((c) => c.transcript).length,
+    entire: entireSummary(path.join(out, 'bundle')),
   }) });
   if (m.checkpoints.length) {
     await sb('/version_checkpoints', { method: 'POST', body: JSON.stringify(m.checkpoints.map((c) => ({ version_id: version.id, checkpoint_id: c.id, has_transcript: c.transcript }))) });
   }
   log(`${mod.name} v${number} published (${m.checkpoints.length} checkpoints, local files in ${out})`);
   return { ok: true, listing, version, dir: out };
+}
+
+// Existing versions published before the Entire summary existed: fill it from their local bundles.
+async function backfillEntire() {
+  const rows = await sb('/versions?select=id,number,listing_id,bundle_path');
+  const out = [];
+  for (const v of rows) {
+    const [l] = await sb(`/listings?id=eq.${v.listing_id}&select=slug`);
+    const dir = path.join(storeDir, l.slug, `v${v.number}`, 'bundle');
+    const summary = fs.existsSync(dir) ? entireSummary(dir) : null;
+    if (!summary) { out.push({ slug: l.slug, number: v.number, skipped: 'no local bundle' }); continue; }
+    await sb(`/versions?id=eq.${v.id}`, { method: 'PATCH', body: JSON.stringify({ entire: summary }) });
+    out.push({ slug: l.slug, number: v.number, checkpoints: summary.checkpoints.length });
+  }
+  return out;
 }
 
 async function list() {
@@ -118,4 +135,4 @@ async function list() {
   };
 }
 
-module.exports = { configured, publish, list, storeDir, slugOf };
+module.exports = { configured, publish, list, backfillEntire, storeDir, slugOf };

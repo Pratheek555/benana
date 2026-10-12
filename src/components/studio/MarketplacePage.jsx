@@ -94,11 +94,54 @@ function Listing({ listing, onChanged }) {
         ))}
       </ul>
 
+      {version?.entire && <EntireSummary entire={version.entire} />}
+
       <span className="ent-label">Checkpoints in v{version?.number}</span>
       {cps.length ? (
         <ul className="mk-cps">{cps.map((c) => <li key={c.checkpoint_id}><code>{c.checkpoint_id}</code>{c.has_transcript ? <span className="ent-chip">transcript</span> : <span className="mk-muted"> metadata only</span>}</li>)}</ul>
       ) : <p className="mk-muted">No checkpoints.</p>}
     </>
+  );
+}
+
+// The same Entire provenance the website shows: checkpoints with agent and model, the changelog, the code map.
+function EntireSummary({ entire }) {
+  const cps = entire.checkpoints || [];
+  const cl = entire.changelog;
+  const cm = entire.codeMap;
+  return (
+    <section className="mk-entire">
+      <span className="ent-label">Built with Entire</span>
+      <div className="mk-stats">
+        <span className="ent-stat"><strong>{cps.length}</strong> checkpoints</span>
+        {cl && <span className="ent-stat"><strong>{cl.filesChanged}</strong> files changed</span>}
+        {cm && <span className="ent-stat"><strong>{cm.symbols}</strong> symbols · <strong>{cm.relations}</strong> relations</span>}
+      </div>
+      <ol className="mk-timeline">
+        {cps.map((c) => (
+          <li key={c.id}>
+            <code>{c.id.slice(0, 12)}…</code>
+            <span className="ent-chip">{c.agent || "agent"}</span>
+            {c.model && <span className="mk-muted">{c.model}</span>}
+            <span className="mk-muted">{Number(c.tokens || 0).toLocaleString()} tokens</span>
+          </li>
+        ))}
+      </ol>
+      {cl?.files?.length > 0 && (
+        <>
+          <span className="ent-label">Changelog</span>
+          <ul className="mk-changes">
+            {cl.files.slice(0, 12).map((f) => (
+              <li key={f.path}>
+                <span className={`mk-status ${f.status}`}>{f.status === "A" ? "added" : f.status === "D" ? "deleted" : "changed"}</span>
+                <code>{f.path}</code>
+                {f.signatureChanged > 0 && <span className="mk-muted">{f.signatureChanged} signature change{f.signatureChanged === 1 ? "" : "s"}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }
 
