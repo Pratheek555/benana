@@ -2,6 +2,7 @@ import React from "react";
 import { call } from "../../api.js";
 import { shortModel, shortSha } from "./shared.jsx";
 import "./entire.css";
+import GraphWindow from "./GraphWindow.jsx";
 
 const IDLE = Object.freeze({ state: "idle" });
 
@@ -277,6 +278,7 @@ export default function EntirePage({ mods, onOpenMod }) {
   const [selectedSha, setSelectedSha] = React.useState(null);
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState("all");
+  const [graphOpen, setGraphOpen] = React.useState(false);
   const railRef = React.useRef(null);
   const commitCount = mod ? mod.attempts.reduce((n, a) => n + (a.commit?.sha ? 1 : 0) + (a.playtestCommit?.sha ? 1 : 0), 0) : 0;
 
@@ -345,6 +347,7 @@ export default function EntirePage({ mods, onOpenMod }) {
 
   const pickRepo = (id) => { setRepoId(id); setSelectedSha(null); };
   const clearFilters = () => { setQuery(""); setFilter("all"); };
+  const unlinkedCount = commits.filter((c) => !c.checkpoint).length;
 
   const allCommits = mods.flatMap((m) => m.attempts.flatMap((a) => [a.commit, a.playtestCommit].filter((c) => c?.sha)));
   const linked = allCommits.filter((c) => c.checkpoint).length;
@@ -359,11 +362,16 @@ export default function EntirePage({ mods, onOpenMod }) {
   const cliDetail = cli.state === "error" ? cli.error : cliKind === "missing" ? value?.error || "Install the Entire CLI so each agent commit gets a checkpoint." : null;
 
   const search = <label className="en-search"><Icon name="search" size={15} /><span className="sr-only">Search commits</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search commits" /></label>;
+  // Commits with an Entire checkpoint, out of all agent commits, for one repo (from the mod's attempts).
+  const coverageOf = (m) => {
+    const all = m.attempts.flatMap((a) => [a.commit, a.playtestCommit].filter((c) => c?.sha));
+    return { linked: all.filter((c) => c.checkpoint).length, total: all.length };
+  };
   const repoPicker = mod && (
     <label className="en-repo-picker">
       <Icon name="folder" size={14} />
       <span className="sr-only">Repository</span>
-      <select value={mod.id} onChange={(event) => pickRepo(event.target.value)}>{repos.map((m) => <option value={m.id} key={m.id}>{m.name}</option>)}</select>
+      <select value={mod.id} onChange={(event) => pickRepo(event.target.value)}>{repos.map((m) => <option value={m.id} key={m.id}>{m.name} · {coverageOf(m).linked}/{coverageOf(m).total}</option>)}</select>
       <Icon name="chevron" size={13} />
     </label>
   );
@@ -382,6 +390,12 @@ export default function EntirePage({ mods, onOpenMod }) {
             <button className="en-back" onClick={() => setSelectedSha(null)}><Icon name="back" size={14} />Commits</button>
             <div className="en-rail-head">{repoPicker}<span className="en-branch"><Icon name="branch" size={12} />{branch}</span></div>
             <div className="en-rail-search">{search}</div>
+            {unlinkedCount > 0 && (
+              <div className="en-inline-error" role="alert">
+                <span>{unlinkedCount} {unlinkedCount === 1 ? "commit has" : "commits have"} no Entire checkpoint, so {unlinkedCount === 1 ? "its" : "their"} session history is missing.</span>
+                <button onClick={() => setFilter("unlinked")}>Show {unlinkedCount === 1 ? "it" : "them"}</button>
+              </div>
+            )}
             <div className="en-rail-list" ref={railRef}>
               {groupByDay(filtered).map(([day, list]) => (
                 <section key={day}>
@@ -403,6 +417,7 @@ export default function EntirePage({ mods, onOpenMod }) {
             onRetry={() => selected.checkpoint && loadCheckpoint(mod, selected)} onClose={() => setSelectedSha(null)} onOpenMod={onOpenMod} onSelect={setSelectedSha} />
         </div>
       ) : <>
+        {graphOpen && mod && <GraphWindow mod={mod} onClose={() => setGraphOpen(false)} />}
         <section className="en-kpis" aria-label="Entire summary">
           <article><span>Repositories</span><strong>{repos.length.toLocaleString()}</strong><small>{repos.length ? `${enabled} with Entire enabled` : "One per mod"}</small></article>
           <article><span>Agent commits</span><strong>{allCommits.length.toLocaleString()}</strong><small>{allCommits.length - playtests} code · {playtests} playtest</small></article>
@@ -419,6 +434,7 @@ export default function EntirePage({ mods, onOpenMod }) {
               <div>
                 <span className="en-browser-count">{plural(commits.length, "commit")}</span>
                 <button className="en-icon-button" onClick={() => loadLog(mod)} disabled={log.state === "loading"} title="Refresh commits" aria-label="Refresh commits"><Icon name="retry" size={14} /></button>
+                <button className="en-button" onClick={() => setGraphOpen(true)}><Icon name="spark" size={14} />View graph</button>
                 <button className="en-button" onClick={() => call("open-path", mod.repoDir)}><Icon name="folder" size={14} />Repository</button>
               </div>
             </div>

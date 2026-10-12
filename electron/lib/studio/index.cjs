@@ -5,7 +5,9 @@ const path = require('node:path');
 const { appRoot, dataDir } = require('../env.cjs');
 const game = require('../game/index.cjs');
 const neatlogs = require('../neatlogs.cjs');
+const entire = require('../entire.cjs');
 const repo = require('./repo.cjs');
+const marketplace = require('../marketplace/index.cjs');
 const prompts = require('./prompts.cjs');
 const bench = require('./bench.cjs');
 const { runClaude, MODELS } = require('./claude.cjs');
@@ -69,6 +71,9 @@ function load() {
     try {
       const mod = JSON.parse(fs.readFileSync(modFile(id), 'utf8'));
       if (!['passed', 'failed', 'stopped'].includes(mod.status)) mod.status = 'stopped';
+      // Attempts left "running" by an interrupted app are closed, so the timeline never shows ghost runs.
+      for (const a of mod.attempts || []) if (a.status === 'running') { a.status = 'stopped'; a.failure ||= { kind: 'interrupted', summary: 'The app stopped before this attempt finished.' }; }
+      if (mod.repoDir) repo.lockSessionPush?.(mod.repoDir);
       // Mods saved before chats had turns: their one request is the first turn.
       mod.turns ||= [{ prompt: mod.prompt, at: mod.createdAt, summary: mod.spec?.summary, checks: mod.testPlan?.checks, endPhase: mod.phase }];
       const last = mod.turns.at(-1);
@@ -314,6 +319,11 @@ async function runAttempt(mod, turnIndex, n, previous) {
   const did = attempt.role === 'fixer' ? `fix ${mod.name} from playtest evidence` : attempt.revision ? `change ${mod.name}: ${turn.prompt.replace(/\s+/g, ' ').slice(0, 72)}` : `implement ${mod.name}`;
   attempt.commit = await repo.commit(mod.repoDir, `Attempt ${n} (${attempt.role}): ${did}`);
   feed(mod, { attempt: n, role: 'benana', kind: 'note', text: `Committed ${attempt.commit.sha.slice(0, 7)}${attempt.commit.checkpoint ? `, Entire checkpoint ${attempt.commit.checkpoint}` : ''}` });
+  // An agent commit without a checkpoint has no record of the work behind it: say so, don't hide it.
+  if (!attempt.commit.checkpoint && mod.partners?.entire?.enabled) {
+    attempt.provenanceMissing = true;
+    feed(mod, { attempt: n, role: 'benana', kind: 'failure', text: `Entire did not link commit ${attempt.commit.sha.slice(0, 7)} to the agent session, so this attempt has no checkpoint.` });
+  }
 
   setPhase(mod, 'deploy', `Attempt ${n}: deploying to the Paper server`);
   attempt.deploy = await game.deployPlugin({ jarPath: attempt.build.jar, packPath: assets?.zip || null, emit });
@@ -572,6 +582,42 @@ function repoOf(id) {
   return mod.repoDir;
 }
 
+
+// Open a marketplace checkpoint in the Studio: a working copy of the mod at that checkpoint's commit,
+// registered as a mod, so the user can ask for changes from there. Nothing is pushed anywhere.
+async function openCheckpoint({ slug, number, checkpointId, name, source, commit }) {
+  const id = `mod_${now().toString(36)}`;
+  const dir = path.join(repo.modsDir, `${slug}-${id.slice(-4)}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+  const { execFileSync } = require('node:child_process');
+  const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' }).trim();
+  execFileSync('git', ['clone', '-q', source, dir], { encoding: 'utf8' });
+  git('config', 'user.name', 'Benana Mod Studio');
+  git('config', 'user.email', 'studio@benana.dev');
+  git('checkout', '-q', '-b', `from-checkpoint-${checkpointId.slice(-6).toLowerCase()}`, commit);
+  repo.lockSessionPush(dir);
+  // Enable Entire here so future agent work in this copy is checkpointed too (best effort).
+  try { execFileSync(process.env.BENANA_ENTIRE || 'entire', ['enable', '--agent', 'claude-code', '--project', '-y'], { cwd: dir, timeout: 60000, stdio: 'ignore' }); repo.lockSessionPush(dir); } catch {}
+  let testPlan = null;
+  try { testPlan = JSON.parse(fs.readFileSync(path.join(dir, 'playtest', 'test-plan.json'), 'utf8')); } catch {}
+  const at = now();
+  const mod = {
+    id, prompt: `Opened from the marketplace: ${name} v${number}, checkpoint ${checkpointId}`, seed: false,
+    name, status: 'passed', phase: 'done', createdAt: at, updatedAt: at,
+    spec: { summary: `${name}, opened at checkpoint ${checkpointId.slice(0, 10)}`, behavior: [] },
+    testPlan, repoDir: dir, partners: { entire: { enabled: true }, neatlogs: { enabled: false } },
+    origin: { marketplace: slug, version: number, checkpoint: checkpointId, commit },
+    sessions: [], attempts: [], error: null,
+    turns: [{ prompt: `Opened from the marketplace (${name} v${number})`, at, summary: `Opened at checkpoint ${checkpointId.slice(0, 10)}`, checks: testPlan?.checks || [], endPhase: 'done', status: 'passed' }],
+    feed: [],
+  };
+  mods.set(id, mod);
+  feed(mod, { role: 'benana', kind: 'note', text: `Opened ${name} v${number} at checkpoint ${checkpointId.slice(0, 10)} (commit ${commit.slice(0, 7)}). Ask for a change to continue from here.` });
+  save(mod);
+  return publicMod(mod);
+}
+
 function handlers(deps) {
   emit = deps.emit;
   log = deps.log;
@@ -619,6 +665,8 @@ function handlers(deps) {
     },
     'studio:checkpoint': ({ id, checkpoint }) => repo.checkpoint(repoOf(id), checkpoint),
     'studio:commits': ({ id }) => repo.commits(repoOf(id)),
+    // The mod's code graph from entire-graph (files, symbols, relations), for the graph window.
+    'studio:graph': ({ id }) => entire.graph(repoOf(id)),
     'studio:files': ({ id }) => repo.files(repoOf(id)),
     'studio:file': ({ id, path: rel }) => repo.readFile(repoOf(id), rel),
     'studio:diff': ({ id, sha }) => repo.diff(repoOf(id), sha),
@@ -630,6 +678,20 @@ function handlers(deps) {
     'studio:partners': async () => {
       const [nl, entire] = await Promise.all([neatlogs.status(), repo.entireStatus()]);
       return { neatlogs: nl, entire };
+    },
+    // Marketplace: rows in Supabase, files on this machine. The service key stays in the main process.
+    'market:list': () => marketplace.list(),
+    'market:publish': async ({ id, metadataOnly = false, withSummaries = false }) => {
+      const mod = mods.get(id);
+      if (!mod) throw new Error('Unknown mod.');
+      if (active?.modId === id) throw new Error('This mod is building. Publish after it finishes.');
+      const sessions = metadataOnly ? [] : '*';
+      return marketplace.publish(mod, { sessions, withSummaries, log: (text) => feed(mod, { role: 'benana', kind: 'note', text }) });
+    },
+    'market:status': () => ({ configured: marketplace.configured(), storeDir: marketplace.storeDir }),
+    'market:open-checkpoint': async ({ slug, number, checkpointId }) => {
+      const cp = await marketplace.checkpointOf(slug, number, checkpointId);
+      return openCheckpoint(cp);
     },
   };
 }

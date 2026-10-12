@@ -3,11 +3,12 @@ import { beginDrag } from "./Split.jsx";
 import { call, on, ago, isDemo } from "../../api.js";
 import BuildPage from "./BuildPage.jsx";
 import ModsPage from "./ModsPage.jsx";
+import MarketplacePage from "./MarketplacePage.jsx";
 import InsightsPage from "./InsightsPage.jsx";
 import NeatlogsPage from "./NeatlogsPage.jsx";
 import EntirePage from "./EntirePage.jsx";
 import BenchPage from "./BenchPage.jsx";
-import { Icon } from "./shared.jsx";
+import { ErrorBoundary, Icon } from "./shared.jsx";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./studio.css";
@@ -15,6 +16,7 @@ import "./studio.css";
 const PAGES = [
   { id: "build", label: "Build" },
   { id: "mods", label: "Mods" },
+  { id: "marketplace", label: "Marketplace" },
   { id: "bench", label: "Bench" },
   { id: "insights", label: "Insights" },
   { id: "neatlogs", label: "Neatlogs" },
@@ -276,6 +278,7 @@ export default function ModStudio({ onOpenWorkspace }) {
       </nav>
 
       <main className="studio-main">
+        <ErrorBoundary key={page}>
         <header className="context-bar">
           <div className="breadcrumb"><span>Benana</span><i>/</i><strong>{currentPage?.label}</strong></div>
           <div className="context-state">
@@ -301,11 +304,13 @@ export default function ModStudio({ onOpenWorkspace }) {
             onOpenCode={openMod}
           />
         )}
+        {page === "marketplace" && <MarketplacePage mods={mods} onOpenMod={watchMod} />}
         {page === "mods" && <ModsPage mods={mods} mod={mod} setSelectedId={setSelectedId} onBuild={newMod} onWatch={watchMod} />}
         {page === "bench" && <BenchPage mods={mods} lessons={lessons} running={running} onWatch={watchMod} onOpenMod={openMod} />}
         {page === "insights" && <InsightsPage mods={mods} lessons={lessons} />}
         {page === "neatlogs" && <NeatlogsPage mods={mods} onOpenMod={openMod} />}
         {page === "entire" && <EntirePage mods={mods} onOpenMod={openMod} />}
+        </ErrorBoundary>
       </main>
     </div>
   );
