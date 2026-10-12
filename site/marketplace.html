@@ -53,6 +53,17 @@
     .facts dt { color:var(--dim); } .facts dd { margin:0; overflow-wrap:anywhere; }
     .facts code { font:12px 'DM Mono', monospace; }
     .pill.ok { border-color: rgba(76,195,138,.4); }
+    .explorer { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1.2fr); gap:12px; margin-bottom:16px; }
+    .cp-list { list-style:none; margin:0; padding:0; border:1px solid var(--line); border-radius:10px; max-height:360px; overflow:auto; }
+    .cp-list li + li { border-top:1px solid var(--line); }
+    .cp-list button { display:grid; gap:2px; width:100%; padding:10px 12px; background:none; border:0; color:var(--dim); text-align:left; font:13px Manrope, sans-serif; cursor:pointer; }
+    .cp-list button:hover { background:rgba(255,255,255,.04); }
+    .cp-list button.on { background:rgba(167,139,250,.12); color:var(--ink); box-shadow: inset 2px 0 0 #a78bfa; }
+    .cp-list code { font:12px 'DM Mono', monospace; color:var(--ink); }
+    .cp-list small { color:var(--dim); font-size:11px; }
+    .cp-detail { border:1px solid var(--line); border-radius:10px; padding:14px; background:var(--bg); display:grid; gap:12px; align-content:start; }
+    .cp-detail .btn { justify-self:start; }
+    @media (max-width: 760px) { .explorer { grid-template-columns:1fr; } }
     .changes { list-style:none; margin:10px 0 0; padding:0; }
     .changes li { padding:10px 0; border-top:1px solid var(--line); }
     .status { font:600 11px 'DM Mono', monospace; text-transform:uppercase; padding:2px 7px; border-radius:6px; }
