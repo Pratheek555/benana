@@ -19,6 +19,15 @@ const game = require('./lib/game/index.cjs');
 const studio = require('./lib/studio/index.cjs');
 const codewatch = require('./lib/codewatch.cjs');
 
+// Dev aid: BENANA_CDP_PORT opens the DevTools protocol on localhost so scripts can drive and screenshot the app,
+// and keeps it painting while other windows cover it (Windows otherwise reports it hidden and screenshots stall).
+if (process.env.BENANA_DEV && process.env.BENANA_CDP_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.BENANA_CDP_PORT);
+  app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+  app.commandLine.appendSwitch('disable-background-timer-throttling');
+}
+
 let win;
 let ctx = null; // { repo, repoPath, intent, harnessStore }
 const inbox = new Map();
@@ -272,7 +281,9 @@ function captureMinecraft() {
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     try {
       const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
-      const source = sources.find((s) => title.test(s.name));
+      // The user's own client ("Play in Minecraft") has the same title, so prefer the camera's window handle.
+      const hwnd = game.status().cameraWindow;
+      const source = (hwnd && sources.find((s) => s.id.split(':')[1] === String(hwnd))) || sources.find((s) => title.test(s.name));
       callback(source ? { video: source } : {});
     } catch {
       callback({});

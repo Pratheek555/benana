@@ -7,12 +7,14 @@
   background: var(--panel, #121316);
   overflow: hidden;
 }
+/* Wraps onto a second row when the pane is narrow, so no button is cut off. */
 .game-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 8px 0 14px;
+  gap: 8px 10px;
+  min-height: 44px;
+  padding: 8px 8px 8px 14px;
   border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
   font-size: 12px;
   color: var(--text-2, #a0a3ab);
@@ -137,33 +139,47 @@
   object-fit: contain;
   background: #000;
 }
-/* Live view source: the real Minecraft client or the bot's 3D viewer. */
-.game-views {
-  display: inline-flex;
-  flex: none;
-  padding: 2px;
-  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.14));
-  border-radius: 7px;
+.game-dot.camera-launching,
+.game-dot.camera-joining {
+  background: var(--warn, #f0b429);
 }
-.game-pane .game-views button {
-  height: 22px;
-  padding: 0 9px;
+.game-dot.camera-live {
+  background: var(--good, #4cc38a);
+  box-shadow: 0 0 0 3px rgba(76, 195, 138, 0.16);
+}
+.game-dot.camera-error {
+  background: var(--bad, #e5484d);
+}
+/* Shown over the bot's 3D viewer when the real Minecraft client is not on screen. */
+.game-fallback {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 24px);
+  padding: 6px 6px 6px 12px;
+  border-radius: 8px;
+  background: rgba(8, 9, 10, 0.82);
+  backdrop-filter: blur(6px);
+  color: #ececee;
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+.game-pane .game-fallback button {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
   border: 0;
   border-radius: 5px;
-  background: transparent;
-  color: var(--text-2, #a0a3ab);
+  background: #ececee;
+  color: #0c0d0f;
   font-size: 11.5px;
+  font-weight: 600;
   cursor: pointer;
 }
-.game-pane .game-views button.on {
-  background: var(--hover, #1c1e22);
-  color: var(--text, #ececee);
-}
-.game-pane .game-views button.close {
-  padding: 0 6px;
-  color: var(--text-3, #6c707a);
-}
-.game-pane .game-views button:disabled {
+.game-pane .game-fallback button:disabled {
   opacity: 0.5;
   cursor: default;
 }

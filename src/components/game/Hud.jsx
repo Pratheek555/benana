@@ -147,7 +147,8 @@ export default function Hud({ hud, viewerUrl, fx = [], native = false }) {
         </div>
       )}
       {hurtAt && <div key={hurtAt} className="hud-hurt" />}
-      <FxFeed fx={fx} />
+      {/* The real client draws particles and plays sounds itself; the list is for the 3D viewer, which can't. */}
+      {!native && <FxFeed fx={fx} />}
       {flash && (
         <div key={flash.at} className={`hud-flash ${flash.tone}`}>
           <strong>{flash.title}</strong>

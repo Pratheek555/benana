@@ -1,6 +1,8 @@
-// Real Minecraft camera: a vanilla Java client that joins the local Paper server as a spectator so the live view
-// shows native rendering (particles, the mod's resource pack, boss bars) while Mineflayer keeps doing the testing.
-// Benana downloads the client from Mojang on first use and captures its window into the Electron app.
+// Real Minecraft clients: vanilla Java clients that join the local Paper server.
+// - The camera joins as a spectator so the live view shows native rendering (particles, the mod's resource pack, boss
+//   bars) while Mineflayer keeps doing the testing. Its window is parked off-screen and captured into the Electron app.
+// - The player ("Play in Minecraft") is a normal window the user plays the mod in themselves.
+// Benana downloads the client from Mojang on first use; both share its jar, libraries and assets.
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -9,6 +11,8 @@ const { dataDir } = require('../env.cjs');
 const { resolveExecutable, terminateProcessTree } = require('../processes.cjs');
 
 const NAME = 'Camera';
+// Minecraft names are 3-16 letters, digits or underscores.
+const PLAYER = /^\w{3,16}$/.test(process.env.BENANA_PLAYER_NAME || '') ? process.env.BENANA_PLAYER_NAME : 'Player';
 const dir = path.join(dataDir, 'game', 'client');
 // The launcher's shared asset store; objects found there are copied instead of downloaded again.
 const sharedObjects = process.env.APPDATA ? path.join(process.env.APPDATA, '.minecraft', 'assets', 'objects') : null;
@@ -87,14 +91,17 @@ async function ensure(version, log) {
   return { v, jar, classpath: [...libs.map((l) => path.join(dir, 'libraries', l.downloads.artifact.path)), jar] };
 }
 
-// Options that skip first-run screens, keep rendering while the window is unfocused, and silence music.
-function writeOptions(game) {
+// Options that skip first-run screens, keep rendering while the window is unfocused, and silence music. The camera
+// also gets a wide field of view, no chat over the shot, and short-lived toasts (an offline server always shows the
+// "chat can't be verified" one); the player keeps their own.
+function writeOptions(game, camera = true) {
   const file = path.join(game, 'options.txt');
   const keep = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean) : [];
   const forced = {
     onboardAccessibility: 'false', skipMultiplayerWarning: 'true', joinedFirstServer: 'true', tutorialStep: 'none',
     pauseOnLostFocus: 'false', inactivityFpsLimit: 'minimized', renderDistance: '8', soundCategory_music: '0.0',
-    narrator: '0', lang: 'en_us', fov: '0.25', particles: '0',
+    narrator: '0', lang: 'en_us', particles: '0',
+    ...(camera ? { fov: '0.25', chatVisibility: '2', notificationDisplayTime: '0.5' } : {}),
   };
   const lines = keep.filter((l) => !(l.split(':')[0] in forced));
   for (const [k, val] of Object.entries(forced)) lines.push(`${k}:${val}`);
@@ -138,9 +145,12 @@ for ($i = 0; $i -lt 480; $i++) {
     if ($owner -eq $target -and [BenanaPark]::IsWindowVisible($h) -and [BenanaPark]::GetWindowTextLength($h) -gt 0) { $script:found = $h; return $false }
     return $true }, [IntPtr]::Zero) | Out-Null
   if ($script:found -ne [IntPtr]::Zero) {
-    $style = [BenanaPark]::GetWindowLong($script:found, -16)
-    [void][BenanaPark]::SetWindowLong($script:found, -16, ($style -band -bnot 0x00CF0000))
-    [void][BenanaPark]::SetWindowPos($script:found, [IntPtr]::Zero, 40000, 0, $args[1], $args[2], 0x0034)
+    if ($args[3] -eq 1) {
+      $style = [BenanaPark]::GetWindowLong($script:found, -16)
+      [void][BenanaPark]::SetWindowLong($script:found, -16, ($style -band -bnot 0x00CF0000))
+      [void][BenanaPark]::SetWindowPos($script:found, [IntPtr]::Zero, 40000, 0, $args[1], $args[2], 0x0034)
+    }
+    Write-Output ("hwnd=" + $script:found.ToInt64())
     exit 0
   }
   Start-Sleep -Milliseconds 250
@@ -148,10 +158,18 @@ for ($i = 0; $i -lt 480; $i++) {
 exit 1
 `;
 
-function park(pid) {
-  if (process.platform !== 'win32' || process.env.BENANA_CAMERA_WINDOW === 'show') return;
-  const script = `& {${PARK}} ${Number(pid)} ${WIDTH} ${HEIGHT}`;
-  spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { stdio: 'ignore', windowsHide: true });
+// Finds the client's window and resolves its handle (or null), parking it off-screen first when `hide` is set. The
+// handle tells the capture which window is the camera, since every client window has the same title.
+function park(pid, hide) {
+  if (process.platform !== 'win32') return Promise.resolve(null);
+  const script = `& {${PARK}} ${Number(pid)} ${WIDTH} ${HEIGHT} ${hide ? 1 : 0}`;
+  return new Promise((resolve) => {
+    let out = '';
+    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    ps.stdout.on('data', (d) => { out += d; });
+    ps.on('error', () => resolve(null));
+    ps.on('close', () => resolve(out.match(/hwnd=(\d+)/)?.[1] || null));
+  });
 }
 
 function offlineUuid(name) {
@@ -162,7 +180,11 @@ function offlineUuid(name) {
 }
 
 class Client {
-  constructor() { this.child = null; }
+  // name: the offline player name. game: its own game directory (options, servers, logs). hidden: park the window
+  // off-screen for capture instead of showing it.
+  constructor({ name = NAME, game = 'game', hidden = true } = {}) {
+    Object.assign(this, { name, game: path.join(dir, game), hidden, child: null, hwnd: null });
+  }
 
   running() { return Boolean(this.child); }
 
@@ -171,17 +193,17 @@ class Client {
   async launch({ version, port, log = () => {}, onExit = () => {} }) {
     if (this.child) return;
     const { v, classpath } = await ensure(version, log);
-    const game = path.join(dir, 'game');
+    const { game, name } = this;
     fs.mkdirSync(game, { recursive: true });
     const address = `127.0.0.1:${port}`;
-    writeOptions(game);
+    writeOptions(game, this.hidden);
     writeServers(game, address);
     const natives = path.join(dir, 'versions', version, 'natives');
     fs.mkdirSync(natives, { recursive: true });
     const vars = {
       natives_directory: natives, launcher_name: 'benana', launcher_version: '0.1', classpath: classpath.join(path.delimiter),
-      auth_player_name: NAME, version_name: version, game_directory: game, assets_root: path.join(dir, 'assets'),
-      assets_index_name: v.assetIndex.id, auth_uuid: offlineUuid(NAME), auth_access_token: '0', clientid: '0', auth_xuid: '0',
+      auth_player_name: name, version_name: version, game_directory: game, assets_root: path.join(dir, 'assets'),
+      assets_index_name: v.assetIndex.id, auth_uuid: offlineUuid(name), auth_access_token: '0', clientid: '0', auth_xuid: '0',
       user_type: 'legacy', version_type: 'release', resolution_width: String(WIDTH), resolution_height: String(HEIGHT),
     };
     const expand = (list) => list.flatMap((a) => (typeof a === 'string' ? [a] : allowed(a.rules) ? [].concat(a.value) : []))
@@ -190,15 +212,18 @@ class Client {
       '-Xmx2G', ...expand(v.arguments.jvm), v.mainClass, ...expand(v.arguments.game),
       '--width', String(WIDTH), '--height', String(HEIGHT), '--quickPlayMultiplayer', address,
     ];
-    const out = fs.openSync(path.join(dir, 'client.log'), 'w');
-    // Not spawnExecutable: it hides windows, and a hidden window cannot be captured.
-    const child = spawn(resolveExecutable('java'), args, { cwd: game, stdio: ['ignore', out, out], windowsHide: false });
+    const out = fs.openSync(path.join(game, 'client.log'), 'w');
+    // Not spawnExecutable: it hides windows, and a hidden window cannot be captured. On Windows javaw runs without
+    // the empty console window java.exe would open next to the game.
+    const javaw = process.platform === 'win32' && resolveExecutable('javaw');
+    const child = spawn(javaw && javaw !== 'javaw' ? javaw : resolveExecutable('java'), args, { cwd: game, stdio: ['ignore', out, out], windowsHide: false });
     fs.closeSync(out);
     this.child = child;
-    park(child.pid);
-    child.on('error', (e) => log(`camera client failed to start: ${e.message}`));
+    this.hwnd = null;
+    park(child.pid, this.hidden && process.env.BENANA_CAMERA_WINDOW !== 'show').then((h) => { if (this.child === child) this.hwnd = h; });
+    child.on('error', (e) => log(`${name}'s Minecraft client failed to start: ${e.message}`));
     child.on('exit', (code) => {
-      if (this.child === child) this.child = null;
+      if (this.child === child) { this.child = null; this.hwnd = null; }
       onExit(code);
     });
   }
@@ -213,4 +238,4 @@ class Client {
   }
 }
 
-module.exports = { Client, NAME, TITLE, dir };
+module.exports = { Client, NAME, PLAYER, TITLE, dir };

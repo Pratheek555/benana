@@ -54,9 +54,10 @@ function MinecraftFeed({ onLost }) {
   return <video ref={video} className="game-feed" autoPlay muted playsInline />;
 }
 
-const CAMERA_LABEL = { launching: "Opening Minecraft…", joining: "Minecraft joining…", live: "Minecraft", error: "Minecraft failed", off: "Minecraft off" };
+const CAMERA_LABEL = { launching: "opening", joining: "joining", live: "live", error: "failed", off: "off" };
 
-// Live view of the test bot inside the local Paper server. Owner: Track A.
+// Live view of the test bot inside the local Paper server: a real Minecraft client watching as a spectator, with the
+// bot's 3D viewer only as a fallback when the client cannot run. Owner: Track A.
 // With a mod (the chat the user is in) it keeps the server on that mod's build and a fresh world, and offers
 // "Run mod" (an AI player shows what the mod does) and "Reset world" (back to untouched terrain).
 export default function GamePane({ showLog = true, mod = null, building = false }) {
@@ -72,8 +73,6 @@ export default function GamePane({ showLog = true, mod = null, building = false 
   const fxId = React.useRef(0);
   const [modDemo, setModDemo] = React.useState({ modId: null, running: false, summary: "", error: null });
   const [dismissed, setDismissed] = React.useState(false);
-  // "minecraft": the real client's spectator feed when it is live; "bot": the prismarine 3D viewer.
-  const [view, setView] = React.useState("minecraft");
   const [feedKey, setFeedKey] = React.useState(0);
   const [feedLost, setFeedLost] = React.useState(false);
   const synced = React.useRef(null);
@@ -124,7 +123,9 @@ export default function GamePane({ showLog = true, mod = null, building = false 
   const caption = demoRunning && showcase?.steps?.length ? showcase : null;
   const showHud = Boolean(hud && status?.viewerUrl && !reloading && status?.bot === "online");
   const cameraLive = status?.camera === "live";
-  const native = view === "minecraft" && cameraLive && !reloading && !feedLost;
+  const native = cameraLive && !feedLost;
+  // The client opens a few seconds after the bot joins; until then the view waits for it instead of showing the viewer.
+  const opening = Boolean(status?.cameraEnabled) && ["launching", "joining"].includes(status?.camera) && !feedLost;
 
   // A relaunched client is a new window, so a new capture.
   React.useEffect(() => {
@@ -165,11 +166,17 @@ export default function GamePane({ showLog = true, mod = null, building = false 
 
   const resetWorld = () => attempt(() => call("studio:reset-world"));
 
-  const toggleCamera = () =>
+  // "Play in Minecraft": a real client window for the user, set up with the loaded mod's items and targets.
+  const playing = ["launching", "joining", "live"].includes(status?.play);
+  const togglePlay = () =>
+    attempt(async () => setStatus(await call("game:play", { on: !playing, plan: matches ? mod?.testPlan || null : null })));
+
+  // Reopens the client (after it failed or was turned off), or recaptures a live client's window.
+  const retryCamera = () =>
     attempt(async () => {
-      const on = !status?.cameraEnabled;
-      setStatus(await call("game:camera", { on }));
-      if (on) setView("minecraft");
+      setFeedLost(false);
+      if (cameraLive) setFeedKey((k) => k + 1);
+      else setStatus(await call("game:camera", { on: true }));
     });
 
   // Opening a chat puts that mod, on a fresh world, in the live view.
@@ -202,37 +209,26 @@ export default function GamePane({ showLog = true, mod = null, building = false 
         </span>
         <span className="game-spacer" />
         {running && (
-          <span className="game-views" role="group" aria-label="Live view source">
-            <button
-              className={native ? "on" : ""}
-              disabled={busy}
-              title={
-                status?.cameraEnabled
-                  ? status?.camera === "error"
-                    ? status.cameraError
-                    : "A real Minecraft client watching as a spectator"
-                  : "Open a real Minecraft client that watches the bot"
-              }
-              onClick={() => {
-                if (!status?.cameraEnabled || status?.camera === "error") return toggleCamera();
-                setView("minecraft");
-                if (feedLost) {
-                  setFeedLost(false);
-                  setFeedKey((k) => k + 1);
-                }
-              }}
-            >
-              {status?.cameraEnabled ? CAMERA_LABEL[status?.camera] || "Minecraft" : "Minecraft off"}
-            </button>
-            <button className={native ? "" : "on"} onClick={() => setView("bot")} title="The bot's 3D viewer">
-              Bot view
-            </button>
-            {status?.cameraEnabled && (
-              <button className="close" disabled={busy} onClick={toggleCamera} title="Close the Minecraft client">
-                ×
-              </button>
-            )}
+          <span className="game-state" title={status?.camera === "error" ? status.cameraError : "The real Minecraft client in the live view"}>
+            <span className={`game-dot camera-${native ? "live" : status?.camera || "off"}`} />
+            Minecraft {native ? "live" : feedLost ? "lost" : CAMERA_LABEL[status?.camera] || "off"}
           </span>
+        )}
+        {status?.bot === "online" && (
+          <button
+            className={`game-btn ghost play ${status?.play || "off"}`}
+            disabled={busy || reloading}
+            title={
+              status?.play === "error"
+                ? `Minecraft could not open: ${status.playError}`
+                : playing
+                  ? `Close your Minecraft window (${status.player})`
+                  : `Open Minecraft and play${matches ? ` ${mod.name}` : ""} yourself as ${status?.player || "Player"}, next to the bot`
+            }
+            onClick={togglePlay}
+          >
+            {{ launching: "Opening Minecraft…", joining: "Joining…", live: "Leave game" }[status?.play] || "Play in Minecraft"}
+          </button>
         )}
         {canLoad && (
           <button
@@ -296,7 +292,7 @@ export default function GamePane({ showLog = true, mod = null, building = false 
         </button>
       </header>
       <div className={`game-view ${showHud ? "hud-on" : ""} ${demoRunning || demoNote ? "demo" : ""} ${caption ? "captioned" : ""}`}>
-        {status?.viewerUrl && !reloading ? (
+        {status?.viewerUrl && !reloading && (native || !opening) ? (
           <>
             {native ? (
               <MinecraftFeed key={feedKey} onLost={() => setFeedLost(true)} />
@@ -304,6 +300,20 @@ export default function GamePane({ showLog = true, mod = null, building = false 
               <iframe title="Bot view" src={status.viewerUrl} />
             )}
             {showHud && <Hud hud={hud} viewerUrl={status.viewerUrl} fx={fx} native={native} />}
+            {!native && (
+              <div className="game-fallback">
+                <span>
+                  {feedLost
+                    ? "Lost the Minecraft window. Showing the bot's 3D viewer."
+                    : status?.camera === "error"
+                      ? `Minecraft could not open: ${status.cameraError || "unknown error"}. Showing the bot's 3D viewer.`
+                      : "Minecraft is closed. Showing the bot's 3D viewer."}
+                </span>
+                <button disabled={busy} onClick={retryCamera}>
+                  {feedLost ? "Reconnect" : "Open Minecraft"}
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <div className="game-empty">
@@ -311,11 +321,15 @@ export default function GamePane({ showLog = true, mod = null, building = false 
               ? "Resetting the world…"
               : deploying
                 ? `Loading ${deploying} on a fresh world…`
+                : status?.viewerUrl && opening
+                  ? status?.camera === "joining"
+                    ? "Minecraft is joining the world…"
+                    : "Opening Minecraft…"
                 : status?.server === "starting"
                   ? "Starting the Paper server…"
                   : mod && canLoad
                     ? `Start the game to load ${mod.name} on a fresh world.`
-                    : "Start the game to watch the AI player."}
+                    : "Start the game to open Minecraft and watch the AI player."}
           </div>
         )}
         {caption ? (

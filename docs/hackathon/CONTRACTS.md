@@ -78,7 +78,9 @@ game.status()
 //   viewerUrl: string|null, controlUrl: string|null, version: '1.21.4', mock: boolean, error: string|null,
 //   deployed: { plugin, jar?, at? }|null,   // the studio mod on the server
 //   deploying: string|null,                // jar name while a swap is in progress
-//   camera: 'off'|'launching'|'joining'|'live'|'error', cameraEnabled: boolean, cameraError: string|null }
+//   camera: 'off'|'launching'|'joining'|'live'|'error', cameraEnabled: boolean, cameraError: string|null,
+//   cameraWindow: string|null,             // the camera's window handle, so the capture never picks the player's window
+//   play: 'off'|'launching'|'joining'|'live'|'error', playError: string|null, player: string }
 
 await game.start(emit)            // download/prepare Paper if needed, start the server, connect the bot, start the viewer
 await game.stop()
@@ -108,9 +110,11 @@ game.mockVerdict(testPlan, attempt)                     // mock only: attempt 1 
 - `game:log`: `{ line, level: 'info'|'warn'|'error', at }`, server console lines.
 - `game:action`: `{ tool, args, result?, at }`, each MCP tool call the bot performs, for the GamePane overlay.
 
-**IPC** (registered by `game.handlers(emit)`): `game:status`, `game:start`, `game:stop`, `game:command { command }`, `game:camera { on }`.
+**IPC** (registered by `game.handlers(emit)`): `game:status`, `game:start`, `game:stop`, `game:command { command }`, `game:camera { on }`, `game:play { on, plan? }`.
 
-**Real Minecraft camera** (`electron/lib/game/client.cjs`): after each boot, Benana launches a vanilla 1.21.4 client (downloaded from Mojang into `~/.benana/game/client` on first use) that joins as the offline player `Camera`, accepts the mod's resource pack, and is put in spectator mode behind the bot. On Windows its window is made frameless and parked off-screen. `main.cjs` captures that window through `getDisplayMedia`, and the live view shows it as the "Minecraft" source, with "Bot view" still showing the prismarine viewer. The bot and its MCP tools are unchanged: the camera only watches, `nearby_entities` leaves it out, and the plugin template tells builders to ignore spectators. Every deploy or reset relaunches the client, because vanilla cannot reconnect by itself. `BENANA_CAMERA=0` turns it off by default, and `BENANA_CAMERA_WINDOW=show` keeps the window on screen.
+**Real Minecraft camera** (`electron/lib/game/client.cjs`): after each boot, Benana launches a vanilla 1.21.4 client (downloaded from Mojang into `~/.benana/game/client` on first use) that joins as the offline player `Camera`, accepts the mod's resource pack, and is put in spectator mode. It frames the bot from its right-hand side at the arena floor's height, looking a few blocks ahead, so whatever the bot hits, throws or summons up to about 12 blocks ahead is in the shot. On Windows its window is made frameless and parked off-screen. `main.cjs` captures that window through `getDisplayMedia`, and the live view shows it as the "Minecraft" source, with "Bot view" still showing the prismarine viewer. The bot and its MCP tools are unchanged: the camera only watches, `nearby_entities` leaves it out, and the plugin template tells builders to ignore spectators. Every deploy or reset relaunches the client, because vanilla cannot reconnect by itself. `BENANA_CAMERA=0` turns it off by default, and `BENANA_CAMERA_WINDOW=show` keeps the window on screen. The clients run under `javaw` on Windows, so no console window opens.
+
+**Play in Minecraft** (`game:play`): a second vanilla client in a normal window, for the user to play the loaded mod themselves. It joins as `BENANA_PLAYER_NAME` (default `Player`), is op, gets Resistance like the bot, and stands next to the bot in the camera's shot. `playKit(plan)` hands it every item the mod's test plan gives (each `give` in the setup and in the checks' `game_setup` lists, once per kind) plus husk spawn eggs, and suggests the plan's other plugin commands in chat. A deploy or reset reopens it on the new world. It has its own game directory (`~/.benana/game/client/play`), so its options are kept between sessions.
 
 ## `minecraft` MCP server: `electron/mcp-minecraft.cjs` (A)
 
@@ -136,7 +140,7 @@ This stdio MCP server forwards calls to the bot's local control API (`BENANA_GAM
 | `attack(entityId, trackTicks?)` | Left-click an entity. Use `trackTicks` to sample it right after the hit |
 | `attack_sequence(entityIds[], intervalTicks?, trackTicks?)` | Hit several entities a few ticks apart in one call, for cooldown and combo checks |
 | `use_item(entityId? \| position?, trackTicks?, trackSelf?, holdTicks?)` | Right-click on an entity, at a block or far point, or in the air. `trackSelf` records the bot. With a ranged item in hand it fires through `shoot` |
-| `shoot(entityId \| entityIds[] \| position, item?, chargeTicks?, intervalTicks?, trackTicks?, radius?)` | Aim and fire a bow, crossbow, trident or throwable; `entityIds` fires a sequence in one call. Reports each projectile (spawned, last position, removed or stuck), explosions with positions, ammo used, chat, and health before/after, deaths and max velocity of every living entity in `radius` |
+| `shoot(entityId \| entityIds[] \| position, item?, chargeTicks?, intervalTicks?, trackTicks?, watchTicks?, radius?)` | Aim and fire a bow, crossbow, trident or throwable; `entityIds` fires a sequence in one call. Reports each projectile (spawned, last position, removed or stuck), explosions with positions, ammo used, chat, and for every living entity in `radius`: health before/after, deaths, max velocity, height gain, and `impactDistance` (horizontal distance to the landing point at the start, closest with its time, and end). `watchTicks` (max 300) keeps recording after impact for effects that linger, such as a black hole or a delayed blast |
 | `track_entity(entityId, ticks?)` | Per-tick position and velocity samples |
 | `wait_ticks(ticks)` | Let the game advance |
 | `chat(message)` | Speak or run a player command (`/launch`) |

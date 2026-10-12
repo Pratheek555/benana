@@ -28,6 +28,9 @@ function runClaude({ cwd, prompt, model, tools, allowedTools = [], mcpConfigFile
 
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  // The Neatlogs hook sends traces with NEATLOGS_API_KEY ahead of its own config, but in .env that name holds the
+  // read token, which ingestion rejects. Sessions get the ingestion key under that name.
+  if (process.env.NEATLOGS_INGEST_KEY) env.NEATLOGS_API_KEY = process.env.NEATLOGS_INGEST_KEY;
   const child = spawnExecutable('claude', args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], env });
   const run = { sessionId: null, final: '', usage: null, error: null, stopped: false };
   const names = new Map();

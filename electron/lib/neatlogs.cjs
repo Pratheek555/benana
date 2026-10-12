@@ -7,9 +7,9 @@ const app = () =>
     ? "https://eu.app.neatlogs.com"
     : "https://app.neatlogs.com";
 const base = () => app() + "/api/v1/public";
-// Two credentials: NEATLOGS_API_KEY only exports traces (the read API answers it with 401).
-// Reading needs a service-account token in NEATLOGS_TOKEN.
-const tokenOf = () => env("NEATLOGS_TOKEN");
+// Reading needs a service-account token: NEATLOGS_TOKEN, or NEATLOGS_API_KEY when that already holds one
+// (the read API answers an export-only key with 401, which is reported below).
+const tokenOf = () => env("NEATLOGS_TOKEN") || env("NEATLOGS_API_KEY");
 const configured = () => Boolean(tokenOf() && env("NEATLOGS_PROJECT_ID"));
 
 async function api(p, init = {}) {

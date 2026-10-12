@@ -26,7 +26,8 @@ so custom items look like what they are. Give every custom item its own texture.
 
 Pick the base `Material` for its behavior, not its look: the texture replaces the look. Use a material with no right-click
 action of its own (`ECHO_SHARD`, `AMETHYST_SHARD`, `HEART_OF_THE_SEA`, `BLAZE_ROD`, `STICK`) unless the vanilla
-behavior is wanted. Avoid blocks (they get placed), food (it gets eaten), bows, and throwables.
+behavior is wanted. Avoid blocks (they get placed), food (it gets eaten), and bows. An item meant to be thrown (a
+grenade, a bomb, a charm you toss) is a `SNOWBALL` with your model; see "Custom throwables" below.
 
 ## Paper 1.21.4 cookbook
 
@@ -67,6 +68,23 @@ javap -cp "$JAR" org.bukkit.Particle | grep -i dust
 - **Effects**: `player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, 200, 1))`, where 200 is ticks and
   1 means level II.
 - **Nearby entities**: `world.getNearbyEntities(loc, r, r, r)` or `loc.getNearbyPlayers(r)`.
+- **Custom throwables**: make the item a `SNOWBALL` with your item model and PDC tag. Handle Paper's
+  `com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent`: when `e.getItemStack()` carries your tag, copy the tag
+  onto `e.getProjectile().getPersistentDataContainer()` and call `((ThrowableProjectile) e.getProjectile()).setItem(e.getItemStack().asOne())`
+  so it flies with your model. For a cooldown, `e.setCancelled(true)` plus `e.setShouldConsume(false)` keeps the item. In
+  `ProjectileHitEvent`, read the tag from the projectile and use `e.getHitBlock()` / `e.getHitEntity()` / the projectile's
+  location as the impact point. The playtester throws with its `shoot` tool, so this path is what gets tested.
+- **Pulling, vortexes, magnets**: in a `runTaskTimer` every tick, for each `LivingEntity` in range (skip spectators), set
+  `velocity = toCenter.normalize().multiply(pull)` plus a sideways `new Vector(-dz, 0, dx).normalize().multiply(swirl)` for a spiral.
+  Ground friction eats sideways velocity, so add a small upward part (0.08 to 0.2) to keep mobs moving. Mobs inside about
+  1.5 blocks of the center should orbit or hover, not be pulled further. Log how many entities each pulse moved.
+- **Explosions**: `world.createExplosion(sourceEntity, loc, power, setFire, breakBlocks)`. The blast's own knockback is weak
+  and random; for a guaranteed launch, set each nearby entity's velocity one tick later (`runTask`), and log the count.
+- **Spectacle**: the user watches through a real Minecraft client, so effects should be visible from 8 blocks away. Use
+  plenty of particles (`world.spawnParticle(Particle.REVERSE_PORTAL, loc, 40, 0.5, 0.5, 0.5, 0.05)`; good ones are `PORTAL`,
+  `REVERSE_PORTAL`, `DRAGON_BREATH`, `SQUID_INK`, `END_ROD`, `SONIC_BOOM`, `FLASH`, `EXPLOSION_EMITTER`, `DUST` with a
+  `DustOptions`), rings and spirals computed with sin/cos around a center, and sounds (`world.playSound(loc, Sound.ENTITY_WARDEN_SONIC_BOOM, 2f, 0.6f)`).
+  Lightning without fire or damage: `world.strikeLightningEffect(loc)`.
 - **Spectators**: a spectator camera player watches every test. Never target, damage, launch, pull, or count a player
   whose `getGameMode() == GameMode.SPECTATOR` (filter them out of `getNearbyPlayers` and `getOnlinePlayers` loops).
   Showing them boss bars, particles and messages is fine.

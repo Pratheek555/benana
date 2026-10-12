@@ -22,7 +22,11 @@ Type an idea, or pick one of the examples, and press Enter. You never open an ID
 
 ## Watch the AI player test it
 
-The live view embeds the game from BenanaBot's camera, so you see the playtest as it happens: the bot gets the item, spawns a target, and uses the mod on it. The server log streams next to it, so plugin errors are visible as they happen.
+The live view is a real Minecraft 1.21.4 client, spectating next to BenanaBot, so you see the playtest with the game's own rendering: particles, lightning, the mod's textures and boss bars. The bot gets the item, spawns a target, and uses the mod on it. The server log streams next to it, so plugin errors are visible as they happen.
+
+## Play it yourself
+
+**Play in Minecraft** opens a second real Minecraft window and drops you into the same world, next to the bot, holding the mod's items (and husk eggs for targets). Benana downloads the vanilla client files from Mojang the first time and joins Benana's local server with them. Set `BENANA_PLAYER_NAME` in `.env` to pick your name.
 
 ![Three frames from BenanaBot's first-person view as it fights husks in the test arena](docs/images/live-view.png)
 

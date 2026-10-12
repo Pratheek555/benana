@@ -55,7 +55,7 @@ const tools = [
   },
   {
     name: 'shoot',
-    description: 'Fire the held bow, crossbow, trident or throwable (snowball, egg, ender_pearl, wind_charge, splash_potion) at a target, aiming for the arc. Draws the bow fully (chargeTicks, default 22) and releases. Pass entityIds to fire several shots back to back in ONE call (for cooldowns). Returns each projectile (spawned or not, where it was last seen, whether it was removed), every explosion the bot saw with its position, the bot ammo before/after, chat during the shots, and for EVERY living entity within radius: health before/after, died, times hurt, max upward/horizontal velocity, and distance to the nearest explosion. Keep targets 5-15 blocks away.',
+    description: 'Fire the held bow, crossbow, trident or throwable (snowball, egg, ender_pearl, wind_charge, splash_potion) at a target, aiming for the arc. Draws the bow fully (chargeTicks, default 22) and releases. Pass entityIds to fire several shots back to back in ONE call (for cooldowns). Returns each projectile (spawned or not, where it was last seen, whether it was removed), every explosion the bot saw with its position, the bot ammo before/after, chat during the shots, and for EVERY living entity within radius: health before/after, died, times hurt, max upward/horizontal velocity, maxHeightGain, distance to the nearest explosion, and impactDistance (horizontal distance to where the projectile landed: start, closest, closestAtMs, end). For effects that last after the impact (a black hole, a delayed blast, a cloud), pass watchTicks to keep recording that long in the SAME call. Keep targets 5-15 blocks away.',
     inputSchema: obj({
       entityId,
       entityIds: { type: 'array', items: { type: 'number' }, description: 'Shoot each in order, in one call' },
@@ -64,6 +64,7 @@ const tools = [
       chargeTicks: { type: 'number', description: 'Bow/trident draw time in ticks (bow: 22 = full power)' },
       intervalTicks: { type: 'number', description: 'Extra ticks between shots in a sequence (default 0)' },
       trackTicks: { type: 'number', description: 'Max ticks to watch after the last shot (default 60)' },
+      watchTicks: { type: 'number', description: 'Keep recording this many ticks after every projectile has landed, for lingering effects (max 300)' },
       radius: { type: 'number', description: 'Report living entities within this many blocks (default 24)' },
     }),
   },

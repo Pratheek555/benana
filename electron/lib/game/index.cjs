@@ -13,7 +13,7 @@ const { spawnSync } = require('node:child_process');
 const { appRoot } = require('../env.cjs');
 const { resolveExecutable, spawnExecutable, terminateProcessTree } = require('../processes.cjs');
 const { Server, VERSION, PORT, dir: serverDir } = require('./server.cjs');
-const { Client, NAME: CAMERA } = require('./client.cjs');
+const { Client, NAME: CAMERA, PLAYER } = require('./client.cjs');
 const { packTextures } = require('../studio/pack.cjs');
 
 const BOT = 'BenanaBot';
@@ -34,9 +34,11 @@ const playtesterTools = TOOLS.map((t) => `mcp__minecraft__${t}`);
 
 // deployed: the studio mod whose jar is in the server's plugins folder; deploying: the one being swapped in.
 // camera: the real Minecraft client watching as a spectator (off, launching, joining, live, error).
+// play: the real Minecraft client the user plays in themselves ("Play in Minecraft"), same states.
 let state = {
   server: 'stopped', bot: 'offline', viewerUrl: null, controlUrl: null, version: VERSION, mock: mock(), error: null,
   deployed: null, deploying: null, resetting: false, camera: 'off', cameraEnabled: process.env.BENANA_CAMERA !== '0', cameraError: null,
+  play: 'off', playError: null, player: PLAYER,
 };
 let emitter = () => {};
 
@@ -46,13 +48,17 @@ function setState(patch) {
   return state;
 }
 
-const status = () => ({ ...state, mock: mock() });
+const status = () => ({ ...state, mock: mock(), cameraWindow: client.hwnd });
 
 const server = new Server();
 
 // The real-client camera. It is a spectator, so it never touches the test: mobs ignore it, `@p` skips it, and the
 // bot's tools leave it out. The capture into the live view is wired in main.cjs.
 const client = new Client();
+// The user's own client: a normal window with its own game directory and options.
+const player = new Client({ name: PLAYER, game: 'play', hidden: false });
+let playRun = 0;
+let playSetup = { commands: [], tries: [] };
 let cameraRun = 0;
 let follow = null;
 let focus = null;
@@ -64,14 +70,27 @@ const entityPos = async (name) => {
   return m ? m.slice(1, 4).map(Number) : null;
 };
 
-// Places the camera behind and to the side of the bot, looking just past it where the mod's targets get summoned,
-// high enough that a launched bot stays in frame.
-async function frameCamera(pos) {
-  const [x, y, z] = pos || (await entityPos(BOT)) || ARENA;
-  focus = [x, z];
-  shot = [x - 7, y + 3.5, z - 4];
+const botYaw = async () => {
+  const m = (await server.command(`data get entity ${BOT} Rotation`)).match(/\[(-?[\d.]+)f/);
+  return m ? Number(m[1]) : 0;
+};
+
+// Frames the bot from its right-hand side, looking at a spot a few blocks ahead of it, so the bot and whatever it
+// hits, throws or summons up to about 12 blocks ahead share the shot, and launched mobs rise through it. The height
+// comes from the arena floor, not the bot, so a bot thrown into the air doesn't take the camera up into the sky. The
+// bot's facing is snapped to a compass direction so aiming at a target doesn't swing the camera.
+async function frameCamera(pos, yaw) {
+  const [x, , z] = pos || (await entityPos(BOT)) || ARENA;
+  const y = ARENA[1];
+  const facing = yaw ?? Math.round((await botYaw().catch(() => 0)) / 90) * 90;
+  const r = (facing * Math.PI) / 180;
+  const ahead = [-Math.sin(r), Math.cos(r)];
+  const right = [-ahead[1], ahead[0]];
+  focus = [x, z, facing];
+  shot = [x + right[0] * 9 + ahead[0] * 2, y + 5, z + right[1] * 9 + ahead[1] * 2];
+  const look = [x + ahead[0] * 4.5, y + 1.5, z + ahead[1] * 4.5];
   await server.command(`gamemode spectator ${CAMERA}`);
-  await server.command(`tp ${CAMERA} ${shot.map((n) => n.toFixed(2)).join(' ')} facing ${x.toFixed(2)} ${(y + 2).toFixed(2)} ${(z + 1.5).toFixed(2)}`);
+  await server.command(`tp ${CAMERA} ${shot.map((n) => n.toFixed(2)).join(' ')} facing ${look.map((n) => n.toFixed(2)).join(' ')}`);
 }
 
 // Reframes when the bot walks out of the shot (launches straight up stay in frame), or when the camera was moved,
@@ -84,18 +103,20 @@ function startFollow() {
       const [bot, cam] = [await entityPos(BOT), await entityPos(CAMERA)];
       const strayed = bot && (!focus || Math.hypot(bot[0] - focus[0], bot[2] - focus[1]) > 5);
       const moved = cam && shot && Math.hypot(cam[0] - shot[0], cam[1] - shot[1], cam[2] - shot[2]) > 0.5;
-      if (strayed || moved) await frameCamera(strayed ? bot : [focus[0], shot[1] - 3.5, focus[1]]);
+      if (strayed) await frameCamera(bot);
+      else if (moved) await frameCamera([focus[0], ARENA[1], focus[1]], focus[2]);
     } catch {}
   }, 1500);
 }
 
-async function waitForJoin(since, run) {
-  const joined = new RegExp(`\\b${CAMERA} joined the game`);
+// current: whether this launch is still the wanted one (a newer launch or a stop cancels the wait).
+async function waitForJoin(since, current, who = client) {
+  const joined = new RegExp(`\\b${who.name} joined the game`);
   const deadline = Date.now() + 180000;
   while (Date.now() < deadline) {
-    if (run !== cameraRun) return false;
+    if (!current()) return false;
     if (server.logSince(since).some((l) => joined.test(l.line))) return true;
-    if (!client.running()) throw new Error('The Minecraft client closed before joining.');
+    if (!who.running()) throw new Error('The Minecraft client closed before joining.');
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error('The Minecraft client did not join within 3 minutes.');
@@ -116,7 +137,7 @@ async function startCamera() {
       onExit: () => { if (run === cameraRun) { clearInterval(follow); setState({ camera: 'off' }); } },
     });
     setState({ camera: 'joining' });
-    if (!(await waitForJoin(since, run))) return;
+    if (!(await waitForJoin(since, () => run === cameraRun))) return;
     // The world finishes loading on the client a moment after the join message.
     await new Promise((r) => setTimeout(r, 1500));
     await frameCamera();
@@ -142,6 +163,81 @@ async function setCamera({ on }) {
   setState({ cameraEnabled: Boolean(on), cameraError: null });
   if (on) startCamera();
   else await stopCamera();
+  return status();
+}
+
+// "Play in Minecraft": opens a real client window for the user next to the bot, then runs the mod's test-plan setup
+// for them (its items, its targets), the same setup the playtester got. The user is op, has Resistance like the bot,
+// and can switch to /gamemode creative. A deploy or reset reopens the window on the new world.
+async function startPlay() {
+  if (mock() || player.running() || state.server !== 'running') return;
+  const run = ++playRun;
+  const since = Date.now();
+  setState({ play: 'launching', playError: null });
+  try {
+    await player.launch({
+      version: VERSION,
+      port: PORT,
+      log: (text) => emitter('game:log', { line: `[play] ${text}`, level: 'info', at: Date.now() }),
+      onExit: () => { if (run === playRun) setState({ play: 'off' }); },
+    });
+    setState({ play: 'joining' });
+    if (!(await waitForJoin(since, () => run === playRun, player))) return;
+    await new Promise((r) => setTimeout(r, 1500));
+    const [x, y, z] = (await entityPos(BOT)) || ARENA;
+    for (const cmd of [
+      `op ${PLAYER}`, `gamemode survival ${PLAYER}`, `clear ${PLAYER}`,
+      `effect give ${PLAYER} resistance infinite 4 true`, `effect give ${PLAYER} saturation infinite 0 true`,
+      `tp ${PLAYER} ${(x - 3).toFixed(2)} ${y.toFixed(2)} ${(z - 3).toFixed(2)} facing ${x.toFixed(2)} ${(y + 1).toFixed(2)} ${(z + 4).toFixed(2)}`,
+    ]) await server.command(cmd);
+    for (const raw of playSetup.commands) {
+      await server.command(`execute as ${PLAYER} at ${PLAYER} run ${raw.replaceAll('@bot', PLAYER)}`);
+    }
+    const tries = playSetup.tries.map((t) => `/${t}`).join(', ');
+    const hint = `Benana: you're in with the mod's items and husk eggs for targets.${tries ? ` Try ${tries}.` : ''} /gamemode creative to fly.`;
+    await server.command(`tellraw ${PLAYER} ${JSON.stringify({ text: hint, color: 'yellow' })}`);
+    setState({ play: 'live' });
+  } catch (e) {
+    if (run !== playRun) return;
+    await player.stop();
+    setState({ play: 'error', playError: e.message });
+  }
+}
+
+async function stopPlay() {
+  playRun++;
+  await player.stop();
+  if (state.play !== 'off') setState({ play: 'off' });
+}
+
+// What the user gets when they join: every command in the mod's test plan that gives the player something (the plan's
+// setup and the game_setup lists inside its checks, first of each kind), plus husk eggs to have targets. Plugin
+// commands that do other things (summoning a boss) are left to the user and suggested in chat.
+function playKit(plan) {
+  const all = [...(plan?.setup || [])];
+  for (const c of plan?.checks || []) {
+    for (const m of String(c.steps || '').matchAll(/game_setup\W{0,3}(\[[^\]]*\])/g)) {
+      try { all.push(...JSON.parse(m[1])); } catch {}
+    }
+  }
+  const vanilla = /^(summon|effect|kill|tp|teleport|clear|gamerule|time|weather|fill|setblock|data|execute|attribute|difficulty|gamemode|item|tag|scoreboard|team|spawnpoint|damage|particle|playsound|say|tellraw|title|xp|experience|enchant)\b/;
+  const gives = new Map();
+  const tries = new Set();
+  for (const raw of all.map((c) => String(c).replace(/^\//, '').trim())) {
+    if (/^give\b|\bgive\b/.test(raw)) {
+      const key = raw.replace(/\s+\d+$/, '').replace(/\{.*\}/, '');
+      if (!gives.has(key)) gives.set(key, raw);
+    } else if (!vanilla.test(raw) && !raw.includes('@bot')) tries.add(raw.split(' ')[0]);
+  }
+  return { commands: [...gives.values(), 'give @bot husk_spawn_egg 16'], tries: [...tries].slice(0, 3) };
+}
+
+// plan: the loaded mod's test plan; its items are handed to the user once they join.
+async function setPlay({ on, plan } = {}) {
+  if (plan !== undefined) playSetup = plan ? playKit(plan) : { commands: ['give @bot husk_spawn_egg 16'], tries: [] };
+  if (!on) { await stopPlay(); return status(); }
+  if (state.server !== 'running' || state.bot !== 'online') throw new Error('Start the game first.');
+  startPlay();
   return status();
 }
 
@@ -391,6 +487,7 @@ async function start(emit = () => {}) {
 async function stop() {
   demo(false);
   if (mock()) return setState({ server: 'stopped', bot: 'offline' });
+  await stopPlay();
   await stopCamera();
   await stopHost();
   await server.stop();
@@ -448,7 +545,9 @@ async function swapPlugin(jarPath, packPath) {
 async function rebootFresh(jarPath, packPath) {
   systemNode();
   await startControl();
-  // The vanilla client cannot reconnect by itself, so it is relaunched after the reboot.
+  // The vanilla client cannot reconnect by itself, so it is relaunched after the reboot (the user's too, if open).
+  const replay = player.running();
+  await stopPlay();
   await stopCamera();
   await stopHost();
   await server.stop();
@@ -465,6 +564,7 @@ async function rebootFresh(jarPath, packPath) {
   }
   const since = Date.now();
   await bootGame();
+  if (replay) startPlay();
   const lines = server.logSince(since);
   const enabled = lines.map((l) => l.line.match(/\[([^\]]+)\] Enabling (\S+) v/)).find(Boolean);
   const errors = lines.filter((l) => l.level === 'error').map((l) => l.line);
@@ -499,7 +599,7 @@ function playtestPrompt(testPlan) {
     `Mod under test: ${testPlan.modName}: ${testPlan.summary}`,
     'Run `game_setup` with the setup commands, then perform every check like a player would and measure the outcome with tools.',
     '`attack` and `use_item` accept `trackTicks` to record the target right after the action; use it whenever the expected effect is movement.',
-    'For bows, crossbows, tridents and throwables, use `shoot` (never `use_item` on a mob: that only right-clicks it). It aims, fires, and reports the projectile, explosions, ammo used, and the health/deaths/knockback of every living entity nearby.',
+    'For bows, crossbows, tridents and throwables, use `shoot` (never `use_item` on a mob: that only right-clicks it). It aims, fires, and reports the projectile, explosions, ammo used, and the health/deaths/knockback/height gain of every living entity nearby. When the effect lasts after impact (a black hole, a cloud, a delayed blast), pass `watchTicks` covering it so the same call measures it: each entity\'s `impactDistance` (start, closest, end) shows a pull or a push. A `track_entity` call afterwards starts seconds late.',
     'Each tool call takes 1-8 real seconds. For anything timing-sensitive (cooldowns, combos), summon all targets first and do it in ONE call: `attack_sequence` for melee, `shoot` with `entityIds` for ranged.',
     'When the mod moves, boosts, launches or hurts the PLAYER, the bot is the test subject: measure it with `track_self` (just watch for N ticks), `use_item` with `trackSelf` (right-click and record the bot), or `move` (hold forward/jump/sprint/sneak and record the bot). They report max upward velocity, height gain, launches with their ticks, horizontal distance, health and effects. Never guess the bot\'s entity id; `nearby_entities` does not list the bot.',
     'Right-click a block (or aim at a far block) with `use_item` and `position`. Place and break blocks as a player with `place_block` and `dig_block`; they fire the plugin\'s block events, which console `setblock` does not. Boss bars: `boss_bars`. Action bar and title text show up in `read_chat` and in tool `chat` fields. Particles and sounds the mod plays (explosion particles, a thunder sound): `particles_and_sounds` with the sinceMs of the action.',
@@ -624,6 +724,7 @@ function handlers(emit) {
   return {
     'game:demo': ({ on }) => demo(on),
     'game:camera': (args = {}) => setCamera(args),
+    'game:play': (args = {}) => setPlay(args),
     'game:status': () => status(),
     'game:hud': () => (hud ? withTextures(hud) : null),
     'game:showcase': () => showcase,
@@ -637,5 +738,5 @@ function handlers(emit) {
 
 module.exports = {
   VERSION, status, start, stop, deployPlugin, resetWorld, runCommand, runTool,
-  mcpConfig, playtesterTools, playtestPrompt, demoTools: DEMO_TOOLS, demoPrompt, clearShowcase, readVerdict, mockVerdict, handlers,
+  mcpConfig, playtesterTools, playtestPrompt, demoTools: DEMO_TOOLS, demoPrompt, clearShowcase, readVerdict, mockVerdict, playKit, handlers,
 };

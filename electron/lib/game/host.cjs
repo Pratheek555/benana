@@ -369,7 +369,7 @@ async function release(spec, chargeTicks) {
 
 // Fires the held ranged item at each target and reports what happened: the projectile, explosions,
 // and the health and knockback of every living entity nearby.
-async function shoot({ entityId, entityIds, position, item, chargeTicks, intervalTicks = 0, trackTicks = 60, radius = 24 } = {}) {
+async function shoot({ entityId, entityIds, position, item, chargeTicks, intervalTicks = 0, trackTicks = 60, watchTicks = 0, radius = 24 } = {}) {
   if (item) await tools.equip({ item });
   const held = bot.heldItem;
   const spec = rangedSpec(held?.name);
@@ -387,7 +387,7 @@ async function shoot({ entityId, entityIds, position, item, chargeTicks, interva
   const watched = new Map();
   for (const e of Object.values(bot.entities)) {
     if (e === bot.entity || dead.has(e.id) || health(e) === undefined || e.position.distanceTo(bot.entity.position) > radius) continue;
-    watched.set(e.id, { entity: e, healthBefore: health(e), start: e.position.clone(), maxUpwardVelocity: 0, maxHorizontalVelocity: 0 });
+    watched.set(e.id, { entity: e, healthBefore: health(e), start: e.position.clone(), maxY: e.position.y, path: [], maxUpwardVelocity: 0, maxHorizontalVelocity: 0 });
   }
   // Projectiles fired by the bot. The server syncs arrow positions only about once a second, so between
   // syncs each flight is dead-reckoned like the vanilla client does.
@@ -397,6 +397,10 @@ async function shoot({ entityId, entityIds, position, item, chargeTicks, interva
       const v = w.entity.velocity;
       w.maxUpwardVelocity = Math.max(w.maxUpwardVelocity, v.y);
       w.maxHorizontalVelocity = Math.max(w.maxHorizontalVelocity, Math.hypot(v.x, v.z));
+      if (bot.entities[w.entity.id]) {
+        w.maxY = Math.max(w.maxY, w.entity.position.y);
+        w.path.push({ at: Date.now(), pos: w.entity.position.clone() });
+      }
     }
     for (const f of spawned) {
       const p = f.entity;
@@ -460,6 +464,9 @@ async function shoot({ entityId, entityIds, position, item, chargeTicks, interva
       await bot.waitForTicks(1);
       settled = spawned.some((f) => !f.removedAt && !f.stuck) ? 0 : settled + 1;
     }
+    // Lingering effects (a black hole, a delayed blast, a cloud): keep recording after the projectiles land.
+    const watch = Math.min(Math.max(Number(watchTicks) || 0, 0), 300);
+    for (let tick = 0; tick < watch; tick++) await bot.waitForTicks(1);
     for (const s of shots) {
       const f = s._flight;
       if (f) {
@@ -476,6 +483,9 @@ async function shoot({ entityId, entityIds, position, item, chargeTicks, interva
 
   const seen = eventsSince(started);
   const explosions = seen.filter((e) => e.kind === 'explosion').map((e) => ({ atMs: e.at - started, position: e.position }));
+  // Where the projectiles came down, for effects centered on the impact (pulls, pushes, auras).
+  const impacts = shots.map((s) => s.projectile?.lastPosition).filter(Boolean).map((p) => new Vec3(...p));
+  const flat = (a) => (impacts.length ? Math.min(...impacts.map((i) => Math.hypot(a.x - i.x, a.z - i.z))) : null);
   const entities = [...watched.values()].map((w) => {
     const died = dead.has(w.entity.id) || seen.some((e) => e.kind === 'death' && e.entityId === w.entity.id);
     const gone = !bot.entities[w.entity.id];
@@ -490,7 +500,15 @@ async function shoot({ entityId, entityIds, position, item, chargeTicks, interva
       maxUpwardVelocity: round(w.maxUpwardVelocity),
       maxHorizontalVelocity: round(w.maxHorizontalVelocity),
       moved: round(w.entity.position.distanceTo(w.start)),
+      maxHeightGain: round(w.maxY - w.start.y),
       distanceToNearestExplosion: explosions.length ? round(Math.min(...explosions.map((x) => w.start.distanceTo(new Vec3(...x.position))))) : null,
+      ...(impacts.length && w.path.length ? {
+        // Horizontal distance to the nearest impact point: at the start, the closest it got (and when), and at the end.
+        impactDistance: (() => {
+          const near = w.path.reduce((b, p) => (flat(p.pos) < flat(b.pos) ? p : b));
+          return { start: round(flat(w.start)), closest: round(flat(near.pos)), closestAtMs: near.at - started, end: round(flat(w.path.at(-1).pos)) };
+        })(),
+      } : {}),
     };
   });
   return {
