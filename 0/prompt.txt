@@ -1,0 +1,20 @@
+Instructions before shooting your submission demo video
+
+We were looking at your traces while you were building your agents. We have a feature that lets you look at your critical incidents, and you need to show how it helped indentify and solve these incidents.
+
+I've attached a demo video on how you can use this feature: https://drive.google.com/file/d/REDACTED/view?usp=sharing
+
+Meanwhile, for your overall demo video submission, in ONE video, you should talk about:
+
+the problem your agent solves
+how cfo.ai and entire were part of the project
+how neatlogs was used to identify and resolve the incidents your agent ran into
+
+keep your videos ready, submissions start today, 12th October 7pm IST! 🎊 
+
+
+can we quickly understand how we can integrate this in our chatUI when it does happen in realtime while building the mod or if it's something else let me know
+
+---
+
+[Assistant quote](t3-citation://v1/1aa8d2bb-6397-4621-8dce-2bd19b02f426/e010c08f-2311-40de-8776-01dae65d1a78/message%3Aprovider%3AclaudeAgent%3Anative-item%3A8d98cb86-00f8-415a-ab07-0fd45fe906f5?text=I+couldn%27t+watch+the+Drive+video+because+the+Google+Drive+connector+isn%27t+authorized+in+this+session.+You+can+connect+it+in+your+claude.ai+connector+settings.+So+this+is+based+on+Neatlogs%27+docs+and+on+checking+their+API+with+our+key.&start=0&end=233&prefix=&suffix=+What+%22critical+incidents%22+are+i) gave the connector access, check now

@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4QC4829V2Z6BB7GYTJC2SP7",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "electron/lib/game/host.cjs",
+    "electron/lib/game/index.cjs",
+    "electron/main.cjs",
+    "src/components/game/GamePane.jsx",
+    "src/components/game/Hud.jsx",
+    "src/components/game/game.css",
+    "src/components/studio/entire.css",
+    "templates/paper-plugin/CLAUDE.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 22,
+    "cache_creation_tokens": 28674,
+    "cache_read_tokens": 428617,
+    "output_tokens": 4525,
+    "api_call_count": 11
+  }
+}
