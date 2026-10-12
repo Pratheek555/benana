@@ -81,7 +81,14 @@ export default function CfoPage({ mods }) {
     });
     check();
     call("cfo:history")
-      .then(setHistory)
+      .then((saved) =>
+        setHistory((current) => [
+          ...current,
+          ...saved.filter(
+            (entry) => !current.some((item) => item.id === entry.id),
+          ),
+        ]),
+      )
       .catch(() => {});
     call("cfo:active")
       .then((active) => {
@@ -100,6 +107,7 @@ export default function CfoPage({ mods }) {
     setLive({ id: null, question: text, events: [] });
     call("cfo:ask", { question: text })
       .then((entry) => {
+        if (entry.error && !entry.answer) setQuestion(text);
         setLive((l) =>
           l?.entry
             ? l
@@ -395,7 +403,12 @@ function ChatRail({
             <summary>Suggested questions</summary>
             <div className="cfo-prompts">
               {prompts.map((prompt) => (
-                <button key={prompt.label} type="button" disabled={asking} onClick={() => prefill(prompt.question)}>
+                <button
+                  key={prompt.label}
+                  type="button"
+                  disabled={asking}
+                  onClick={() => prefill(prompt.question)}
+                >
                   {prompt.label}
                 </button>
               ))}
@@ -427,13 +440,17 @@ function ChatRail({
             <button
               type="button"
               className="cfo-send stop"
-              onClick={() => call("cfo:stop").catch((e) => onError(e.message))}
+              onClick={(event) => {
+                event.preventDefault();
+                call("cfo:stop").catch((e) => onError(e.message));
+              }}
               aria-label="Stop CFO response"
             >
               <Icon name="stop" />
             </button>
           ) : (
             <button
+              type="submit"
               className="cfo-send"
               disabled={!question.trim()}
               aria-label="Send question"
@@ -773,9 +790,9 @@ function Methodology({ totals }) {
       <p>
         Build costs use the API cost reported for each agent session in local
         mod records. Verified cost divides total spend, including failed builds,
-        by the number of passed mods. It is unknown when any build has incomplete
-        cost records. Payback uses the gross $1.99 listed price. It excludes
-        marketplace fees, payment fees, tax, refunds, and support time.{" "}
+        by the number of passed mods. It is unknown when any build has
+        incomplete cost records. Payback uses the gross $1.99 listed price. It
+        excludes marketplace fees, payment fees, tax, refunds, and support time.{" "}
         {totals?.uncostedSessions
           ? `${totals.uncostedSessions} session${totals.uncostedSessions === 1 ? " has" : "s have"} no reported cost and stays outside the totals.`
           : totals

@@ -1,13 +1,16 @@
 .studio .view.cfo-page {
-  --cfo-bg: #f6f4ef;
-  --cfo-card: #fffefa;
-  --cfo-ink: #24212b;
-  --cfo-muted: #716c78;
-  --cfo-line: #e4e0d8;
-  --cfo-line-strong: #d5cfc4;
-  --cfo-violet: #6654b8;
-  --cfo-violet-soft: #f0edfb;
-  --cfo-green: #297862;
+  --text: #f2f2f2;
+  --text-2: #b0b0b0;
+  --text-3: #969696;
+  --cfo-bg: #000000;
+  --cfo-card: #0b0b0b;
+  --cfo-ink: #f2f2f2;
+  --cfo-muted: #a3a3a3;
+  --cfo-line: #242424;
+  --cfo-line-strong: #333333;
+  --cfo-accent: #e6e6e6;
+  --cfo-accent-soft: #191919;
+  --cfo-positive: #cccccc;
   container-type: inline-size;
   min-width: 0;
   gap: 0;
@@ -15,6 +18,9 @@
   background: var(--cfo-bg);
   color: var(--cfo-ink);
   font-variant-numeric: tabular-nums;
+}
+.studio .view.cfo-page .status i {
+  background: currentColor;
 }
 .studio .cfo-page > * {
   width: 100%;
@@ -27,7 +33,7 @@
 .studio .cfo-page button:focus-visible,
 .studio .cfo-page textarea:focus-visible,
 .studio .cfo-page summary:focus-visible {
-  outline: 2px solid var(--cfo-violet);
+  outline: 2px solid var(--cfo-accent);
   outline-offset: 2px;
 }
 
@@ -43,7 +49,7 @@
   gap: 7px;
   align-items: center;
   margin-bottom: 9px;
-  color: var(--cfo-violet);
+  color: var(--cfo-accent);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -54,8 +60,8 @@
   height: 20px;
   place-items: center;
   border-radius: 6px;
-  background: var(--cfo-violet);
-  color: white;
+  background: var(--cfo-accent);
+  color: #080808;
   font-size: 11px;
 }
 .studio .cfo-page-head h1 {
@@ -80,7 +86,7 @@
   padding: 0 10px;
   border: 1px solid var(--cfo-line-strong);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.55);
+  background: #111111;
   color: var(--cfo-muted);
   font-size: 11px;
   font-weight: 600;
@@ -89,15 +95,15 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #a39da8;
+  background: #808080;
 }
 .studio .cfo-badge.ok {
-  border-color: #b8d8ce;
-  color: var(--cfo-green);
+  border-color: #383838;
+  color: var(--cfo-positive);
 }
 .studio .cfo-badge.ok i {
-  background: #39a383;
-  box-shadow: 0 0 0 3px #e3f2ed;
+  background: #d0d0d0;
+  box-shadow: 0 0 0 3px #222222;
 }
 .studio .cfo-alert,
 .studio .cfo-sample {
@@ -106,16 +112,16 @@
   align-items: center;
   margin-bottom: 14px;
   padding: 10px 13px;
-  border: 1px solid #e6d8ae;
+  border: 1px solid #333333;
   border-radius: 10px;
-  background: #fff9e7;
-  color: #67582d;
+  background: #111111;
+  color: #bdbdbd;
   font-size: 12px;
 }
 .studio .cfo-alert {
-  border-color: #eccac6;
-  background: #fff3f1;
-  color: #9a4037;
+  border-color: #484848;
+  background: #181818;
+  color: #eeeeee;
 }
 
 .studio .cfo-kpis {
@@ -126,7 +132,7 @@
   border-radius: 12px;
   overflow: hidden;
   background: var(--cfo-card);
-  box-shadow: 0 1px 2px rgba(45, 35, 24, 0.03);
+  box-shadow: 0 1px 2px rgba(255, 255, 255, 0.02);
 }
 .studio .cfo-kpi {
   min-width: 0;
@@ -154,13 +160,13 @@
 .studio .cfo-kpi small {
   display: block;
   overflow: hidden;
-  color: #918b94;
+  color: #969696;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .studio .cfo-kpi.warn strong {
-  color: #a96026;
+  color: #dddddd;
 }
 
 .studio .cfo-workspace {
@@ -181,7 +187,7 @@
   border: 1px solid var(--cfo-line);
   border-radius: 12px;
   background: var(--cfo-card);
-  box-shadow: 0 1px 2px rgba(45, 35, 24, 0.035);
+  box-shadow: 0 1px 2px rgba(255, 255, 255, 0.02);
 }
 .studio .cfo-card-head {
   display: flex;
@@ -193,7 +199,7 @@
 .studio .cfo-card-head > div > span {
   display: block;
   margin-bottom: 5px;
-  color: var(--cfo-violet);
+  color: var(--cfo-accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -231,7 +237,7 @@
   margin: 2px 0 15px;
   overflow: hidden;
   border-radius: 999px;
-  background: #ece8e1;
+  background: #252525;
 }
 .studio .cfo-spend-bar i {
   min-width: 3px;
@@ -262,33 +268,33 @@
   font-weight: 600;
 }
 .studio .cfo-spend-list small {
-  color: #99939d;
+  color: #999999;
   text-align: right;
 }
 .studio .cfo-models {
   margin: 15px 0 0;
   padding-top: 12px;
   border-top: 1px solid var(--cfo-line);
-  color: #96909a;
+  color: #969696;
   font-size: 10.5px;
 }
 .studio .cfo-page .r-spec {
-  background: #a79caf;
+  background: #747474;
 }
 .studio .cfo-page .r-builder {
-  background: #6a58b7;
+  background: #dadada;
 }
 .studio .cfo-page .r-playtester {
-  background: #4c8da1;
+  background: #a5a5a5;
 }
 .studio .cfo-page .r-fixer {
-  background: #c07060;
+  background: #5c5c5c;
 }
 .studio .cfo-page .r-grader {
-  background: #cc9650;
+  background: #3e3e3e;
 }
 .studio .cfo-page .r-coach {
-  background: #5e9b7f;
+  background: #8c8c8c;
 }
 
 .studio .cfo-quote form label,
@@ -312,7 +318,7 @@
   border: 1px solid var(--cfo-line-strong);
   border-radius: 9px;
   outline: 0;
-  background: #fff;
+  background: #111111;
   color: var(--cfo-ink);
   font-size: 12px;
   line-height: 1.45;
@@ -320,26 +326,26 @@
 }
 .studio .cfo-quote textarea:focus,
 .studio .cfo-composer textarea:focus {
-  border-color: #8978ca;
-  box-shadow: 0 0 0 3px rgba(102, 84, 184, 0.09);
+  border-color: #bbbbbb;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.07);
 }
 .studio .cfo-page .btn {
   border-color: var(--cfo-line-strong);
-  background: #fff;
-  color: #56505d;
+  background: #111111;
+  color: #cccccc;
 }
 .studio .cfo-page .btn:hover:not(:disabled) {
-  border-color: #a99ece;
-  background: var(--cfo-violet-soft);
-  color: #4e3d9a;
+  border-color: #666666;
+  background: var(--cfo-accent-soft);
+  color: #eeeeee;
 }
 .studio .cfo-page .btn.solid {
-  border-color: var(--cfo-violet);
-  background: var(--cfo-violet);
-  color: white;
+  border-color: var(--cfo-accent);
+  background: var(--cfo-accent);
+  color: #080808;
 }
 .studio .cfo-page .bad {
-  color: #a64039;
+  color: #cccccc;
   font-size: 11px;
 }
 .studio .cfo-quote-result {
@@ -348,9 +354,9 @@
   gap: 12px;
   margin-top: 15px;
   padding: 14px;
-  border: 1px solid #dcd5f5;
+  border: 1px solid #363636;
   border-radius: 10px;
-  background: #f8f6ff;
+  background: #141414;
 }
 .studio .cfo-quote-result > div > span,
 .studio .cfo-quote-result > div > small {
@@ -383,6 +389,7 @@
   justify-content: flex-end;
 }
 .studio .cfo-table-wrap {
+  position: relative;
   margin: 0 -19px -19px;
   overflow-x: auto;
 }
@@ -396,8 +403,8 @@
   padding: 9px 12px;
   border-top: 1px solid var(--cfo-line);
   border-bottom: 1px solid var(--cfo-line);
-  background: #faf8f4;
-  color: #8c8690;
+  background: #101010;
+  color: #a0a0a0;
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.035em;
@@ -407,8 +414,8 @@
 }
 .studio .cfo-table td {
   padding: 11px 12px;
-  border-bottom: 1px solid #ece8e1;
-  color: #5f5964;
+  border-bottom: 1px solid #252525;
+  color: #bbbbbb;
   vertical-align: middle;
 }
 .studio .cfo-table tr:last-child td {
@@ -430,7 +437,7 @@
 .studio .cfo-table td > small {
   display: block;
   margin-top: 2px;
-  color: #98919b;
+  color: #999999;
   font-size: 9.5px;
 }
 .studio .cfo-page .status {
@@ -438,22 +445,22 @@
 }
 .studio .cfo-page .status.passed,
 .studio .cfo-page .status.pass {
-  color: #297862;
+  color: #cccccc;
 }
 .studio .cfo-page .status.failed,
 .studio .cfo-page .status.fail {
-  color: #a64039;
+  color: #cccccc;
 }
 .studio .cfo-page .status.running,
 .studio .cfo-page .status.queued {
-  color: #91601c;
+  color: #cccccc;
 }
 .studio .cfo-row-action {
   padding: 3px 7px;
-  border: 1px solid #d9d2ef;
+  border: 1px solid #373737;
   border-radius: 6px;
-  background: #f7f4ff;
-  color: #5846a5;
+  background: #181818;
+  color: #dddddd;
   font-size: 10px;
   cursor: pointer;
 }
@@ -488,7 +495,7 @@
   border: 1px solid var(--cfo-line);
   border-radius: 13px;
   background: var(--cfo-card);
-  box-shadow: 0 6px 22px rgba(45, 35, 24, 0.06);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
 }
 .studio .cfo-chat-head {
   display: flex;
@@ -504,8 +511,8 @@
   height: 34px;
   place-items: center;
   border-radius: 10px;
-  background: var(--cfo-violet);
-  color: white;
+  background: var(--cfo-accent);
+  color: #080808;
 }
 .studio .cfo-chat-head > div:nth-child(2) {
   min-width: 0;
@@ -521,7 +528,7 @@
 }
 .studio .cfo-chat-head > div:nth-child(2) span {
   margin-top: 2px;
-  color: #918a95;
+  color: #a0a0a0;
   font-size: 10.5px;
 }
 .studio .cfo-chat-head .cfo-badge {
@@ -531,13 +538,13 @@
 }
 .studio .cfo-connect {
   border-bottom: 1px solid var(--cfo-line);
-  background: #faf8ff;
+  background: #121212;
   color: var(--cfo-muted);
   font-size: 11px;
 }
 .studio .cfo-connect summary {
   padding: 9px 14px;
-  color: #5d4ba8;
+  color: #dddddd;
   cursor: pointer;
   font-weight: 650;
 }
@@ -559,7 +566,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--cfo-violet);
+  color: var(--cfo-accent);
   cursor: pointer;
   font: inherit;
   text-decoration: underline;
@@ -569,7 +576,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 17px 14px;
-  scrollbar-color: #d5d0d8 transparent;
+  scrollbar-color: #444444 transparent;
   scrollbar-width: thin;
 }
 .studio .cfo-welcome {
@@ -587,8 +594,8 @@
   place-items: center;
   margin-bottom: 13px;
   border-radius: 14px;
-  background: var(--cfo-violet-soft);
-  color: var(--cfo-violet);
+  background: var(--cfo-accent-soft);
+  color: var(--cfo-accent);
 }
 .studio .cfo-welcome h2 {
   margin: 0;
@@ -615,15 +622,15 @@
   padding: 9px 10px;
   border: 1px solid var(--cfo-line);
   border-radius: 8px;
-  background: #fff;
-  color: #55505a;
+  background: #111111;
+  color: #c0c0c0;
   font-size: 11px;
   cursor: pointer;
 }
 .studio .cfo-prompts button:hover {
-  border-color: #beb4df;
-  background: #faf8ff;
-  color: #50409a;
+  border-color: #666666;
+  background: #121212;
+  color: #eeeeee;
 }
 .studio .cfo-exchange + .cfo-exchange {
   margin-top: 20px;
@@ -634,15 +641,15 @@
   margin-left: auto;
   padding: 9px 11px;
   border-radius: 11px 11px 3px 11px;
-  background: #ebe7f8;
-  color: #3e3653;
+  background: #222222;
+  color: #eeeeee;
   font-size: 11.5px;
   line-height: 1.5;
   white-space: pre-wrap;
 }
 .studio .cfo-assistant-message {
   margin-top: 9px;
-  color: #49434d;
+  color: #cccccc;
   font-size: 11.5px;
   line-height: 1.58;
 }
@@ -657,8 +664,8 @@
 }
 .studio .cfo-assistant-message code {
   border-radius: 4px;
-  background: #f0ede8;
-  color: #554e5a;
+  background: #222222;
+  color: #dddddd;
 }
 .studio .cfo-calls {
   display: flex;
@@ -674,9 +681,9 @@
   font-size: 9px;
 }
 .studio .cfo-calls span.cfo {
-  border-color: #d9d2ef;
-  background: #f6f3ff;
-  color: #5a48a7;
+  border-color: #373737;
+  background: #181818;
+  color: #cccccc;
 }
 .studio .cfo-working {
   display: flex;
@@ -688,7 +695,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--cfo-violet);
+  background: var(--cfo-accent);
   animation: cfo-pulse 1.1s ease-in-out infinite;
 }
 @keyframes cfo-pulse {
@@ -704,20 +711,28 @@
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--cfo-line);
-  color: #99939c;
+  color: #999999;
   font-size: 9.5px;
 }
 .studio .cfo-page .partner-link {
-  color: #77717a;
+  color: #aaaaaa;
 }
 .studio .cfo-composer {
   padding: 12px;
   border-top: 1px solid var(--cfo-line);
-  background: #fbfaf7;
+  background: #0d0d0d;
 }
-.studio .cfo-starters { margin-bottom: 10px; color: var(--cfo-muted); font-size: 11px; }
-.studio .cfo-starters summary { cursor: pointer; }
-.studio .cfo-starters .cfo-prompts { margin-top: 8px; }
+.studio .cfo-starters {
+  margin-bottom: 10px;
+  color: var(--cfo-muted);
+  font-size: 11px;
+}
+.studio .cfo-starters summary {
+  cursor: pointer;
+}
+.studio .cfo-starters .cfo-prompts {
+  margin-top: 8px;
+}
 .studio .cfo-composer > div {
   position: relative;
 }
@@ -730,7 +745,7 @@
 .studio .cfo-composer small {
   display: block;
   margin-top: 5px;
-  color: #aaa4ac;
+  color: #999999;
   font-size: 9.5px;
 }
 .studio .cfo-send {
@@ -744,12 +759,12 @@
   padding: 0;
   border: 0;
   border-radius: 8px;
-  background: var(--cfo-violet);
-  color: white;
+  background: var(--cfo-accent);
+  color: #080808;
   cursor: pointer;
 }
 .studio .cfo-send.stop {
-  background: #9f4c47;
+  background: #dddddd;
 }
 .studio .cfo-send:disabled {
   cursor: default;
@@ -796,6 +811,9 @@
   .studio .view.cfo-page {
     padding: 22px 16px 90px;
   }
+}
+@media (max-width: 620px) {
+  .studio:has(.cfo-page) .side-resizer { display: none; }
 }
 @container (max-width: 430px) {
   .studio .cfo-page-head {
