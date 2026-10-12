@@ -79,7 +79,7 @@ async function detail(slug) {
       <h3>Checkpoints</h3>
       ${cps.length ? `<div class="explorer">
         <ul class="cp-list" role="listbox" aria-label="Checkpoints">${cps.map((c, i) => `<li><button role="option" data-cp="${i}" aria-selected="${i === 0}" class="${i === 0 ? 'on' : ''}">
-          <span class="tip" role="tooltip">${c.summary ? `<b>Intent.</b> ${esc(c.summary.intent)}<br><b>Outcome.</b> ${esc(c.summary.outcome)}` : `${esc(c.agent || 'agent')}${c.model ? ' · ' + esc(c.model) : ''} · ${Number(c.tokens || 0).toLocaleString()} tokens`}</span><code>${esc(c.id.slice(0, 12))}…</code><span>${esc(c.agent || 'agent')}${c.model ? ' · ' + esc(c.model) : ''}</span><small>${c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</small></button></li>`).join('')}</ul>
+          <span class="tip" role="tooltip">${c.summary ? `<b>Intent.</b> ${esc(c.summary.intent)}<br><b>Outcome.</b> ${esc(c.summary.outcome)}` : `<b>No summary for this checkpoint.</b><br>${esc(c.agent || 'agent')}${c.model ? ' · ' + esc(c.model) : ''} · ${Number(c.tokens || 0).toLocaleString()} tokens`}</span><code>${esc(c.id.slice(0, 12))}…</code><span>${esc(c.agent || 'agent')}${c.model ? ' · ' + esc(c.model) : ''}</span><small>${c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</small></button></li>`).join('')}</ul>
         <div class="cp-detail" id="cp-detail"></div>
       </div>` : '<p class="muted">No checkpoints recorded for this version.</p>'}
       <h3>Provenance</h3>
