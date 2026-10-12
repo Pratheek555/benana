@@ -1,0 +1,5 @@
+should we change how we are giving our test agent access to a basic flat minecraft world to test the mods, so the demo is more clear? it is a very big change, and if possible to spin up a real mc instance to see the mod work and tell me how it would be working
+
+---
+
+continue the work
