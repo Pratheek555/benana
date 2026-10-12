@@ -4,7 +4,7 @@ import { Empty, Icon, PageHead, Status } from "./shared.jsx";
 
 // Marketplace: listings published from the Studio. Rows live in Supabase; the files live on this
 // machine. Publishing runs the gate (sanitize, secret scan) and writes the evidence bundle.
-export default function MarketplacePage({ mods }) {
+export default function MarketplacePage({ mods, onOpenMod = () => {} }) {
   const [state, setState] = React.useState(null);
   const [selected, setSelected] = React.useState(null);
   const [error, setError] = React.useState("");
@@ -41,7 +41,7 @@ export default function MarketplacePage({ mods }) {
         </section>
 
         <section className="mk-detail">
-          {listing ? <Listing listing={listing} onChanged={load} /> : <Empty>Select a listing.</Empty>}
+          {listing ? <Listing listing={listing} onChanged={load} onOpenMod={onOpenMod} /> : <Empty>Select a listing.</Empty>}
         </section>
 
         <aside className="mk-publish">
@@ -58,7 +58,7 @@ export default function MarketplacePage({ mods }) {
 
 const clip = (t, n) => (t.length <= n ? t : `${t.slice(0, t.lastIndexOf(' ', n) > 0 ? t.lastIndexOf(' ', n) : n)}…`);
 
-function Listing({ listing, onChanged }) {
+function Listing({ listing, onChanged, onOpenMod }) {
   const version = listing.versions?.[0];
   const cps = version?.version_checkpoints || [];
   return (
@@ -94,7 +94,7 @@ function Listing({ listing, onChanged }) {
         ))}
       </ul>
 
-      {version?.entire && <EntireSummary entire={version.entire} />}
+      {version?.entire && <EntireSummary entire={version.entire} number={version.number} slug={listing.slug} onOpenMod={onOpenMod} />}
 
       <span className="ent-label">Checkpoints in v{version?.number}</span>
       {cps.length ? (
@@ -104,11 +104,26 @@ function Listing({ listing, onChanged }) {
   );
 }
 
-// The same Entire provenance the website shows: checkpoints with agent and model, the changelog, the code map.
-function EntireSummary({ entire }) {
+// Entire, as a checkpoint explorer: every checkpoint of the version, its detail, and "Open in Benana",
+// which makes a working copy at that checkpoint's commit and opens it in the Studio.
+function EntireSummary({ entire, number, slug, onOpenMod }) {
   const cps = entire.checkpoints || [];
   const cl = entire.changelog;
   const cm = entire.codeMap;
+  const [selected, setSelected] = React.useState(cps[0]?.id || null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const cp = cps.find((c) => c.id === selected) || cps[0] || null;
+
+  const open = (c) => {
+    setBusy(true);
+    setError("");
+    call("market:open-checkpoint", { slug, number, checkpointId: c.id })
+      .then((mod) => onOpenMod(mod.id))
+      .catch((e) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+
   return (
     <section className="mk-entire">
       <span className="ent-label">Built with Entire</span>
@@ -117,16 +132,40 @@ function EntireSummary({ entire }) {
         {cl && <span className="ent-stat"><strong>{cl.filesChanged}</strong> files changed</span>}
         {cm && <span className="ent-stat"><strong>{cm.symbols}</strong> symbols · <strong>{cm.relations}</strong> relations</span>}
       </div>
-      <ol className="mk-timeline">
-        {cps.map((c) => (
-          <li key={c.id}>
-            <code>{c.id.slice(0, 12)}…</code>
-            <span className="ent-chip">{c.agent || "agent"}</span>
-            {c.model && <span className="mk-muted">{c.model}</span>}
-            <span className="mk-muted">{Number(c.tokens || 0).toLocaleString()} tokens</span>
-          </li>
-        ))}
-      </ol>
+
+      {cps.length > 0 && (
+        <div className="mk-explorer">
+          <ul className="mk-cp-list" role="listbox" aria-label="Checkpoints">
+            {cps.map((c) => (
+              <li key={c.id}>
+                <button role="option" aria-selected={c.id === cp?.id} className={c.id === cp?.id ? "active" : ""} onClick={() => setSelected(c.id)}>
+                  <code>{c.id.slice(0, 12)}…</code>
+                  <span>{c.agent || "agent"}{c.model ? ` · ${c.model}` : ""}</span>
+                  <small>{c.createdAt ? new Date(c.createdAt).toLocaleString() : ""}</small>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {cp && (
+            <div className="mk-cp-detail">
+              <dl>
+                <dt>Checkpoint</dt><dd><code>{cp.id}</code></dd>
+                <dt>Commit</dt><dd><code>{cp.commit ? cp.commit.slice(0, 10) : "not linked"}</code></dd>
+                <dt>Agent</dt><dd>{cp.agent || "—"}{cp.model ? ` · ${cp.model}` : ""}</dd>
+                <dt>Sessions</dt><dd>{cp.sessions} · {cp.hasTranscript ? "transcript published" : "metadata only"}</dd>
+                <dt>Tokens</dt><dd>{Number(cp.tokens || 0).toLocaleString()}</dd>
+              </dl>
+              {cp.files?.length > 0 && <div className="mk-files">{cp.files.map((f) => <code key={f}>{f}</code>)}</div>}
+              <button className="btn solid" disabled={busy || !cp.commit} onClick={() => open(cp)}>
+                {busy ? "Opening…" : "Open in Benana"}
+              </button>
+              <p className="mk-muted">Creates a working copy of this mod at this checkpoint's commit, so you can continue from here. Nothing is published.</p>
+              {error && <p className="mk-err">{error}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
       {cl?.files?.length > 0 && (
         <>
           <span className="ent-label">Changelog</span>

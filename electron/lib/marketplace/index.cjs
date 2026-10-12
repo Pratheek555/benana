@@ -7,6 +7,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { dataDir, env } = require('../env.cjs');
 const { git } = require('../git.cjs');
 const bundle = require('../publish/bundle.cjs');
@@ -96,7 +97,7 @@ async function publish(mod, { log = () => {}, sessions = '*' } = {}) {
     bundle_manifest_sha256: manifestSha, commit_sha: head, playtest_summary: play.summary, playtest_status: play.status,
     checkpoint_count: m.checkpoints.length, tokens: m.tokens.input + m.tokens.output + m.tokens.cacheRead,
     transcripts: m.checkpoints.filter((c) => c.transcript).length,
-    entire: entireSummary(path.join(out, 'bundle')),
+    entire: entireSummary(path.join(out, 'bundle'), { repoDir: mod.repoDir }),
   }) });
   if (m.checkpoints.length) {
     await sb('/version_checkpoints', { method: 'POST', body: JSON.stringify(m.checkpoints.map((c) => ({ version_id: version.id, checkpoint_id: c.id, has_transcript: c.transcript }))) });
@@ -112,7 +113,15 @@ async function backfillEntire() {
   for (const v of rows) {
     const [l] = await sb(`/listings?id=eq.${v.listing_id}&select=slug`);
     const dir = path.join(storeDir, l.slug, `v${v.number}`, 'bundle');
-    const summary = fs.existsSync(dir) ? entireSummary(dir) : null;
+    // Clone the source bundle so the checkpoint → commit map can be read from its history.
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'benana-backfill-'));
+    const bundleFile = path.join(storeDir, l.slug, `v${v.number}`, 'source.bundle');
+    let summary = null;
+    if (fs.existsSync(dir) && fs.existsSync(bundleFile)) {
+      await git(work, ['clone', '-q', bundleFile, 'w']).catch(() => {});
+      summary = entireSummary(dir, { repoDir: path.join(work, 'w') });
+    }
+    fs.rmSync(work, { recursive: true, force: true });
     if (!summary) { out.push({ slug: l.slug, number: v.number, skipped: 'no local bundle' }); continue; }
     await sb(`/versions?id=eq.${v.id}`, { method: 'PATCH', body: JSON.stringify({ entire: summary }) });
     out.push({ slug: l.slug, number: v.number, checkpoints: summary.checkpoints.length });
@@ -135,4 +144,17 @@ async function list() {
   };
 }
 
-module.exports = { configured, publish, list, backfillEntire, storeDir, slugOf };
+// Everything needed to open one checkpoint of a published version locally.
+async function checkpointOf(slug, number, checkpointId) {
+  const [l] = await sb(`/listings?slug=eq.${encodeURIComponent(slug)}&select=id,name`);
+  if (!l) throw new Error('Unknown listing.');
+  const [v] = await sb(`/versions?listing_id=eq.${l.id}&number=eq.${Number(number)}&select=id,number,entire`);
+  if (!v) throw new Error('Unknown version.');
+  const cp = (v.entire?.checkpoints || []).find((c) => c.id === checkpointId);
+  if (!cp?.commit) throw new Error('This checkpoint has no commit in the published source.');
+  const source = path.join(storeDir, slug, `v${v.number}`, 'source.bundle');
+  if (!fs.existsSync(source)) throw new Error('The source for this version is not on this machine.');
+  return { slug, number: v.number, checkpointId, name: l.name, source, commit: cp.commit };
+}
+
+module.exports = { configured, publish, list, backfillEntire, checkpointOf, storeDir, slugOf };

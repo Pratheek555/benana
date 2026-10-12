@@ -39,9 +39,24 @@ function summarizeFile(f) {
 }
 
 // bundleDir: the version's bundle folder (manifest.json, checkpoints/, changelog.json, code-map.md).
-function entireSummary(bundleDir) {
+// checkpoint id -> commit that carries its Entire-Checkpoint trailer, read from a repo (or a clone of the source bundle).
+function commitsByCheckpoint(repoDir) {
+  const { execFileSync } = require('node:child_process');
+  const out = new Map();
+  try {
+    const log = execFileSync('git', ['-C', repoDir, 'log', '--all', '--format=%H %(trailers:key=Entire-Checkpoint,valueonly)'], { encoding: 'utf8' });
+    for (const line of log.split('\n')) {
+      const [sha, ...ids] = line.trim().split(/\s+/);
+      for (const id of ids) if (sha && id) out.set(id, sha);
+    }
+  } catch { /* no repo */ }
+  return out;
+}
+
+function entireSummary(bundleDir, { repoDir = null } = {}) {
   const manifest = readJson(path.join(bundleDir, 'manifest.json'));
   if (!manifest) return null;
+  const commits = repoDir ? commitsByCheckpoint(repoDir) : new Map();
   const checkpoints = (manifest.checkpoints || []).map((c) => {
     const meta = readJson(path.join(bundleDir, 'checkpoints', c.id, 'metadata.json')) || {};
     const sessions = meta.sessions || [];
@@ -49,6 +64,7 @@ function entireSummary(bundleDir) {
     const tokens = sessions.reduce((n, s) => n + (s.token_usage?.input_tokens || 0) + (s.token_usage?.output_tokens || 0) + (s.token_usage?.cache_read_tokens || 0), 0);
     return {
       id: c.id,
+      commit: commits.get(c.id) || null,
       agent: first.agent || null,
       model: first.model || null,
       createdAt: first.created_at || null,
@@ -73,4 +89,4 @@ function entireSummary(bundleDir) {
   };
 }
 
-module.exports = { entireSummary, codeMapStats };
+module.exports = { entireSummary, codeMapStats, commitsByCheckpoint };
