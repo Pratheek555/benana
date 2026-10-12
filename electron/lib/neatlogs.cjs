@@ -7,8 +7,10 @@ const app = () =>
     ? "https://eu.app.neatlogs.com"
     : "https://app.neatlogs.com";
 const base = () => app() + "/api/v1/public";
-const configured = () =>
-  Boolean(env("NEATLOGS_API_KEY") && env("NEATLOGS_PROJECT_ID"));
+// Two credentials: NEATLOGS_API_KEY only exports traces (the read API answers it with 401).
+// Reading needs a service-account token in NEATLOGS_TOKEN.
+const tokenOf = () => env("NEATLOGS_TOKEN");
+const configured = () => Boolean(tokenOf() && env("NEATLOGS_PROJECT_ID"));
 
 async function api(p, init = {}) {
   const timeoutMs = init.timeoutMs || 15000;
@@ -18,12 +20,13 @@ async function api(p, init = {}) {
     ...request,
     signal: request.signal || AbortSignal.timeout(timeoutMs),
     headers: {
-      Authorization: `Bearer ${env("NEATLOGS_API_KEY")}`,
+      Authorization: `Bearer ${tokenOf()}`,
       "x-project-id": env("NEATLOGS_PROJECT_ID"),
       "Content-Type": "application/json",
       ...(request.headers || {}),
     },
   });
+  if (res.status === 401) throw new Error("Neatlogs rejected NEATLOGS_TOKEN (401). Use a service-account token; the export key cannot read traces.");
   if (!res.ok) throw new Error(`Neatlogs ${p}: ${res.status}`);
   const j = await res.json();
   return j.data ?? j;
@@ -114,7 +117,7 @@ async function evidence(run, deps = {}) {
       configured: false,
       matched: false,
       traces: [],
-      error: "Set NEATLOGS_API_KEY and NEATLOGS_PROJECT_ID to link traces.",
+      error: "Set NEATLOGS_TOKEN (service account) and NEATLOGS_PROJECT_ID to read traces.",
     };
   if (!run.sessionId)
     return {

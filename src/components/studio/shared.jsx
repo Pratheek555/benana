@@ -44,6 +44,12 @@ export function phaseIndex(mod) {
 // A mod is one chat: turn 0 builds it and every later turn changes it. Older saves and sample mods have just the first turn.
 export const turnsOf = (mod) => (mod?.turns?.length ? mod.turns : [{ prompt: mod?.prompt || "", at: mod?.createdAt }]);
 
+// A chat item can arrive before the mod snapshot that holds its turn; fall back to the newest turn.
+export const turnAt = (mod, k) => {
+  const turns = turnsOf(mod);
+  return turns[k] ?? turns[turns.length - 1];
+};
+
 export const turnAttempts = (mod, k = turnsOf(mod).length - 1) => (mod?.attempts || []).filter((a) => (a.turn ?? 0) === k);
 
 // A later turn replaces the test plan, so a verdict never carries over from an earlier turn.
@@ -297,4 +303,29 @@ export function PartnerStatus({ mod }) {
       </li>
     </ul>
   );
+}
+
+
+// Keeps one broken panel from blanking the whole studio: shows the error and a retry.
+export class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("Studio panel crashed:", error, info?.componentStack);
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="panel-error" role="alert">
+        <strong>This panel hit an error.</strong>
+        <p>{String(this.state.error.message || this.state.error)}</p>
+        <button className="btn" onClick={() => this.setState({ error: null })}>Try again</button>
+      </div>
+    );
+  }
 }

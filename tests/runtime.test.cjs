@@ -286,7 +286,7 @@ test("Entire normalization retains raw ranked evidence and rejects an empty grap
 });
 
 test("Neatlogs evidence requires exact session correlation", async () => {
-  process.env.NEATLOGS_API_KEY = "test";
+  process.env.NEATLOGS_TOKEN = "test";
   process.env.NEATLOGS_PROJECT_ID = "project";
   const calls = [];
   const result = await neatlogs.evidence(
