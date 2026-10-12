@@ -39,7 +39,7 @@ const { mineflayer: viewer } = require('prismarine-viewer');
 const { Vec3 } = require('vec3');
 const nbt = require('prismarine-nbt');
 
-const { MC_PORT, MC_VERSION, BOT_NAME, VIEWER_PORT, VIEWER_FIRST_PERSON } = process.env;
+const { MC_PORT, MC_VERSION, BOT_NAME, VIEWER_PORT, VIEWER_FIRST_PERSON, CAMERA_NAME } = process.env;
 
 const send = (msg) => process.send && process.send(msg);
 const round = (n) => Math.round(n * 1000) / 1000;
@@ -581,7 +581,8 @@ const tools = {
   },
   async nearby_entities({ radius = 16 } = {}) {
     return Object.values(bot.entities)
-      .filter((e) => e !== bot.entity && !dead.has(e.id) && e.position.distanceTo(bot.entity.position) <= radius)
+      // The spectator camera is not part of the test.
+      .filter((e) => e !== bot.entity && !dead.has(e.id) && !(CAMERA_NAME && e.username === CAMERA_NAME) && e.position.distanceTo(bot.entity.position) <= radius)
       .map(describe)
       .sort((a, b) => a.distance - b.distance);
   },

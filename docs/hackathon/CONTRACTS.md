@@ -77,7 +77,8 @@ game.status()
 // { server: 'stopped'|'starting'|'running'|'error', bot: 'offline'|'connecting'|'online',
 //   viewerUrl: string|null, controlUrl: string|null, version: '1.21.4', mock: boolean, error: string|null,
 //   deployed: { plugin, jar?, at? }|null,   // the studio mod on the server
-//   deploying: string|null }               // jar name while a swap is in progress
+//   deploying: string|null,                // jar name while a swap is in progress
+//   camera: 'off'|'launching'|'joining'|'live'|'error', cameraEnabled: boolean, cameraError: string|null }
 
 await game.start(emit)            // download/prepare Paper if needed, start the server, connect the bot, start the viewer
 await game.stop()
@@ -107,7 +108,9 @@ game.mockVerdict(testPlan, attempt)                     // mock only: attempt 1 
 - `game:log`: `{ line, level: 'info'|'warn'|'error', at }`, server console lines.
 - `game:action`: `{ tool, args, result?, at }`, each MCP tool call the bot performs, for the GamePane overlay.
 
-**IPC** (registered by `game.handlers(emit)`): `game:status`, `game:start`, `game:stop`, `game:command { command }`.
+**IPC** (registered by `game.handlers(emit)`): `game:status`, `game:start`, `game:stop`, `game:command { command }`, `game:camera { on }`.
+
+**Real Minecraft camera** (`electron/lib/game/client.cjs`): after each boot, Benana launches a vanilla 1.21.4 client (downloaded from Mojang into `~/.benana/game/client` on first use) that joins as the offline player `Camera`, accepts the mod's resource pack, and is put in spectator mode behind the bot. On Windows its window is made frameless and parked off-screen. `main.cjs` captures that window through `getDisplayMedia`, and the live view shows it as the "Minecraft" source, with "Bot view" still showing the prismarine viewer. The bot and its MCP tools are unchanged: the camera only watches, `nearby_entities` leaves it out, and the plugin template tells builders to ignore spectators. Every deploy or reset relaunches the client, because vanilla cannot reconnect by itself. `BENANA_CAMERA=0` turns it off by default, and `BENANA_CAMERA_WINDOW=show` keeps the window on screen.
 
 ## `minecraft` MCP server: `electron/mcp-minecraft.cjs` (A)
 

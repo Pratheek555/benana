@@ -82,7 +82,8 @@ function FxFeed({ fx }) {
   );
 }
 
-export default function Hud({ hud, viewerUrl, fx = [] }) {
+// native: the real client is on screen and draws its own boss bars.
+export default function Hud({ hud, viewerUrl, fx = [], native = false }) {
   const base = `${viewerUrl}/textures/1.21.4/`;
   const [toast, setToast] = React.useState(null);
   const [flash, setFlash] = React.useState(null);
@@ -135,11 +136,12 @@ export default function Hud({ hud, viewerUrl, fx = [] }) {
 
   if (!hud || !viewerUrl) return null;
   const effects = hud.effects || [];
+  const bossBars = native ? [] : hud.bossBars || [];
   return (
     <div className="hud" style={{ "--s": S }}>
-      {hud.bossBars?.length > 0 && (
+      {bossBars.length > 0 && (
         <div className="hud-top">
-          {hud.bossBars.slice(0, 3).map((b, i) => (
+          {bossBars.slice(0, 3).map((b, i) => (
             <BossBar key={i} bar={b} base={base} />
           ))}
         </div>

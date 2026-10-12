@@ -67,4 +67,7 @@ javap -cp "$JAR" org.bukkit.Particle | grep -i dust
 - **Effects**: `player.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, 200, 1))`, where 200 is ticks and
   1 means level II.
 - **Nearby entities**: `world.getNearbyEntities(loc, r, r, r)` or `loc.getNearbyPlayers(r)`.
+- **Spectators**: a spectator camera player watches every test. Never target, damage, launch, pull, or count a player
+  whose `getGameMode() == GameMode.SPECTATOR` (filter them out of `getNearbyPlayers` and `getOnlinePlayers` loops).
+  Showing them boss bars, particles and messages is fine.
 - Never block the main thread. Use the scheduler for anything delayed or repeated, and cancel tasks in `onDisable`.

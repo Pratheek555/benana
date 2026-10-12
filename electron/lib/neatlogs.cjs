@@ -2,10 +2,11 @@
 // Ingestion is done by Neatlogs' own Claude Code plugin / Codex hooks (see execute_yourself.md).
 const { env } = require("./env.cjs");
 
-const base = () =>
-  (env("NEATLOGS_REGION") === "eu"
+const app = () =>
+  env("NEATLOGS_REGION") === "eu"
     ? "https://eu.app.neatlogs.com"
-    : "https://app.neatlogs.com") + "/api/v1/public";
+    : "https://app.neatlogs.com";
+const base = () => app() + "/api/v1/public";
 const configured = () =>
   Boolean(env("NEATLOGS_API_KEY") && env("NEATLOGS_PROJECT_ID"));
 
@@ -63,6 +64,19 @@ async function allSpans(request, id, pages = 4) {
   return spans;
 }
 
+// The public API returns no dashboard links, so a trace deep link comes from NEATLOGS_TRACE_URL,
+// e.g. https://app.neatlogs.com/<path>/{traceId}. Without it the link opens the dashboard.
+function traceUrl(traceId) {
+  const template = env("NEATLOGS_TRACE_URL");
+  if (!template || !traceId) return { url: app(), deepLink: false };
+  return {
+    url: template
+      .replaceAll("{traceId}", encodeURIComponent(traceId))
+      .replaceAll("{projectId}", encodeURIComponent(env("NEATLOGS_PROJECT_ID") || "")),
+    deepLink: true,
+  };
+}
+
 const failed = (span) => String(span.status || span.status_code || "").toUpperCase() === "ERROR";
 const spanName = (span) => String(span.spanName || span.name || span.span_name || "span").replace(/^mcp__\w+?__/, "");
 
@@ -76,8 +90,10 @@ function summarize(trace, spans) {
     if (last?.name === name && last.error === failed(span)) last.n++;
     else sequence.push({ name, n: 1, error: failed(span) });
   }
+  const traceId = trace.traceId || trace.trace_id || trace.id;
   return {
-    traceId: trace.traceId || trace.trace_id || trace.id,
+    traceId,
+    ...traceUrl(traceId),
     status: trace.status,
     finalized: trace.finalizationStatus === "finalized",
     spans: trace.spansCount ?? spans.length,
@@ -173,4 +189,5 @@ module.exports = {
   status,
   summarize,
   traceItems,
+  traceUrl,
 };

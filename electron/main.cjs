@@ -2,7 +2,7 @@
 // The renderer only talks to it over IPC.
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, session, desktopCapturer } = require('electron');
 const { dataDir, appRoot, env } = require('./lib/env.cjs');
 const { RepoStore } = require('./lib/store.cjs');
 const github = require('./lib/github.cjs');
@@ -25,7 +25,16 @@ const inbox = new Map();
 let pollTimer = null;
 const configFile = path.join(dataDir, 'config.json');
 
-const emit = (channel, data) => win && !win.isDestroyed() && win.webContents.send(channel, data);
+let camera = 'off';
+const emit = (channel, data) => {
+  if (!win || win.isDestroyed()) return;
+  // The Minecraft camera client takes focus (and the mouse) when it opens; hand both back once it is live.
+  if (channel === 'game:status' && data?.camera !== camera) {
+    if (data?.camera === 'live') { win.setAlwaysOnTop(true); win.focus(); win.setAlwaysOnTop(false); }
+    camera = data?.camera;
+  }
+  win.webContents.send(channel, data);
+};
 const log = (text, level = 'info') => emit('log', { text, level, at: Date.now() });
 const code = codewatch.watch(__dirname, (state) => emit('app:code', state));
 // Written before an in-app restart so the next launch brings the game back up.
@@ -256,6 +265,21 @@ function resumeAfterRestart() {
   if (resume.resumeGame && Date.now() - resume.at < 5 * 60 * 1000) game.start(emit).catch((e) => log(`game: ${e.message}`, 'error'));
 }
 
-app.whenReady().then(() => { createWindow(); resumeAfterRestart(); });
+// The live view's "Minecraft" feed: getDisplayMedia in the renderer captures the real client's window, matched by
+// its title ("Minecraft 1.21.4 - Multiplayer ..."), never another window.
+function captureMinecraft() {
+  const title = new RegExp(`^Minecraft\\*? ${game.VERSION.replace(/\./g, '\\.')}(?![\\d.])`);
+  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+    try {
+      const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
+      const source = sources.find((s) => title.test(s.name));
+      callback(source ? { video: source } : {});
+    } catch {
+      callback({});
+    }
+  });
+}
+
+app.whenReady().then(() => { captureMinecraft(); createWindow(); resumeAfterRestart(); });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => { game.stop().catch(() => {}); });

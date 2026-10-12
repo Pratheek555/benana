@@ -30,6 +30,32 @@ function describe(a) {
   return JSON.stringify(a.args || {}).slice(0, 80);
 }
 
+// The real Minecraft client's window, captured into the app (main.cjs picks the window). Calls onLost when the
+// capture ends, e.g. the client relaunching after a deploy.
+function MinecraftFeed({ onLost }) {
+  const video = React.useRef(null);
+  React.useEffect(() => {
+    let stream = null;
+    let stopped = false;
+    navigator.mediaDevices
+      .getDisplayMedia({ video: { frameRate: 60 }, audio: false })
+      .then((s) => {
+        if (stopped) return s.getTracks().forEach((t) => t.stop());
+        stream = s;
+        video.current.srcObject = s;
+        s.getVideoTracks()[0]?.addEventListener("ended", () => onLost?.());
+      })
+      .catch(() => onLost?.());
+    return () => {
+      stopped = true;
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+  return <video ref={video} className="game-feed" autoPlay muted playsInline />;
+}
+
+const CAMERA_LABEL = { launching: "Opening Minecraft…", joining: "Minecraft joining…", live: "Minecraft", error: "Minecraft failed", off: "Minecraft off" };
+
 // Live view of the test bot inside the local Paper server. Owner: Track A.
 // With a mod (the chat the user is in) it keeps the server on that mod's build and a fresh world, and offers
 // "Run mod" (an AI player shows what the mod does) and "Reset world" (back to untouched terrain).
@@ -46,6 +72,10 @@ export default function GamePane({ showLog = true, mod = null, building = false 
   const fxId = React.useRef(0);
   const [modDemo, setModDemo] = React.useState({ modId: null, running: false, summary: "", error: null });
   const [dismissed, setDismissed] = React.useState(false);
+  // "minecraft": the real client's spectator feed when it is live; "bot": the prismarine 3D viewer.
+  const [view, setView] = React.useState("minecraft");
+  const [feedKey, setFeedKey] = React.useState(0);
+  const [feedLost, setFeedLost] = React.useState(false);
   const synced = React.useRef(null);
 
   React.useEffect(() => {
@@ -93,6 +123,16 @@ export default function GamePane({ showLog = true, mod = null, building = false 
   const locked = busy || building || reloading;
   const caption = demoRunning && showcase?.steps?.length ? showcase : null;
   const showHud = Boolean(hud && status?.viewerUrl && !reloading && status?.bot === "online");
+  const cameraLive = status?.camera === "live";
+  const native = view === "minecraft" && cameraLive && !reloading && !feedLost;
+
+  // A relaunched client is a new window, so a new capture.
+  React.useEffect(() => {
+    if (cameraLive) {
+      setFeedLost(false);
+      setFeedKey((k) => k + 1);
+    }
+  }, [cameraLive]);
 
   const attempt = async (fn) => {
     setBusy(true);
@@ -125,6 +165,13 @@ export default function GamePane({ showLog = true, mod = null, building = false 
 
   const resetWorld = () => attempt(() => call("studio:reset-world"));
 
+  const toggleCamera = () =>
+    attempt(async () => {
+      const on = !status?.cameraEnabled;
+      setStatus(await call("game:camera", { on }));
+      if (on) setView("minecraft");
+    });
+
   // Opening a chat puts that mod, on a fresh world, in the live view.
   React.useEffect(() => {
     synced.current = null;
@@ -154,6 +201,39 @@ export default function GamePane({ showLog = true, mod = null, building = false 
           {resetting ? "Resetting world…" : deploying ? `Loading ${deploying}…` : deployed?.plugin || "No mod"}
         </span>
         <span className="game-spacer" />
+        {running && (
+          <span className="game-views" role="group" aria-label="Live view source">
+            <button
+              className={native ? "on" : ""}
+              disabled={busy}
+              title={
+                status?.cameraEnabled
+                  ? status?.camera === "error"
+                    ? status.cameraError
+                    : "A real Minecraft client watching as a spectator"
+                  : "Open a real Minecraft client that watches the bot"
+              }
+              onClick={() => {
+                if (!status?.cameraEnabled || status?.camera === "error") return toggleCamera();
+                setView("minecraft");
+                if (feedLost) {
+                  setFeedLost(false);
+                  setFeedKey((k) => k + 1);
+                }
+              }}
+            >
+              {status?.cameraEnabled ? CAMERA_LABEL[status?.camera] || "Minecraft" : "Minecraft off"}
+            </button>
+            <button className={native ? "" : "on"} onClick={() => setView("bot")} title="The bot's 3D viewer">
+              Bot view
+            </button>
+            {status?.cameraEnabled && (
+              <button className="close" disabled={busy} onClick={toggleCamera} title="Close the Minecraft client">
+                ×
+              </button>
+            )}
+          </span>
+        )}
         {canLoad && (
           <button
             className="game-btn load"
@@ -218,8 +298,12 @@ export default function GamePane({ showLog = true, mod = null, building = false 
       <div className={`game-view ${showHud ? "hud-on" : ""} ${demoRunning || demoNote ? "demo" : ""} ${caption ? "captioned" : ""}`}>
         {status?.viewerUrl && !reloading ? (
           <>
-            <iframe title="Bot view" src={status.viewerUrl} />
-            {showHud && <Hud hud={hud} viewerUrl={status.viewerUrl} fx={fx} />}
+            {native ? (
+              <MinecraftFeed key={feedKey} onLost={() => setFeedLost(true)} />
+            ) : (
+              <iframe title="Bot view" src={status.viewerUrl} />
+            )}
+            {showHud && <Hud hud={hud} viewerUrl={status.viewerUrl} fx={fx} native={native} />}
           </>
         ) : (
           <div className="game-empty">

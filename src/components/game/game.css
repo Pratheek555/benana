@@ -130,6 +130,43 @@
   height: 100%;
   border: 0;
 }
+.game-feed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+/* Live view source: the real Minecraft client or the bot's 3D viewer. */
+.game-views {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.14));
+  border-radius: 7px;
+}
+.game-pane .game-views button {
+  height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2, #a0a3ab);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.game-pane .game-views button.on {
+  background: var(--hover, #1c1e22);
+  color: var(--text, #ececee);
+}
+.game-pane .game-views button.close {
+  padding: 0 6px;
+  color: var(--text-3, #6c707a);
+}
+.game-pane .game-views button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .game-empty {
   display: grid;
   place-items: center;

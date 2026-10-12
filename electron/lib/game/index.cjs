@@ -13,6 +13,7 @@ const { spawnSync } = require('node:child_process');
 const { appRoot } = require('../env.cjs');
 const { resolveExecutable, spawnExecutable, terminateProcessTree } = require('../processes.cjs');
 const { Server, VERSION, PORT, dir: serverDir } = require('./server.cjs');
+const { Client, NAME: CAMERA } = require('./client.cjs');
 const { packTextures } = require('../studio/pack.cjs');
 
 const BOT = 'BenanaBot';
@@ -32,7 +33,11 @@ const TOOLS = ['game_setup', 'reset_arena', ...BOT_TOOLS, 'server_log', 'report_
 const playtesterTools = TOOLS.map((t) => `mcp__minecraft__${t}`);
 
 // deployed: the studio mod whose jar is in the server's plugins folder; deploying: the one being swapped in.
-let state = { server: 'stopped', bot: 'offline', viewerUrl: null, controlUrl: null, version: VERSION, mock: mock(), error: null, deployed: null, deploying: null, resetting: false };
+// camera: the real Minecraft client watching as a spectator (off, launching, joining, live, error).
+let state = {
+  server: 'stopped', bot: 'offline', viewerUrl: null, controlUrl: null, version: VERSION, mock: mock(), error: null,
+  deployed: null, deploying: null, resetting: false, camera: 'off', cameraEnabled: process.env.BENANA_CAMERA !== '0', cameraError: null,
+};
 let emitter = () => {};
 
 function setState(patch) {
@@ -44,6 +49,101 @@ function setState(patch) {
 const status = () => ({ ...state, mock: mock() });
 
 const server = new Server();
+
+// The real-client camera. It is a spectator, so it never touches the test: mobs ignore it, `@p` skips it, and the
+// bot's tools leave it out. The capture into the live view is wired in main.cjs.
+const client = new Client();
+let cameraRun = 0;
+let follow = null;
+let focus = null;
+let shot = null;
+
+const entityPos = async (name) => {
+  const out = await server.command(`data get entity ${name} Pos`);
+  const m = out.match(/\[(-?[\d.]+)d, (-?[\d.]+)d, (-?[\d.]+)d\]/);
+  return m ? m.slice(1, 4).map(Number) : null;
+};
+
+// Places the camera behind and to the side of the bot, looking just past it where the mod's targets get summoned,
+// high enough that a launched bot stays in frame.
+async function frameCamera(pos) {
+  const [x, y, z] = pos || (await entityPos(BOT)) || ARENA;
+  focus = [x, z];
+  shot = [x - 7, y + 3.5, z - 4];
+  await server.command(`gamemode spectator ${CAMERA}`);
+  await server.command(`tp ${CAMERA} ${shot.map((n) => n.toFixed(2)).join(' ')} facing ${x.toFixed(2)} ${(y + 2).toFixed(2)} ${(z + 1.5).toFixed(2)}`);
+}
+
+// Reframes when the bot walks out of the shot (launches straight up stay in frame), or when the camera was moved,
+// e.g. a setup command teleported every player.
+function startFollow() {
+  clearInterval(follow);
+  follow = setInterval(async () => {
+    if (state.camera !== 'live' || state.resetting || state.deploying) return;
+    try {
+      const [bot, cam] = [await entityPos(BOT), await entityPos(CAMERA)];
+      const strayed = bot && (!focus || Math.hypot(bot[0] - focus[0], bot[2] - focus[1]) > 5);
+      const moved = cam && shot && Math.hypot(cam[0] - shot[0], cam[1] - shot[1], cam[2] - shot[2]) > 0.5;
+      if (strayed || moved) await frameCamera(strayed ? bot : [focus[0], shot[1] - 3.5, focus[1]]);
+    } catch {}
+  }, 1500);
+}
+
+async function waitForJoin(since, run) {
+  const joined = new RegExp(`\\b${CAMERA} joined the game`);
+  const deadline = Date.now() + 180000;
+  while (Date.now() < deadline) {
+    if (run !== cameraRun) return false;
+    if (server.logSince(since).some((l) => joined.test(l.line))) return true;
+    if (!client.running()) throw new Error('The Minecraft client closed before joining.');
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error('The Minecraft client did not join within 3 minutes.');
+}
+
+// Launches the client and puts it in spectator behind the bot. Runs in the background: the bot's tests never
+// wait for the camera.
+async function startCamera() {
+  if (mock() || !state.cameraEnabled || client.running() || state.server !== 'running') return;
+  const run = ++cameraRun;
+  const since = Date.now();
+  setState({ camera: 'launching', cameraError: null });
+  try {
+    await client.launch({
+      version: VERSION,
+      port: PORT,
+      log: (text) => emitter('game:log', { line: `[camera] ${text}`, level: 'info', at: Date.now() }),
+      onExit: () => { if (run === cameraRun) { clearInterval(follow); setState({ camera: 'off' }); } },
+    });
+    setState({ camera: 'joining' });
+    if (!(await waitForJoin(since, run))) return;
+    // The world finishes loading on the client a moment after the join message.
+    await new Promise((r) => setTimeout(r, 1500));
+    await frameCamera();
+    setState({ camera: 'live' });
+    startFollow();
+  } catch (e) {
+    if (run !== cameraRun) return;
+    await client.stop();
+    setState({ camera: 'error', cameraError: e.message });
+  }
+}
+
+async function stopCamera() {
+  cameraRun++;
+  clearInterval(follow);
+  focus = null;
+  shot = null;
+  await client.stop();
+  if (state.camera !== 'off') setState({ camera: 'off' });
+}
+
+async function setCamera({ on }) {
+  setState({ cameraEnabled: Boolean(on), cameraError: null });
+  if (on) startCamera();
+  else await stopCamera();
+  return status();
+}
 
 // Studio jars are copied in as studio-<ModName>.jar.
 function deployedOnDisk() {
@@ -97,7 +197,7 @@ function startHost() {
       cwd: appRoot,
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       env: {
-        ...process.env, MC_PORT: String(PORT), MC_VERSION: VERSION, BOT_NAME: BOT,
+        ...process.env, MC_PORT: String(PORT), MC_VERSION: VERSION, BOT_NAME: BOT, CAMERA_NAME: CAMERA,
         VIEWER_PORT: String(VIEWER_PORT), VIEWER_FIRST_PERSON: process.env.BENANA_VIEW === 'first' ? '1' : '0',
       },
     });
@@ -199,11 +299,14 @@ async function runTool(tool, args = {}) {
       const cmd = String(raw).replace(/^\//, '').replaceAll('@bot', BOT);
       out.push({ command: cmd, output: await server.command(`execute as ${BOT} at ${BOT} run ${cmd}`) });
     }
+    // Setup commands can move every player (`tp @a`) or change game modes; put the camera back.
+    if (state.camera === 'live') await frameCamera().catch(() => {});
     return out;
   }
   if (tool === 'reset_arena') {
     await resetArena();
     await prepareBot();
+    if (state.camera === 'live') await frameCamera(ARENA).catch(() => {});
     await botCall('wait_ticks', { ticks: 10 });
     return { reset: true, note: 'Arena rebuilt flat (grass at y=64), all mobs/items/projectiles removed, bot back at the center with an empty inventory. Run your setup commands again. Plugin state such as cooldowns is NOT reset; wait it out.' };
   }
@@ -261,6 +364,7 @@ async function bootGame() {
   await startHost();
   await prepareBot();
   setState({ viewerUrl: `http://127.0.0.1:${VIEWER_PORT}` });
+  startCamera();
 }
 
 let booting = null;
@@ -287,6 +391,7 @@ async function start(emit = () => {}) {
 async function stop() {
   demo(false);
   if (mock()) return setState({ server: 'stopped', bot: 'offline' });
+  await stopCamera();
   await stopHost();
   await server.stop();
   return setState({ server: 'stopped', bot: 'offline', viewerUrl: null });
@@ -343,6 +448,8 @@ async function swapPlugin(jarPath, packPath) {
 async function rebootFresh(jarPath, packPath) {
   systemNode();
   await startControl();
+  // The vanilla client cannot reconnect by itself, so it is relaunched after the reboot.
+  await stopCamera();
   await stopHost();
   await server.stop();
   setState({ server: 'stopped', bot: 'offline', viewerUrl: null });
@@ -516,6 +623,7 @@ function handlers(emit) {
   }
   return {
     'game:demo': ({ on }) => demo(on),
+    'game:camera': (args = {}) => setCamera(args),
     'game:status': () => status(),
     'game:hud': () => (hud ? withTextures(hud) : null),
     'game:showcase': () => showcase,

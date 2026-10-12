@@ -185,6 +185,25 @@ const NO_TRACE = {
   notfound: "Neatlogs had not finalized the playtest trace in time, so the fixer works from the verdict and Entire checkpoints.",
 };
 
+// Summaries saved before links were recorded fall back to the dashboard.
+function TraceLink({ summary }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = () =>
+    navigator.clipboard.writeText(summary.traceId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  return (
+    <div className="handoff-link">
+      <button onClick={() => window.benana?.openExternal(summary.url || "https://app.neatlogs.com")} title={summary.deepLink ? "Open this trace in the Neatlogs dashboard" : "Open the Neatlogs dashboard, then search for the trace ID"}>
+        Open in Neatlogs ↗
+      </button>
+      <code title={summary.traceId}>trace {String(summary.traceId).slice(0, 12)}</code>
+      <button className="ghost" onClick={copy}>{copied ? "Copied" : "Copy ID"}</button>
+    </div>
+  );
+}
+
 export function HandoffCard({ mod, n }) {
   const attempt = mod.attempts.find((a) => a.n === n);
   const ctx = attempt?.context;
@@ -250,6 +269,8 @@ export function HandoffCard({ mod, n }) {
           </span>
         )}
       </div>
+
+      {summary?.traceId && <TraceLink summary={summary} />}
 
       {summary && failedCalls.length > 0 && (
         <ul className="handoff-errors">
