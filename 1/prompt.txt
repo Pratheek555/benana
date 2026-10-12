@@ -1,0 +1,20 @@
+Instructions before shooting your submission demo video
+
+We were looking at your traces while you were building your agents. We have a feature that lets you look at your critical incidents, and you need to show how it helped indentify and solve these incidents.
+
+I've attached a demo video on how you can use this feature: https://drive.google.com/file/d/REDACTED/view?usp=sharing
+
+Meanwhile, for your overall demo video submission, in ONE video, you should talk about:
+
+the problem your agent solves
+how cfo.ai and entire were part of the project
+how neatlogs was used to identify and resolve the incidents your agent ran into
+
+keep your videos ready, submissions start today, 12th October 7pm IST! 🎊 
+
+
+can we quickly understand how we can integrate this in our chatUI when it does happen in realtime while building the mod or if it's something else let me know
+
+---
+
+[Assistant quote](t3-citation://v1/1aa8d2bb-6397-4621-8dce-2bd19b02f426/55fe4d31-4539-4efb-9def-a38561c18579/message%3Aprovider%3AclaudeAgent%3Anative-item%3Ab9e8bbb7-5cac-4bfe-97ec-5080da846aae?text=%3A+skip+the+live+feature.+Add+a+small+%22Open+in+Neatlogs%22+link+with+the+trace+ID+on+the+handoff+card+%28about+15+minutes%29%2C+so+the+video+can+jump+from+Benana%27s+chat+straight+to+the+incident.+Want+me+to+add+that+link%2C+or+try+the+live+detections+version%3F&start=2482&end=2729&prefix=7pm+IST+today.+My+recommendation&suffix=+Sources%3A+Neatlogs+docs+Neatlogs)  work on this
