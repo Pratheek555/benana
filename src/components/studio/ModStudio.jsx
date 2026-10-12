@@ -304,7 +304,7 @@ export default function ModStudio({ onOpenWorkspace }) {
             onOpenCode={openMod}
           />
         )}
-        {page === "marketplace" && <MarketplacePage mods={mods} />}
+        {page === "marketplace" && <MarketplacePage mods={mods} onOpenMod={watchMod} />}
         {page === "mods" && <ModsPage mods={mods} mod={mod} setSelectedId={setSelectedId} onBuild={newMod} onWatch={watchMod} />}
         {page === "bench" && <BenchPage mods={mods} lessons={lessons} running={running} onWatch={watchMod} onOpenMod={openMod} />}
         {page === "insights" && <InsightsPage mods={mods} lessons={lessons} />}

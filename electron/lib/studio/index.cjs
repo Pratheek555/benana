@@ -582,6 +582,42 @@ function repoOf(id) {
   return mod.repoDir;
 }
 
+
+// Open a marketplace checkpoint in the Studio: a working copy of the mod at that checkpoint's commit,
+// registered as a mod, so the user can ask for changes from there. Nothing is pushed anywhere.
+async function openCheckpoint({ slug, number, checkpointId, name, source, commit }) {
+  const id = `mod_${now().toString(36)}`;
+  const dir = path.join(repo.modsDir, `${slug}-${id.slice(-4)}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+  const { execFileSync } = require('node:child_process');
+  const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' }).trim();
+  execFileSync('git', ['clone', '-q', source, dir], { encoding: 'utf8' });
+  git('config', 'user.name', 'Benana Mod Studio');
+  git('config', 'user.email', 'studio@benana.dev');
+  git('checkout', '-q', '-b', `from-checkpoint-${checkpointId.slice(-6).toLowerCase()}`, commit);
+  repo.lockSessionPush(dir);
+  // Enable Entire here so future agent work in this copy is checkpointed too (best effort).
+  try { execFileSync(process.env.BENANA_ENTIRE || 'entire', ['enable', '--agent', 'claude-code', '--project', '-y'], { cwd: dir, timeout: 60000, stdio: 'ignore' }); repo.lockSessionPush(dir); } catch {}
+  let testPlan = null;
+  try { testPlan = JSON.parse(fs.readFileSync(path.join(dir, 'playtest', 'test-plan.json'), 'utf8')); } catch {}
+  const at = now();
+  const mod = {
+    id, prompt: `Opened from the marketplace: ${name} v${number}, checkpoint ${checkpointId}`, seed: false,
+    name, status: 'passed', phase: 'done', createdAt: at, updatedAt: at,
+    spec: { summary: `${name}, opened at checkpoint ${checkpointId.slice(0, 10)}`, behavior: [] },
+    testPlan, repoDir: dir, partners: { entire: { enabled: true }, neatlogs: { enabled: false } },
+    origin: { marketplace: slug, version: number, checkpoint: checkpointId, commit },
+    sessions: [], attempts: [], error: null,
+    turns: [{ prompt: `Opened from the marketplace (${name} v${number})`, at, summary: `Opened at checkpoint ${checkpointId.slice(0, 10)}`, checks: testPlan?.checks || [], endPhase: 'done', status: 'passed' }],
+    feed: [],
+  };
+  mods.set(id, mod);
+  feed(mod, { role: 'benana', kind: 'note', text: `Opened ${name} v${number} at checkpoint ${checkpointId.slice(0, 10)} (commit ${commit.slice(0, 7)}). Ask for a change to continue from here.` });
+  save(mod);
+  return publicMod(mod);
+}
+
 function handlers(deps) {
   emit = deps.emit;
   log = deps.log;
@@ -653,6 +689,10 @@ function handlers(deps) {
       return marketplace.publish(mod, { sessions, log: (text) => feed(mod, { role: 'benana', kind: 'note', text }) });
     },
     'market:status': () => ({ configured: marketplace.configured(), storeDir: marketplace.storeDir }),
+    'market:open-checkpoint': async ({ slug, number, checkpointId }) => {
+      const cp = await marketplace.checkpointOf(slug, number, checkpointId);
+      return openCheckpoint(cp);
+    },
   };
 }
 
