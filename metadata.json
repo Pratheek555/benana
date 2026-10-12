@@ -1,0 +1,57 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4R3K6FGR6FT6J5QJ1Y5ETGJ",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".gitignore",
+    "docs/marketplace/SPEC.md",
+    "electron/lib/marketplace/entire-summary.cjs",
+    "electron/lib/marketplace/index.cjs",
+    "electron/lib/neatlogs.cjs",
+    "electron/lib/publish/bundle.cjs",
+    "electron/lib/publish/refs.cjs",
+    "electron/lib/publish/sanitize.cjs",
+    "electron/lib/publish/secrets.cjs",
+    "electron/lib/publish/summaries.cjs",
+    "electron/lib/studio/index.cjs",
+    "electron/lib/studio/prompts.cjs",
+    "electron/lib/studio/repo.cjs",
+    "scripts/test-marketplace-rls.mjs",
+    "site/index.html",
+    "site/marketplace.html",
+    "site/src/marketplace.js",
+    "site/vite.config.js",
+    "src/components/studio/BuildPage.jsx",
+    "src/components/studio/EntirePage.jsx",
+    "src/components/studio/GraphWindow.jsx",
+    "src/components/studio/MarketplacePage.jsx",
+    "src/components/studio/ModStudio.jsx",
+    "src/components/studio/shared.jsx",
+    "src/components/studio/studio.css",
+    "supabase/migrations/20261011000000_waitlist.sql",
+    "supabase/migrations/20261011120000_marketplace.sql",
+    "supabase/migrations/20261012000000_marketplace_local.sql",
+    "supabase/migrations/20261012120000_entire_summary.sql",
+    "tests/publish.test.cjs",
+    "tests/runtime.test.cjs",
+    "tests/secrets.test.cjs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 10,
+    "cache_creation_tokens": 17053,
+    "cache_read_tokens": 213604,
+    "output_tokens": 3717,
+    "api_call_count": 5
+  }
+}
