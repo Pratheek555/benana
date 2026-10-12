@@ -463,7 +463,7 @@ const DIFFS = {
 Entire-Checkpoint: c15d90f2a8e3
 
 diff --git a/src/main/java/dev/benana/mod/LaunchSword.java b/src/main/java/dev/benana/mod/LaunchSword.java
-@@ onHit
+@@ -18,5 +18,7 @@ public void onHit(EntityDamageByEntityEvent event) {
          lastLaunch.put(player.getUniqueId(), now);
 -        target.setVelocity(new Vector(0, 1.2, 0));
 -        target.getWorld().spawnParticle(Particle.CLOUD, target.getLocation(), 40);
@@ -489,6 +489,60 @@ function checkpointsOf(m) {
         agent: "claude",
       }));
   });
+}
+
+const javaPath = (m) => `src/main/java/dev/benana/mod/${m.name}.java`;
+const iso = (t) => new Date(t).toISOString();
+
+function commitsOf(m) {
+  const items = m.attempts.flatMap((a) => [
+    a.commit?.sha && {
+      sha: a.commit.sha,
+      subject: a.role === "seeded" ? `Attempt ${a.n} seeded implementation` : `Attempt ${a.n} (${a.role}): ${a.role === "builder" ? "implement" : "fix from playtest evidence"} ${m.name}`,
+      date: iso(a.startedAt + 2 * MIN),
+      checkpoint: a.commit.checkpoint,
+      files: [{ path: javaPath(m), additions: a.role === "builder" ? 84 : 9, deletions: a.role === "builder" ? 3 : 4 }, ...(a.role === "builder" ? [{ path: "src/main/resources/plugin.yml", additions: 6, deletions: 1 }] : [])],
+    },
+    a.playtestCommit?.sha && {
+      sha: a.playtestCommit.sha,
+      subject: `Playtest attempt ${a.n}: ${a.verdict?.passed ? "PASS" : "FAIL"} (${(a.verdict?.checks || []).map((c) => `${c.id}=${c.status}`).join(", ")})`,
+      date: iso(a.startedAt + 6 * MIN),
+      checkpoint: a.playtestCommit.checkpoint,
+      files: [{ path: `playtest/attempt-${a.n}/verdict.json`, additions: 38, deletions: 0 }],
+    },
+  ].filter(Boolean));
+  items.unshift({ sha: `${m.id.slice(-4)}0a1b2c`, subject: `Scaffold ${m.name} from the Benana Paper template`, date: iso(m.createdAt), checkpoint: null, files: [{ path: "pom.xml", additions: 61, deletions: 0 }, { path: "src/main/resources/plugin.yml", additions: 4, deletions: 0 }, { path: javaPath(m), additions: 12, deletions: 0 }] });
+  return items.reverse().map((c) => ({ ...c, author: "Benana Mod Studio", additions: c.files.reduce((n, f) => n + f.additions, 0), deletions: c.files.reduce((n, f) => n + f.deletions, 0) }));
+}
+
+function checkpointOf(m, id) {
+  const a = m.attempts.find((x) => x.commit?.checkpoint === id || x.playtestCommit?.checkpoint === id);
+  if (!a) return { ok: false, error: "Unknown checkpoint." };
+  const playtest = a.playtestCommit?.checkpoint === id;
+  const s = a.sessions.find((x) => (playtest ? x.role === "playtester" : x.role !== "playtester")) || a.sessions[0];
+  const files = playtest ? [`playtest/attempt-${a.n}/verdict.json`] : [javaPath(m), ...(a.role === "builder" ? ["src/main/resources/plugin.yml"] : [])];
+  const u = s?.usage || {};
+  return {
+    ok: true,
+    item: {
+      checkpoint_id: id,
+      strategy: "manual-commit",
+      branch: "main",
+      checkpoints_count: 1,
+      files_touched: files,
+      session_count: 1,
+      sessions: [{
+        index: 0,
+        session_id: s?.sessionId,
+        agent: "Claude Code",
+        model: s?.model,
+        created_at: iso(s?.startedAt || a.startedAt),
+        files_touched: files,
+        token_usage: { input_tokens: Math.round((u.inputTokens || 0) * 0.02), cache_creation_tokens: Math.round((u.inputTokens || 0) * 0.18), cache_read_tokens: u.cacheReadInputTokens || 0, output_tokens: u.outputTokens || 0, api_call_count: playtest ? 14 : 7 },
+      }],
+      tasks: [],
+    },
+  };
 }
 
 function fileText(m, rel) {
@@ -619,9 +673,11 @@ export const studioSample = {
   "studio:get": ({ id }) => ({ ...brief(byId(id)), feed: byId(id).feed }),
   "studio:stop": () => false,
   "studio:lessons": () => LESSONS,
-  "studio:partners": { neatlogs: { configured: true, ok: true } },
+  "studio:partners": { neatlogs: { configured: true, ok: true }, entire: { installed: true, version: "sample" } },
   "studio:evidence": evidenceFor,
   "studio:checkpoints": ({ id }) => ({ ok: true, items: checkpointsOf(byId(id)) }),
+  "studio:checkpoint": ({ id, checkpoint }) => checkpointOf(byId(id), checkpoint),
+  "studio:commits": ({ id }) => ({ ok: true, branch: "main", items: commitsOf(byId(id)) }),
   "studio:files": ({ id }) => {
     const m = byId(id);
     return ["pom.xml", "src/main/resources/plugin.yml", `src/main/java/dev/benana/mod/${m.name}.java`, "playtest/test-plan.json"];
@@ -629,7 +685,7 @@ export const studioSample = {
   "studio:file": ({ id, path }) => fileText(byId(id), path),
   "studio:diff": ({ sha }) =>
     DIFFS[sha] ||
-    `Sample commit ${sha}\n\ndiff --git a/playtest/test-plan.json b/playtest/test-plan.json\n@@ checks\n+  "checks": []\n`,
+    `Sample commit ${sha}\n\ndiff --git a/playtest/test-plan.json b/playtest/test-plan.json\n@@ -1,3 +1,4 @@\n {\n+  "checks": [],\n   "version": 1\n }\n`,
   "game:status": GAME,
   "game:logs": () => SERVER_BACKLOG,
   "game:start": GAME,

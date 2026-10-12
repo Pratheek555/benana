@@ -99,6 +99,41 @@ async function checkpoints(dir) {
   try { return { ok: true, items: JSON.parse(res.out) }; } catch { return { ok: false, items: [], error: 'Unrecognized checkpoint output.' }; }
 }
 
+async function checkpoint(dir, id) {
+  if (!/^[0-9A-Za-z]{6,40}$/.test(id || '')) return { ok: false, error: 'Unknown checkpoint.' };
+  const res = await exec('entire', ['checkpoint', 'explain', id, '--json', '--no-pager'], dir, { timeoutMs: 30000 });
+  if (!res.ok) return { ok: false, error: (res.missing ? 'Entire CLI is not installed.' : res.err || res.out).trim().slice(0, 400) };
+  try { return { ok: true, item: JSON.parse(res.out) }; } catch { return { ok: false, error: 'Unrecognized checkpoint output.' }; }
+}
+
+async function commits(dir, limit = 200) {
+  const branch = (await git(dir, 'rev-parse', '--abbrev-ref', 'HEAD')).out.trim() || 'main';
+  const res = await git(dir, 'log', `-${limit}`, '--numstat', '--format=%x1e%H%x1f%s%x1f%aI%x1f%an%x1f%(trailers:key=Entire-Checkpoint,valueonly,separator=%x2C)%x1f');
+  if (!res.ok) return { ok: false, branch, items: [], error: res.err.trim().slice(0, 400) };
+  const items = res.out.split('\x1e').filter((s) => s.trim()).map((record) => {
+    const [sha, subject, date, author, trailer, stat = ''] = record.split('\x1f');
+    const files = stat.split('\n').map((l) => l.split('\t')).filter((p) => p.length === 3)
+      .map(([add, del, file]) => ({ path: file, additions: Number(add) || 0, deletions: Number(del) || 0 }));
+    return {
+      sha,
+      subject,
+      date,
+      author,
+      checkpoint: trailer.split(',')[0].trim() || null,
+      files,
+      additions: files.reduce((n, f) => n + f.additions, 0),
+      deletions: files.reduce((n, f) => n + f.deletions, 0),
+    };
+  });
+  return { ok: true, branch, items };
+}
+
+async function entireStatus() {
+  const res = await exec('entire', ['--version'], process.cwd(), { timeoutMs: 15000 });
+  if (!res.ok) return { installed: false, error: res.missing ? 'Entire CLI is not installed.' : (res.err || res.out).trim().slice(0, 400) };
+  return { installed: true, version: /Entire CLI\s+(\S+)/.exec(res.out)?.[1] || res.out.trim().split('\n')[0] };
+}
+
 async function history(dir) {
   return (await git(dir, 'log', '--format=%h %s%n%(trailers:key=Entire-Checkpoint)', '-20')).out.trim();
 }
@@ -115,7 +150,10 @@ async function readFile(dir, rel) {
 
 async function diff(dir, sha) {
   if (!/^[0-9a-f]{7,40}$/.test(sha || '')) throw new Error('Unknown commit.');
-  return (await git(dir, 'show', '--format=%s%n%n%b', '--patch', '--no-color', sha)).out.slice(0, 200000);
+  const res = await git(dir, 'show', '--format=%s%n%n%b', '--patch', '--no-color', sha);
+  if (!res.ok) throw new Error((res.err || res.out || 'Could not read commit.').trim().slice(0, 400));
+  if (res.out.length > 200000) throw new Error('This commit patch is larger than the 200,000 character display limit. Open the repository to inspect the full diff.');
+  return res.out;
 }
 
 async function build(dir, name) {
@@ -130,4 +168,4 @@ async function build(dir, name) {
   return { ok, jar: fs.existsSync(jar) ? jar : null, log: log.slice(-12000), assets };
 }
 
-module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, history, files, readFile, diff, build };
+module.exports = { modsDir, create, enableNeatlogs, commit, checkpoints, checkpoint, commits, entireStatus, history, files, readFile, diff, build };

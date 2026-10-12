@@ -2340,9 +2340,6 @@
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
-.studio .entire-split .list {
-  padding: 0 8px 8px;
-}
 .studio .mods-detail {
   min-height: 0;
   padding: 20px 24px 28px;
@@ -2799,27 +2796,7 @@
   font-size: 11.5px;
 }
 
-/* ---------- Neatlogs and Entire ---------- */
 
-.studio .connection {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-}
-.studio .connection strong {
-  flex: none;
-  font-weight: 600;
-}
-.studio .connection .meta {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .studio .split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
@@ -2828,9 +2805,6 @@
 }
 .studio .split > .panel:first-child {
   overflow-x: auto;
-}
-.studio .entire-split {
-  grid-template-columns: 300px minmax(0, 1fr);
 }
 .studio .detail-card {
   position: sticky;
@@ -2871,48 +2845,6 @@
 .studio .spans small {
   color: var(--text-3);
 }
-.studio .commits {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.studio .commits li {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-}
-.studio .commits li:not(:last-child)::before {
-  content: "";
-  position: absolute;
-  top: 26px;
-  bottom: -10px;
-  left: 4px;
-  width: 1px;
-  background: var(--line-strong);
-}
-.studio .commit-node {
-  flex: none;
-  width: 9px;
-  height: 9px;
-  border: 2px solid var(--good);
-  border-radius: 50%;
-  background: var(--panel);
-}
-.studio .commits li.bad .commit-node {
-  border-color: var(--bad);
-}
-.studio .commit-main {
-  display: flex;
-  flex: 1;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-.studio .commit-main strong {
-  font-weight: 500;
-}
 
 @media (max-width: 1180px) {
   .studio {
@@ -2933,8 +2865,7 @@
   .studio .runtime-status { justify-content: center; padding-inline: 0; }
   .studio .insight-grid,
   .studio .overview,
-  .studio .split,
-  .studio .entire-split {
+  .studio .split {
     grid-template-columns: 1fr;
   }
   .studio .mods {
@@ -2986,7 +2917,7 @@
   .studio .side-foot { display: none; }
   .studio .nav {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     height: 100%;
   }
   .studio .nav-item {
@@ -3397,7 +3328,9 @@
 .studio .split-gutter:active::after { opacity: 0.7; }
 
 /* Sidebar width handle */
-.studio .side { position: relative; }
+@media (min-width: 621px) {
+  .studio .side { position: relative; }
+}
 .studio .side-resizer {
   position: absolute;
   top: 0;

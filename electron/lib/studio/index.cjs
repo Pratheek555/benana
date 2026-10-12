@@ -617,6 +617,8 @@ function handlers(deps) {
       const mod = mods.get(id);
       return mod?.repoDir ? repo.checkpoints(mod.repoDir) : { ok: false, items: [], error: 'No repository yet.' };
     },
+    'studio:checkpoint': ({ id, checkpoint }) => repo.checkpoint(repoOf(id), checkpoint),
+    'studio:commits': ({ id }) => repo.commits(repoOf(id)),
     'studio:files': ({ id }) => repo.files(repoOf(id)),
     'studio:file': ({ id, path: rel }) => repo.readFile(repoOf(id), rel),
     'studio:diff': ({ id, sha }) => repo.diff(repoOf(id), sha),
@@ -625,7 +627,10 @@ function handlers(deps) {
     'studio:bench-results': () => bench.results(),
     // Builds the task's request through the normal pipeline, then grades the result with the hidden checks.
     'studio:bench-run': ({ taskId }) => create({ prompt: bench.task(taskId).prompt, bench: { taskId, lessonsBefore: lessons().length } }),
-    'studio:partners': async () => ({ neatlogs: await neatlogs.status() }),
+    'studio:partners': async () => {
+      const [nl, entire] = await Promise.all([neatlogs.status(), repo.entireStatus()]);
+      return { neatlogs: nl, entire };
+    },
   };
 }
 
