@@ -1,9 +1,11 @@
 import React from "react";
+import benanaMark from "../../../assets/benana-mark.svg";
 import { beginDrag } from "./Split.jsx";
 import { call, on, ago, isDemo } from "../../api.js";
 import BuildPage from "./BuildPage.jsx";
 import ModsPage from "./ModsPage.jsx";
 import MarketplacePage from "./MarketplacePage.jsx";
+import CfoPage from "./CfoPage.jsx";
 import InsightsPage from "./InsightsPage.jsx";
 import NeatlogsPage from "./NeatlogsPage.jsx";
 import EntirePage from "./EntirePage.jsx";
@@ -17,6 +19,7 @@ const PAGES = [
   { id: "build", label: "Build" },
   { id: "mods", label: "Mods" },
   { id: "marketplace", label: "Marketplace" },
+  { id: "cfo", label: "CFO" },
   { id: "bench", label: "Bench" },
   { id: "insights", label: "Insights" },
   { id: "neatlogs", label: "Neatlogs" },
@@ -31,6 +34,13 @@ const ICONS = {
       <rect x="11.5" y="3" width="5.5" height="5.5" rx="1.2" />
       <rect x="3" y="11.5" width="5.5" height="5.5" rx="1.2" />
       <rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1.2" />
+    </>
+  ),
+  marketplace: <path d="M3.5 7.5 4.7 3.5h10.6l1.2 4M3.5 7.5v9h13v-9M3.5 7.5h13M8 16.5v-4h4v4" />,
+  cfo: (
+    <>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M12.4 7.7c-.4-.8-1.3-1.2-2.4-1.2-1.3 0-2.3.7-2.3 1.7 0 2.4 4.7 1.2 4.7 3.6 0 1-1 1.8-2.4 1.8-1.2 0-2.2-.5-2.6-1.4M10 5v1.5M10 13.6V15" />
     </>
   ),
   insights: <path d="M3 16.5h14M6 13V9.5M10 13V5M14 13V8" />,
@@ -198,9 +208,9 @@ export default function ModStudio({ onOpenWorkspace }) {
           onDoubleClick={() => setSide(SIDE_DEFAULT)}
         />
         <div className="logo">
-          <span className="brand-mark">B</span>
+          <img className="brand-mark" src={benanaMark} alt="" />
           <span className="logo-text">
-            <strong>Benana</strong>
+            <strong>benana</strong>
             <small>Mod Studio</small>
           </span>
           <button
@@ -305,6 +315,7 @@ export default function ModStudio({ onOpenWorkspace }) {
           />
         )}
         {page === "marketplace" && <MarketplacePage mods={mods} onOpenMod={watchMod} />}
+        {page === "cfo" && <CfoPage mods={mods} />}
         {page === "mods" && <ModsPage mods={mods} mod={mod} setSelectedId={setSelectedId} onBuild={newMod} onWatch={watchMod} />}
         {page === "bench" && <BenchPage mods={mods} lessons={lessons} running={running} onWatch={watchMod} onOpenMod={openMod} />}
         {page === "insights" && <InsightsPage mods={mods} lessons={lessons} />}

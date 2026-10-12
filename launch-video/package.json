@@ -1,0 +1,22 @@
+{
+  "name": "benana-launch-video",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render src/index.js Launch out/benana-launch-raw.mp4 --codec=h264 --crf=18 --concurrency=4 && ffmpeg -v error -y -i out/benana-launch-raw.mp4 -t 70 -c:v copy -af afade=t=out:st=68.5:d=1.5 -c:a aac -b:a 192k -movflags +faststart out/benana-launch.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.535",
+    "@remotion/google-fonts": "^4.0.535",
+    "@remotion/media-utils": "^4.0.535",
+    "@remotion/noise": "^4.0.535",
+    "@remotion/transitions": "^4.0.535",
+    "obs-websocket-js": "^5.0.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.535"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}

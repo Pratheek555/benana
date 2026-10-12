@@ -665,7 +665,46 @@ const BENCH_RESULTS = [
   benchRun(2, {}, 6, 20),
 ];
 
+const CFO_BOOKS = {
+  at: NOW,
+  currency: "USD",
+  source: "Sample data stored in Benana's browser demo. These figures are not your costs or revenue.",
+  totals: {
+    spend: 8.56, mods: 4, passed: 3, failed: 1, costPerVerifiedMod: 2.8533,
+    medianPassedMod: 1.84, rework: 3.21, reworkShare: 0.375, failedSpend: 3.26,
+    firstTryRate: 0.5, remixes: 0, remixMedianCost: null, scratchMedianCost: 1.84,
+    costedSessions: 14, uncostedSessions: 0,
+    byRole: { spec: 1.55, builder: 3.47, playtester: 2.08, fixer: 1.46 },
+    byModel: { opus: 6.48, sonnet: 2.08 },
+  },
+  mods: [
+    { id: "sample-cfo-1", name: "LaunchSword", status: "passed", remix: false, turns: 1, attempts: 2, sessions: 5, cost: 2.41, costComplete: true, rework: 0.86, breakEven: [{ price: 0.99, sales: 3 }, { price: 1.99, sales: 2 }, { price: 4.99, sales: 1 }] },
+    { id: "sample-cfo-2", name: "StormGolem", status: "passed", remix: false, turns: 1, attempts: 1, sessions: 3, cost: 1.84, costComplete: true, rework: 0, breakEven: [{ price: 0.99, sales: 2 }, { price: 1.99, sales: 1 }, { price: 4.99, sales: 1 }] },
+    { id: "sample-cfo-3", name: "TrailBlazer", status: "passed", remix: false, turns: 1, attempts: 1, sessions: 3, cost: 1.05, costComplete: true, rework: 0, breakEven: [{ price: 0.99, sales: 2 }, { price: 1.99, sales: 1 }, { price: 4.99, sales: 1 }] },
+    { id: "sample-cfo-4", name: "PhantomArrows", status: "failed", remix: false, turns: 1, attempts: 3, sessions: 3, cost: 3.26, costComplete: true, rework: 2.35, breakEven: [{ price: 0.99, sales: 4 }, { price: 1.99, sales: 2 }, { price: 4.99, sales: 1 }] },
+  ],
+};
+
+function sampleQuote(prompt) {
+  const basis = /sword|weapon|lightning/i.test(prompt) ? CFO_BOOKS.mods.slice(0, 2) : CFO_BOOKS.mods.filter((m) => m.status === "passed");
+  const costs = basis.map((m) => m.cost);
+  return {
+    ok: true, expected: costs.reduce((n, x) => n + x, 0) / costs.length,
+    low: Math.min(...costs), high: Math.max(...costs), fixChance: 0.5, costPerFix: 1.07,
+    matched: basis.length < 3,
+    basis: basis.map((m) => ({ name: m.name, cost: m.cost, attempts: m.attempts, status: m.status, shared: [] })),
+  };
+}
+
 export const studioSample = {
+  "cfo:books": () => CFO_BOOKS,
+  "cfo:quote": ({ prompt }) => sampleQuote(prompt),
+  "cfo:export": () => { throw new Error("CSV export runs in the desktop app. This preview uses local sample finance data only."); },
+  "cfo:status": { added: false, state: "sample", detail: "The browser demo uses labelled local sample data." },
+  "cfo:history": [],
+  "cfo:active": null,
+  "cfo:ask": () => { throw new Error("cfo.ai questions run in the desktop app. This preview uses local sample finance data only."); },
+  "cfo:stop": false,
   "studio:bench-tasks": () => [{ ...stormGolem, gold: undefined, checks: BENCH_CHECKS }],
   "studio:bench-results": () => BENCH_RESULTS,
   "studio:bench-run": () => { throw new Error("Benchmarks run in the desktop app. This preview shows sample runs."); },

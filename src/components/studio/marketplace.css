@@ -1,0 +1,128 @@
+/* Marketplace. Typography and spacing do the work; borders are hairlines; color only where it carries meaning
+   (the one primary action, a passed playtest, and the Entire mark). */
+.studio .view.market-page {
+  --mk-text: #ededea;
+  --mk-text-2: #a1a09a;
+  --mk-text-3: #6f6e69;
+  --mk-hair: rgba(255, 255, 255, 0.08);
+  --mk-hover: rgba(255, 255, 255, 0.03);
+  --mk-entire: #b4a3f0;
+  display: block;
+  padding: 0;
+  overflow-y: auto;
+  color: var(--mk-text);
+  font-size: 14px;
+}
+.studio .market-page *, .studio .market-page *::before, .studio .market-page *::after { box-sizing: border-box; }
+.studio .market-page button, .studio .market-page input, .studio .market-page select { font: inherit; color: inherit; }
+.studio .market-page button { cursor: pointer; }
+.studio .market-page button:disabled { cursor: default; opacity: .5; }
+.studio .market-page :is(button, input, select):focus-visible { outline: 2px solid rgba(255,255,255,.5); outline-offset: 2px; }
+.studio .market-page code { font-family: var(--mono); font-size: 12.5px; }
+.studio .market-page .good { color: var(--good-text); }
+.studio .market-page .mk-dim { color: var(--mk-text-3); }
+
+.studio .market-page .mk-page { max-width: 1120px; margin: 0 auto; padding: 40px 40px 64px; }
+.studio .market-page .mk-mark { flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Header */
+.studio .market-page .mk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; margin-bottom: 28px; }
+.studio .market-page .mk-head h1 { font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
+.studio .market-page .mk-head p { max-width: 640px; margin-top: 8px; color: var(--mk-text-2); font-size: 14px; line-height: 1.55; }
+.studio .market-page .mk-entire-name { display: inline-flex; align-items: center; gap: 4px; color: var(--mk-entire); }
+.studio .market-page .mk-crumb { margin-bottom: 14px; padding: 0; border: 0; background: none; color: var(--mk-text-3); font-size: 13px; }
+.studio .market-page .mk-crumb:hover { color: var(--mk-text); }
+.studio .market-page .mk-crumb::before { content: "← "; }
+.studio .market-page .mk-note { margin: -12px 0 24px; color: var(--mk-text-2); font-size: 13px; }
+.studio .market-page .mk-note.bad { margin: 8px 0 0; color: var(--bad-text); overflow-wrap: anywhere; }
+
+/* Buttons */
+.studio .market-page .mk-btn { flex: none; height: 34px; padding: 0 16px; border: 1px solid var(--mk-hair); border-radius: 6px; background: transparent; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.studio .market-page .mk-btn:hover:not(:disabled) { background: var(--mk-hover); border-color: rgba(255,255,255,.16); }
+.studio .market-page .mk-btn.primary { border-color: transparent; background: var(--mk-text); color: #0b0b0b; }
+.studio .market-page .mk-btn.primary:hover:not(:disabled) { background: #fff; }
+.studio .market-page .mk-btn.small { height: 28px; padding: 0 11px; font-size: 12.5px; }
+.studio .market-page .mk-textbtn { padding: 0; border: 0; background: none; color: var(--mk-text); font-size: 13px; text-decoration: underline; text-decoration-color: rgba(255,255,255,.22); text-underline-offset: 3px; }
+.studio .market-page .mk-textbtn:hover { text-decoration-color: currentColor; }
+
+/* Browse */
+.studio .market-page .mk-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--mk-hair); }
+.studio .market-page .mk-filters { display: flex; gap: 22px; }
+.studio .market-page .mk-filters button { display: inline-flex; gap: 6px; padding: 0 0 12px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--mk-text-3); font-size: 13.5px; }
+.studio .market-page .mk-filters button:hover { color: var(--mk-text); }
+.studio .market-page .mk-filters button.active { border-bottom-color: var(--mk-text); color: var(--mk-text); }
+.studio .market-page .mk-filters span { color: var(--mk-text-3); }
+.studio .market-page .mk-search { width: 220px; height: 32px; margin-bottom: 10px; padding: 0 10px; border: 1px solid var(--mk-hair); border-radius: 6px; background: transparent; font-size: 13px; }
+.studio .market-page .mk-search::placeholder { color: var(--mk-text-3); }
+.studio .market-page .mk-empty { padding: 48px 0; color: var(--mk-text-3); font-size: 13.5px; }
+
+.studio .market-page .mk-list { margin: 0; padding: 0; list-style: none; }
+.studio .market-page .mk-list li { border-bottom: 1px solid var(--mk-hair); }
+.studio .market-page .mk-list-head, .studio .market-page .mk-row { display: grid; grid-template-columns: minmax(0, 1fr) 70px 90px 70px 70px 72px; }
+.studio .market-page .mk-list-head { gap: 24px; padding: 10px 4px; color: var(--mk-text-3); font-size: 12px; }
+.studio .market-page .mk-list-head span:last-child, .studio .market-page .mk-row-host { text-align: right; }
+.studio .market-page .mk-num { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.studio .market-page .mk-row > span { font-size: 13.5px; }
+.studio .market-page .mk-row { align-items: center; gap: 24px; width: 100%; padding: 18px 4px; border: 0; background: none; text-align: left; }
+.studio .market-page .mk-row:hover { background: var(--mk-hover); }
+.studio .market-page .mk-row-main h3 { display: flex; align-items: baseline; gap: 10px; font-size: 15px; font-weight: 600; letter-spacing: -.005em; }
+.studio .market-page .mk-row-from { color: var(--mk-text-3); font-size: 12.5px; font-weight: 400; }
+.studio .market-page .mk-row-main p { max-width: 620px; margin-top: 5px; overflow: hidden; color: var(--mk-text-2); font-size: 13.5px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.studio .market-page .mk-row-meta { display: flex; gap: 28px; margin: 0; }
+.studio .market-page .mk-row-meta div { min-width: 64px; }
+.studio .market-page .mk-row-meta dt { color: var(--mk-text-3); font-size: 11.5px; }
+.studio .market-page .mk-row-meta dd { margin: 3px 0 0; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.studio .market-page .mk-row-host { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; color: var(--mk-text-3); font-size: 12.5px; }
+.studio .market-page .mk-row-host.on { color: var(--mk-entire); }
+
+/* Listing */
+.studio .market-page .mk-columns { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 56px; padding-top: 8px; border-top: 1px solid var(--mk-hair); }
+.studio .market-page .mk-section-head { display: flex; align-items: baseline; gap: 12px; padding: 22px 0 12px; }
+.studio .market-page .mk-section-head h2 { font-size: 15px; font-weight: 600; }
+.studio .market-page .mk-section-head span { color: var(--mk-text-3); font-size: 13px; }
+
+.studio .market-page .mk-history { margin: 0; padding: 0; border: 1px solid var(--mk-hair); border-radius: 8px; list-style: none; }
+.studio .market-page .mk-history > li + li { border-top: 1px solid var(--mk-hair); }
+.studio .market-page .mk-commit { display: flex; align-items: center; gap: 16px; padding: 0 14px 0 0; }
+.studio .market-page .mk-commit:hover { background: var(--mk-hover); }
+.studio .market-page .mk-commit-main { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; padding: 13px 0 13px 16px; border: 0; background: none; text-align: left; }
+.studio .market-page .mk-commit-title { overflow: hidden; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.studio .market-page .mk-commit-sub { color: var(--mk-text-3); font-size: 12.5px; }
+.studio .market-page .mk-sha { color: var(--mk-text-3); }
+.studio .market-page .mk-commit .mk-btn { opacity: 0; transition: opacity .1s; }
+.studio .market-page .mk-commit:hover .mk-btn, .studio .market-page .mk-commit .mk-btn:focus-visible, .studio .market-page li.open .mk-commit .mk-btn { opacity: 1; }
+.studio .market-page .mk-commit-body { padding: 2px 16px 16px; color: var(--mk-text-2); font-size: 13.5px; line-height: 1.6; }
+.studio .market-page .mk-commit-body > * + * { margin-top: 10px; }
+.studio .market-page .mk-commit-body .mk-dim { font-size: 12.5px; }
+.studio .market-page .mk-paths { margin: 0; padding: 0; list-style: none; font: 12.5px/1.8 var(--mono); }
+
+.studio .market-page .mk-side section { padding: 22px 0 0; }
+.studio .market-page .mk-side h4 { margin-bottom: 6px; color: var(--mk-text-3); font-size: 12px; font-weight: 500; }
+.studio .market-page .mk-side p { font-size: 13.5px; line-height: 1.5; }
+.studio .market-page .mk-host { display: flex; align-items: center; gap: 6px; color: var(--mk-entire); }
+.studio .market-page .mk-repo { display: block; margin: 6px 0 8px; color: var(--mk-text); overflow-wrap: anywhere; }
+.studio .market-page .mk-links { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.studio .market-page .mk-select { height: 30px; padding: 0 8px; border: 1px solid var(--mk-hair); border-radius: 6px; background: #0b0b0b; font-size: 13px; }
+
+/* Publish sheet */
+.studio .market-page .mk-sheet-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: flex-end; background: rgba(0,0,0,.55); }
+.studio .market-page .mk-sheet { display: flex; flex-direction: column; width: min(420px, 100%); height: 100%; padding: 28px 28px 0; border-left: 1px solid var(--mk-hair); background: #0c0c0c; }
+.studio .market-page .mk-sheet > header { display: flex; align-items: baseline; justify-content: space-between; }
+.studio .market-page .mk-sheet h2 { font-size: 18px; font-weight: 600; }
+.studio .market-page .mk-sheet-intro { margin: 8px 0 20px; color: var(--mk-text-2); font-size: 13.5px; line-height: 1.55; }
+.studio .market-page .mk-sheet .mk-note { margin: 0 0 16px; }
+.studio .market-page .mk-check { display: flex; align-items: center; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--mk-hair); color: var(--mk-text-2); font-size: 13px; }
+.studio .market-page .mk-publist { flex: 1; min-height: 0; margin: 0 -28px; padding: 0 28px 28px; overflow-y: auto; list-style: none; }
+.studio .market-page .mk-publist > li { padding: 12px 0; border-bottom: 1px solid var(--mk-hair); }
+.studio .market-page .mk-pubrow { display: flex; align-items: center; gap: 12px; }
+.studio .market-page .mk-pubrow > div { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.studio .market-page .mk-pubrow strong { font-size: 14px; font-weight: 500; }
+.studio .market-page .mk-pubrow span { color: var(--mk-text-3); font-size: 12.5px; }
+
+@media (max-width: 1000px) {
+  .studio .market-page .mk-row, .studio .market-page .mk-list-head { grid-template-columns: minmax(0,1fr) 72px; }
+  .studio .market-page :is(.mk-row, .mk-list-head) > :not(:first-child):not(:last-child) { display: none; }
+  .studio .market-page .mk-columns { grid-template-columns: 1fr; gap: 0; }
+}
+
+.studio .market-page .mk-repo-links { display: flex; flex-wrap: wrap; gap: 14px; }

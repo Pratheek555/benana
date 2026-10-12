@@ -1,4 +1,5 @@
 import React from "react";
+import benanaMark from "../../../assets/benana-mark.svg";
 import Split from "./Split.jsx";
 import { call, on } from "../../api.js";
 import TestPanel, { useNow, useStickyScroll } from "./TestPanel.jsx";
@@ -110,7 +111,7 @@ function Welcome({ lessons, onPick }) {
   return (
     <div className="thread welcome-wrap">
       <div className="intro">
-        <span className="welcome-mark">B</span>
+        <img className="welcome-mark" src={benanaMark} alt="" />
         <h1>What should your mod do?</h1>
         <p>Describe a gameplay idea. Benana writes the Paper plugin, an AI player tests it on a live server, and a fixer patches anything that breaks.</p>
         <div className="ideas">
@@ -470,7 +471,7 @@ function Turn({ role, title, meta, aside, children }) {
   return (
     <div className="turn">
       <div className="turn-head">
-        <span className={`role-avatar ${role}`}>{AVATAR[role] || role[0]?.toUpperCase()}</span>
+        {role === "benana" ? <img className="role-avatar benana" src={benanaMark} alt="" /> : <span className={`role-avatar ${role}`}>{AVATAR[role] || role[0]?.toUpperCase()}</span>}
         <strong>{title}</strong>
         {meta && <span className="meta">{meta}</span>}
         {aside}
@@ -768,13 +769,21 @@ function ResultCard({ mod, onOpenCode }) {
   const attempts = turnAttempts(mod);
   const lessons = attempts.filter((a) => a.lesson);
   const n = attempts.length;
+  // A fresh remix has no attempts of its own yet: say where it came from instead of a build result.
+  const remixed = mod.origin && !mod.attempts?.length;
+  const o = mod.origin || {};
   return (
-    <div className={`result-card ${mod.status}`}>
+    <div className={`result-card ${remixed ? "remix" : mod.status}`}>
       <div className="result-top">
         <span className="result-icon">
-          <Icon name={passed ? "check" : "x"} size={18} />
+          <Icon name={remixed ? "spark" : passed ? "check" : "x"} size={18} />
         </span>
-        <div>
+        {remixed ? (
+          <div>
+            <strong>Remix of {o.name || o.marketplace} v{o.version}{o.checkpoint ? ` at checkpoint ${o.checkpoint.slice(0, 10)}` : ""}</strong>
+            <p>{mod.testPlan?.checks?.length || 0} inherited checks · {o.repo ? `cloned from Entire ${o.repo}` : "cloned from this machine"} · ask for a change to build on it</p>
+          </div>
+        ) : <div>
           <strong>
             {passed
               ? `${mod.name} passed every check${n === 1 ? " on the first attempt" : ` after ${n} attempts`}`
@@ -786,7 +795,7 @@ function ResultCard({ mod, onOpenCode }) {
             {checks.filter((c) => c.status === "pass").length}/{mod.testPlan?.checks.length || checks.length} checks passing · {n} attempt
             {n === 1 ? "" : "s"} · {fmtMoney(modSpend(mod))}
           </p>
-        </div>
+        </div>}
       </div>
       {lessons.map((a) => (
         <div key={a.n} className="lesson">

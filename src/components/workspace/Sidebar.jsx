@@ -1,4 +1,5 @@
 import React from "react";
+import benanaMark from "../../../assets/benana-mark.svg";
 import { isDemo } from "../../api.js";
 import Icon from "../Icon.jsx";
 
@@ -44,7 +45,7 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <button className="repo" onClick={() => setRoute("settings")}>
-        <span className="repo-mark">B</span>
+        <img className="repo-mark" src={benanaMark} alt="" />
         <span>
           <strong>{project.name || project.repo?.split("/").at(-1)}</strong>
           <small>{project.repo}</small>

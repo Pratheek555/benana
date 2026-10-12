@@ -1316,6 +1316,13 @@ select:focus-visible {
   background: #e8c45a;
   color: #191608;
 }
+img.repo-mark,
+img.brand {
+  display: block;
+  flex-shrink: 0;
+  background: transparent;
+  object-fit: contain;
+}
 .sidebar nav button,
 .recent button,
 .repo,

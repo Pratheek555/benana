@@ -176,3 +176,16 @@ If steps 4–8 fail, the version row is not created or is deleted, and uploaded 
 ## 14. Not in launch
 
 Payments, verification sandbox, paid listings, team organizations, and mobile.
+
+## 15. Storage on Entire (decided and tested 2026-10-12)
+
+Published mods live on Entire, not Supabase Storage. Supabase keeps only the rows; `versions.entire` (jsonb) carries `remote` (repo, tag, meta commit, pushed checkpoints) and `origin` (the listing, version and checkpoint a remix came from).
+
+- **One public Entire repo per listing:** `/et/<BENANA_ENTIRE_PROJECT, default benana-market>/<slug>`. Public means any signed-in Entire user can pull; only the owner can push.
+  - `main` and tag `marketplace/v<n>`: the source at each version.
+  - `refs/entire/checkpoints/<shard>/<id>`: the version's checkpoints, **rebuilt from the sanitized bundle** (`checkpoints/<id>/ref/`), never the raw local refs. Without transcripts only `metadata.json` files are kept. `entire checkpoint explain` works on them in a clone, and `--transcript` when transcripts were published.
+  - `benana/meta`: `v<n>/context.json` (spec, behavior, test plan, build requests, attempts and lessons, checkpoint list, lineage), `v<n>/bundle/` (evidence) and the jar; `listing.json` at the root.
+- **Publish:** gate (sanitize, gitleaks, entropy) over the bundle, the native refs and `context.json` → `entire repo create` + `repo edit --visibility public` (retried; a new repo takes a few seconds) → `git push --no-verify` with explicit refspecs → version row.
+- **Remix:** `entire repo clone`, fetch checkpoint refs, meta branch and tags, check out the version or checkpoint commit on `remix/<slug>-v<n>[-<id>]`, write `REMIX.md` (git-excluded) from `context.json`, and seed the mod's spec and test plan from it. A remix publishes as its own listing (`<slug>-remix-<id>`), never as a version of its parent.
+- **Tested:** custom refs push and clone; pushing sends only the named refs (no session upload); sanitized `full.jsonl` still serves `--transcript`; a published checkpoint had 0 occurrences of the creator's username vs 127 in the raw ref.
+- **Not yet tested:** a second Entire account reading a public repo (only one account available). `entire checkpoint list` on the remix branch shows nothing (it lists the current branch), so REMIX.md lists the parent's checkpoint IDs for `explain`.

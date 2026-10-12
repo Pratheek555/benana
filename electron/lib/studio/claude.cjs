@@ -19,8 +19,8 @@ function resultText(content) {
 /**
  * @returns {{ done: Promise<{ok, sessionId, final, usage, error}>, stop: () => void }}
  */
-function runClaude({ cwd, prompt, model, tools, allowedTools = [], mcpConfigFile, appendSystemPrompt, timeoutMs = 20 * 60 * 1000, onEvent = () => {} }) {
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--permission-mode', 'acceptEdits', '--setting-sources', 'project,local'];
+function runClaude({ cwd, prompt, model, tools, allowedTools = [], mcpConfigFile, appendSystemPrompt, settingSources = 'project,local', timeoutMs = 20 * 60 * 1000, onEvent = () => {} }) {
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--model', model, '--permission-mode', 'acceptEdits', '--setting-sources', settingSources];
   if (tools) args.push('--tools', tools.join(','));
   if (allowedTools.length) args.push('--allowedTools', allowedTools.join(','));
   if (mcpConfigFile) args.push('--mcp-config', mcpConfigFile, '--strict-mcp-config');
@@ -50,14 +50,14 @@ function runClaude({ cwd, prompt, model, tools, allowedTools = [], mcpConfigFile
           if (item.type === 'text' && item.text.trim()) onEvent({ kind: 'text', text: item.text.trim() });
           if (item.type === 'tool_use') {
             names.set(item.id, item.name);
-            onEvent({ kind: 'tool', name: item.name.replace(/^mcp__\w+?__/, ''), input: item.input, summary: summarize(item.input) });
+            onEvent({ kind: 'tool', name: item.name.replace(/^mcp__\w+?__/, ''), rawName: item.name, input: item.input, summary: summarize(item.input) });
           }
         }
       } else if (ev.type === 'user') {
         for (const item of ev.message?.content || []) {
           if (item.type !== 'tool_result') continue;
           const name = (names.get(item.tool_use_id) || 'tool').replace(/^mcp__\w+?__/, '');
-          onEvent({ kind: 'result', name, isError: Boolean(item.is_error), text: resultText(item.content).slice(0, 1500) });
+          onEvent({ kind: 'result', name, rawName: names.get(item.tool_use_id) || 'tool', isError: Boolean(item.is_error), text: resultText(item.content).slice(0, 1500) });
         }
       } else if (ev.type === 'result') {
         run.final = ev.result || '';

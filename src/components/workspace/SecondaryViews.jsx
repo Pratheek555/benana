@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import benanaMark from "../../../assets/benana-mark.svg";
 import { call } from "../../api.js";
 import { Badge } from "./ui.jsx";
 
@@ -181,7 +182,7 @@ export function RuntimeSetup() {
   return (
     <div className="runtime">
       <div className="runtime-card">
-        <span className="brand">B</span>
+        <img className="brand" src={benanaMark} alt="" />
         <h1>Open Benana in the desktop app</h1>
         <p>
           The renderer cannot reach repositories or local agents without the
@@ -206,7 +207,7 @@ export function ProjectSetup({ onOpen }) {
   return (
     <div className="runtime">
       <div className="runtime-card project-setup">
-        <span className="brand">B</span>
+        <img className="brand" src={benanaMark} alt="" />
         <h1>Open a repository</h1>
         <p>
           Connect a GitHub repository and its local checkout. Intent ingestion

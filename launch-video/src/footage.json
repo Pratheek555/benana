@@ -1,0 +1,10 @@
+{
+  "buildApp": { "src": "footage/build-app.mp4", "cropTop": 24 },
+  "game": { "src": "footage/game.mp4", "startFrom": 4, "cropTop": 0 },
+  "stuckFail": { "src": "footage/stuck-fail.mp4", "cropTop": 24 },
+  "stuckPass": { "src": "footage/stuck-pass.mp4", "cropTop": 24 },
+  "market": { "src": "footage/market.mp4", "cropTop": 24 },
+  "cfo": { "src": "footage/cfo-final.mp4" },
+  "cfoStats": { "buildCost": 2.10, "quote": 2.29, "breakEven": 2 },
+  "tiles": ["tiles/build.png", "tiles/game.png", "tiles/market.png", "tiles/cfo.png", "tiles/pass.png"]
+}

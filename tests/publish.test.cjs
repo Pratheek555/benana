@@ -80,6 +80,19 @@ test("a transcript with a real-format secret blocks the bundle", async () => {
   assert.equal(r.manifest.gate.findings[0].rule, "aws-access-token");
 });
 
+test("a secret removed from the source tree still blocks publishing its history", async () => {
+  const { dir } = repoWithCheckpoints();
+  fs.writeFileSync(path.join(dir, 'credentials.txt'), 'aws_access_key_id = AKIAQWERTYUIOPASDFGH\n');
+  git(dir, 'add', 'credentials.txt');
+  git(dir, 'commit', '-qm', 'Add credentials');
+  git(dir, 'rm', '-q', 'credentials.txt');
+  git(dir, 'commit', '-qm', 'Remove credentials');
+  const out = path.join(tmp('pub-out-'), 'bundle');
+  const result = await bundle.build({ repoDir: dir, version: 'HEAD', sessions: [], outDir: out, identity, execute: fakeEntire('hello') });
+  assert.equal(result.ok, false);
+  assert.equal(result.manifest.gate.findings.some(f => f.rule === 'aws-access-token'), true);
+});
+
 test("sessions not chosen ship metadata only", async () => {
   const { dir, base } = repoWithCheckpoints();
   const out = path.join(tmp("pub-out-"), "bundle");
@@ -101,4 +114,49 @@ test("transcripts lose signatures and embedded system prompts, and keep the conv
 test("uppercase UUIDs are identifiers, not secrets; mixed random tokens are still flagged", () => {
   assert.equal(sanitize('{"id":"579D0815-9364-4C06-9161-9A4B14862FBA"}').suspicious.length, 0);
   assert.equal(sanitize("x=sparkprofile1234567890AbCdEfG").suspicious.length, 1);
+});
+
+// A checkpoint ref laid out the way Entire stores it, with identity details in the raw transcript.
+function repoWithNativeCheckpoint() {
+  const { dir, base } = repoWithCheckpoints();
+  const files = {
+    "metadata.json": '{"checkpoint_id":"CK1","cwd":"/Users/alice/mods"}',
+    "0/metadata.json": '{"session_id":"s1"}',
+    "0/full.jsonl": '{"type":"user","message":"open /Users/alice/mods/a.txt","signature":"EqXyZ123"}\n',
+    "0/prompt.txt": "mail alice@corp.example",
+  };
+  const index = path.join(tmp("pub-index-"), "index");
+  const env = { ...process.env, GIT_INDEX_FILE: index };
+  for (const [rel, text] of Object.entries(files)) {
+    const f = path.join(tmp("pub-blob-"), "f");
+    fs.writeFileSync(f, text);
+    const blob = git(dir, "hash-object", "-w", f).trim();
+    execFileSync("git", ["update-index", "--add", "--cacheinfo", `100644,${blob},${rel}`], { cwd: dir, env });
+  }
+  const tree = execFileSync("git", ["write-tree"], { cwd: dir, env, encoding: "utf8" }).trim();
+  git(dir, "update-ref", "refs/entire/checkpoints/K1/CK1", git(dir, "commit-tree", tree, "-m", "Checkpoint: CK1").trim());
+  return { dir, base };
+}
+
+test("the published checkpoint ref is the native tree, sanitized", async () => {
+  const { dir, base } = repoWithNativeCheckpoint();
+  const out = path.join(tmp("pub-out-"), "bundle");
+  const r = await bundle.build({ repoDir: dir, version: "HEAD", previous: base, sessions: "*", outDir: out, identity, execute: fakeEntire("hello") });
+  assert.equal(r.ok, true);
+  const ref = path.join(out, "checkpoints/CK1/ref");
+  const full = fs.readFileSync(path.join(ref, "0/full.jsonl"), "utf8");
+  assert.doesNotMatch(full, /alice/);
+  assert.doesNotMatch(full, /signature/);
+  assert.doesNotMatch(fs.readFileSync(path.join(ref, "0/prompt.txt"), "utf8"), /alice@corp/);
+  assert.equal(r.manifest.checkpoints[0].ref, "refs/entire/checkpoints/K1/CK1");
+});
+
+test("without transcripts the published checkpoint ref keeps only metadata", async () => {
+  const { dir, base } = repoWithNativeCheckpoint();
+  const out = path.join(tmp("pub-out-"), "bundle");
+  await bundle.build({ repoDir: dir, version: "HEAD", previous: base, sessions: [], outDir: out, identity, execute: fakeEntire("should not be read") });
+  const ref = path.join(out, "checkpoints/CK1/ref");
+  assert.deepEqual(fs.readdirSync(path.join(ref, "0")), ["metadata.json"]);
+  assert.ok(fs.existsSync(path.join(ref, "metadata.json")));
+  assert.doesNotMatch(fs.readFileSync(path.join(ref, "metadata.json"), "utf8"), /alice/);
 });

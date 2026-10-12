@@ -6,13 +6,24 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 
-const BIN = () => process.env.BENANA_GITLEAKS || 'gitleaks';
+// On Windows, winget installs gitleaks under its package folder without always adding it to PATH.
+function wingetGitleaks() {
+  const base = process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet');
+  if (!base) return null;
+  const link = path.join(base, 'Links', 'gitleaks.exe');
+  if (fs.existsSync(link)) return link;
+  const pkgs = path.join(base, 'Packages');
+  const dir = fs.existsSync(pkgs) && fs.readdirSync(pkgs).find((d) => d.startsWith('Gitleaks.Gitleaks'));
+  const exe = dir && path.join(pkgs, dir, 'gitleaks.exe');
+  return exe && fs.existsSync(exe) ? exe : null;
+}
+const BIN = () => process.env.BENANA_GITLEAKS || (process.platform === 'win32' && wingetGitleaks()) || 'gitleaks';
 
 // gitleaks exit codes: 0 = no leaks, 1 = leaks found, anything else = the scan itself failed.
 function run(args, { bin = BIN(), timeoutMs = 120000 } = {}) {
   return new Promise((resolve) => {
     execFile(bin, args, { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error && error.code === 'ENOENT') return resolve({ code: -1, error: 'gitleaks is not installed (brew install gitleaks).' });
+      if (error && error.code === 'ENOENT') return resolve({ code: -1, error: 'The secret scanner (gitleaks) is not installed. Install it (winget install Gitleaks.Gitleaks, or brew install gitleaks) and try again.' });
       if (error && typeof error.code !== 'number') return resolve({ code: -1, error: `gitleaks failed to run: ${String(error.message).slice(0, 200)}` });
       resolve({ code: error ? error.code : 0, stderr: String(stderr || '') });
     });
@@ -20,10 +31,10 @@ function run(args, { bin = BIN(), timeoutMs = 120000 } = {}) {
 }
 
 // Scan a directory. Returns { clean, findings, error }.
-async function scanDir(dir, opts = {}) {
+async function scan(dir, args, opts = {}) {
   const report = path.join(os.tmpdir(), `benana-gitleaks-${process.pid}-${Date.now()}.json`);
   try {
-    const res = await run(['dir', dir, '--report-format', 'json', '--report-path', report, '--redact', '--no-banner'], opts);
+    const res = await run([...args, '--report-format', 'json', '--report-path', report, '--redact', '--no-banner', '--max-archive-depth', '2'], opts);
     if (res.code === -1) return { clean: false, findings: [], error: res.error };
     if (res.code !== 0 && res.code !== 1) return { clean: false, findings: [], error: `gitleaks exited with ${res.code}: ${res.stderr.slice(0, 200)}` };
     const raw = res.code === 1 && fs.existsSync(report) ? JSON.parse(fs.readFileSync(report, 'utf8')) : [];
@@ -39,6 +50,9 @@ async function scanDir(dir, opts = {}) {
     fs.rmSync(report, { force: true });
   }
 }
+
+const scanDir = (dir, opts = {}) => scan(dir, ['dir', dir], opts);
+const scanGit = (dir, revision, opts = {}) => scan(dir, ['git', dir, '--log-opts', revision], opts);
 
 // Scan one piece of text (for example, a checkpoint transcript) under a given file name.
 async function scanText(name, text, opts = {}) {
@@ -89,4 +103,4 @@ function defaultExecute(args, cwd) {
   });
 }
 
-module.exports = { scanDir, scanText, scanCheckpoint, publishGate };
+module.exports = { scanDir, scanGit, scanText, scanCheckpoint, publishGate };

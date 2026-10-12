@@ -255,6 +255,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1480, height: 920, minWidth: 1100, minHeight: 680, backgroundColor: '#101214',
     title: 'benana', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 },
+    icon: path.join(appRoot, 'assets', process.platform === 'win32' ? 'benana-icon.ico' : 'benana-icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   // Dev aid: BENANA_SCREENSHOT=/path.png captures the window after BENANA_SCREENSHOT_DELAY ms.

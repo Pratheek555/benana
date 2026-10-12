@@ -1,241 +1,309 @@
 import React from "react";
 import { call, ago } from "../../api.js";
-import { Empty, Icon, PageHead, Status } from "./shared.jsx";
+import { fmtDuration } from "./shared.jsx";
+import "./marketplace.css";
 
-// Marketplace: listings published from the Studio. Rows live in Supabase; the files live on this
-// machine. Publishing runs the gate (sanitize, secret scan) and writes the evidence bundle.
+// Marketplace: mods published from the Studio. Each listing is a public Entire repo (source, sanitized checkpoints, and a
+// meta branch with the spec, test plan and evidence); Supabase holds the rows (listings, versions, votes). Remixing clones a
+// version or checkpoint from Entire with that context, so the remixer's agents can build on top of it.
+
+const since = (date) => (date ? `${ago(new Date(date).getTime())} ago` : "");
+const short = (s, n = 10) => (s ? s.slice(0, n) : "");
+const latest = (l) => l.versions?.[0] || null;
+const originOf = (l) => l.versions?.find((v) => v.entire?.origin)?.entire?.origin || null;
+const repoOf = (l) => l.versions?.find((v) => v.entire?.remote?.repo)?.entire?.remote?.repo || null;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// Entire's mark, used once per surface to say where a mod lives.
+const EntireMark = () => (
+  <svg className="mk-mark" width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8h4.2M10.8 8H15M8 5.2 10.8 8 8 10.8 5.2 8z" /></svg>
+);
+
+function CopyText({ text, children }) {
+  const [done, setDone] = React.useState(false);
+  return (
+    <button className="mk-textbtn" onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1300); }); }}>
+      {done ? "Copied" : children}
+    </button>
+  );
+}
+
 export default function MarketplacePage({ mods, onOpenMod = () => {} }) {
   const [state, setState] = React.useState(null);
-  const [selected, setSelected] = React.useState(null);
+  const [status, setStatus] = React.useState(null);
   const [error, setError] = React.useState("");
+  const [selected, setSelected] = React.useState(null);
+  const [query, setQuery] = React.useState("");
+  const [filter, setFilter] = React.useState("all");
+  const [publishing, setPublishing] = React.useState(false);
 
   const load = React.useCallback(() => {
+    setError("");
     call("market:list").then(setState).catch((e) => setError(e.message));
+    call("market:status").then(setStatus).catch(() => setStatus({ entire: { loggedIn: false } }));
   }, []);
   React.useEffect(load, [load]);
 
-  const listing = state?.listings?.find((l) => l.id === selected) || state?.listings?.[0] || null;
-  const publishable = mods.filter((m) => m.repoDir && ["passed", "failed"].includes(m.status));
+  const listings = state?.listings || [];
+  const remixesOf = React.useMemo(() => {
+    const map = new Map();
+    for (const l of listings) { const o = originOf(l); if (o?.slug) map.set(o.slug, [...(map.get(o.slug) || []), l]); }
+    return map;
+  }, [listings]);
+  const listing = listings.find((l) => l.id === selected) || null;
+  const filtered = listings.filter((l) => {
+    const kind = filter === "all" || (filter === "remixes" && originOf(l)) || (filter === "tested" && latest(l)?.playtest_status === "passed");
+    return kind && (!query.trim() || `${l.name} ${l.summary || ""}`.toLowerCase().includes(query.trim().toLowerCase()));
+  });
+  const entire = status?.entire;
+  const signedIn = Boolean(entire?.loggedIn);
+
+  React.useEffect(() => {
+    if (!listing) return undefined;
+    const onKey = (e) => { if (e.key === "Escape" && !e.target.closest?.("input, textarea")) setSelected(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [listing]);
 
   return (
-    <div className="view mk-view">
-      <PageHead title="Marketplace" sub="Mods published from this Studio. Files stay on this machine; the listing rows are in Supabase." />
-      {error && <div className="alert">{error}</div>}
-      {state && !state.configured && <div className="alert">The marketplace is not configured. Add the Supabase keys to .env.</div>}
+    <div className="view market-page">
+      {listing ? (
+        <ListingView listing={listing} listings={listings} remixes={remixesOf.get(listing.slug) || []} onSelect={setSelected} onBack={() => setSelected(null)} onOpenMod={onOpenMod} signedIn={signedIn} />
+      ) : (
+        <div className="mk-page">
+          <header className="mk-head">
+            <div>
+              <h1>Marketplace</h1>
+              <p>Mods built in Benana, hosted on <span className="mk-entire-name"><EntireMark />Entire</span> with their full agent history. Remix any of them.</p>
+            </div>
+            <button className="mk-btn primary" onClick={() => setPublishing(true)}>Publish</button>
+          </header>
+          {status && !signedIn && <p className="mk-note">Sign in to Entire (<code>entire login</code>) to publish or remix.</p>}
+          {error && <p className="mk-note bad">{error}</p>}
 
-      <div className="mk-layout">
-        <section className="mk-list" aria-label="Listings">
-          <span className="ent-label">Listings ({state?.listings?.length ?? 0})</span>
-          {!state && <p className="mk-muted">Loading…</p>}
-          {state?.listings?.map((l) => (
-            <button key={l.id} className={`mk-row ${listing?.id === l.id ? "active" : ""}`} onClick={() => setSelected(l.id)}>
-              <strong>{l.name}</strong>
-              <span>
-                v{l.versions?.[0]?.number || 0} · {l.stats?.votes || 0} votes
-                {l.stats?.stars ? ` · ${Number(l.stats.stars).toFixed(1)}★` : ""}
-              </span>
-              <small>{l.versions?.[0]?.playtest_status === "passed" ? "Playtest passed" : l.versions?.[0]?.playtest_status === "failed" ? "Playtest failed" : "Not playtested"}</small>
-            </button>
-          ))}
-          {state?.listings && !state.listings.length && <Empty>Nothing published yet. Publish a mod from the panel on the right.</Empty>}
+          <div className="mk-bar">
+            <nav className="mk-filters" aria-label="Filter">
+              {[["all", "All", listings.length], ["tested", "Tested", null], ["remixes", "Remixes", null]].map(([value, label, n]) => (
+                <button key={value} className={filter === value ? "active" : ""} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}{n != null && <span>{n}</span>}</button>
+              ))}
+            </nav>
+            <input className="mk-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label="Search mods" />
+          </div>
+
+          {!state ? <p className="mk-empty">Loading…</p>
+            : filtered.length ? (
+              <ul className="mk-list">
+                <li className="mk-list-head" aria-hidden="true"><span>Mod</span><span>Version</span><span>Checkpoints</span><span>Remixes</span><span>Playtest</span><span>Hosted</span></li>
+                {filtered.map((l) => <ListingRow key={l.id} listing={l} remixes={(remixesOf.get(l.slug) || []).length} onOpen={() => setSelected(l.id)} />)}
+              </ul>
+            ) : <p className="mk-empty">{listings.length ? "No mods match." : "Nothing published yet."}</p>}
+        </div>
+      )}
+
+      {publishing && <PublishSheet mods={mods} listings={listings} signedIn={signedIn} onClose={() => setPublishing(false)} onPublished={load} />}
+    </div>
+  );
+}
+
+function ListingRow({ listing, remixes, onOpen }) {
+  const v = latest(listing);
+  const origin = originOf(listing);
+  const onEntire = Boolean(repoOf(listing));
+  return (
+    <li>
+      <button className="mk-row" onClick={onOpen}>
+        <div className="mk-row-main">
+          <h3>{listing.name}{origin && <span className="mk-row-from">remix of {origin.name || origin.slug}</span>}</h3>
+          <p>{listing.summary || "No description."}</p>
+        </div>
+        <span className="mk-num">v{v?.number || 0}</span>
+        <span className="mk-num">{v?.checkpoint_count || 0}</span>
+        <span className="mk-num">{remixes}</span>
+        <span className={v?.playtest_status === "passed" ? "good" : "mk-dim"}>{v?.playtest_status === "passed" ? "Passed" : v?.playtest_status === "failed" ? "Failed" : "—"}</span>
+        <span className={`mk-row-host${onEntire ? " on" : ""}`}>{onEntire ? <><EntireMark />Entire</> : "Local"}</span>
+      </button>
+    </li>
+  );
+}
+
+// One line per checkpoint: what it did. AI summaries start with the agent's own framing ("Continue work on the existing
+// GodMob Paper plugin (…)"), so keep the first clause; without a summary, name the files it touched.
+function cpTitle(c) {
+  const intent = c.summary?.intent?.split(/[(:;.—]/)[0]?.trim();
+  if (intent) return intent;
+  const names = (c.files || []).map((f) => f.split("/").pop());
+  return names.length ? `Changed ${names.slice(0, 2).join(", ")}${names.length > 2 ? ` and ${names.length - 2} more` : ""}` : "Checkpoint";
+}
+
+function ListingView({ listing, listings, remixes, onSelect, onBack, onOpenMod, signedIn }) {
+  const [vn, setVn] = React.useState(latest(listing)?.number);
+  const [open, setOpen] = React.useState(null);
+  const [busy, setBusy] = React.useState(null);
+  const [error, setError] = React.useState("");
+  React.useEffect(() => { setVn(latest(listing)?.number); setError(""); setOpen(null); }, [listing.id]);
+  const version = listing.versions?.find((v) => v.number === vn) || latest(listing);
+  const ent = version?.entire || {};
+  const repo = ent.remote?.repo || null;
+  const origin = originOf(listing);
+  const parent = origin ? listings.find((l) => l.slug === origin.slug) : null;
+  const canRemix = Boolean(repo && signedIn);
+  const cps = [...(ent.checkpoints || [])].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+
+  const remix = (checkpointId = null) => {
+    setBusy(checkpointId || "version");
+    setError("");
+    call("market:open-checkpoint", { slug: listing.slug, number: version.number, checkpointId })
+      .then((mod) => onOpenMod(mod.id))
+      .catch((e) => setError(e.message))
+      .finally(() => setBusy(null));
+  };
+
+  return (
+    <div className="mk-page">
+      <button className="mk-crumb" onClick={onBack}>Marketplace</button>
+      <header className="mk-head">
+        <div>
+          <h1>{listing.name}</h1>
+          <p>{listing.summary}</p>
+        </div>
+        {canRemix && <button className="mk-btn primary" disabled={Boolean(busy)} onClick={() => remix(null)}>{busy === "version" ? "Cloning…" : `Remix v${version?.number}`}</button>}
+      </header>
+      {error && <p className="mk-note bad">{error}</p>}
+
+      <div className="mk-columns">
+        <section className="mk-main">
+          <div className="mk-section-head">
+            <h2>History</h2>
+            <span>{plural(cps.length, "checkpoint")} recorded by Entire</span>
+          </div>
+          {cps.length ? (
+            <ol className="mk-history">
+              {cps.map((c) => (
+                <li key={c.id} className={open === c.id ? "open" : ""}>
+                  <div className="mk-commit">
+                    <button className="mk-commit-main" onClick={() => setOpen(open === c.id ? null : c.id)} aria-expanded={open === c.id}>
+                      <span className="mk-commit-title">{cpTitle(c)}</span>
+                      <span className="mk-commit-sub">{c.agent || "Agent"}{c.model ? ` · ${c.model.replace(/^claude-/, "")}` : ""} · {since(c.createdAt)}</span>
+                    </button>
+                    <code className="mk-sha" title={c.id}>{short(c.id, 8).toLowerCase()}</code>
+                    {canRemix && c.commit && <button className="mk-btn small" disabled={Boolean(busy)} onClick={() => remix(c.id)}>{busy === c.id ? "Cloning…" : "Remix from here"}</button>}
+                  </div>
+                  {open === c.id && (
+                    <div className="mk-commit-body">
+                      {c.summary?.outcome && <p>{c.summary.outcome}</p>}
+                      {c.files?.length > 0 && <ul className="mk-paths">{c.files.map((f) => <li key={f}>{f}</li>)}</ul>}
+                      <p className="mk-dim">Checkpoint <code>{c.id}</code>{c.commit ? <> · commit <code>{short(c.commit, 7)}</code></> : null}{c.hasTranscript ? " · transcript published" : ""}</p>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          ) : <p className="mk-empty">No checkpoints in this version.</p>}
         </section>
 
-        <section className="mk-detail">
-          {listing ? <Listing listing={listing} onChanged={load} onOpenMod={onOpenMod} /> : <Empty>Select a listing.</Empty>}
-        </section>
-
-        <aside className="mk-publish">
-          <span className="ent-label">Publish a mod</span>
-          {!publishable.length && <p className="mk-muted">Finish a mod's build and playtest first. Only passed or failed mods can be published.</p>}
-          {publishable.map((m) => (
-            <PublishCard key={m.id} mod={m} published={state?.listings?.find((l) => l.name === m.name)} onPublished={load} />
-          ))}
+        <aside className="mk-side">
+          <section>
+            <h4>Source</h4>
+            {repo ? <>
+              <p className="mk-host"><EntireMark />Hosted on Entire</p>
+              <code className="mk-repo">{repo}</code>
+              <div className="mk-repo-links">
+                <button className="mk-textbtn" onClick={() => call("open-external", `https://entire.io${repo}`)}>View on Entire</button>
+                <CopyText text={`entire repo clone ${repo}`}>Copy clone command</CopyText>
+              </div>
+            </> : <p className="mk-dim">Not on Entire yet. The creator needs to publish it again before it can be remixed.</p>}
+          </section>
+          <section>
+            <h4>Version</h4>
+            {listing.versions?.length > 1 ? (
+              <select className="mk-select" value={version?.number} onChange={(e) => setVn(Number(e.target.value))}>{listing.versions.map((v) => <option key={v.id} value={v.number}>v{v.number} · {since(v.created_at)}</option>)}</select>
+            ) : <p>v{version?.number} · {since(version?.created_at)}</p>}
+          </section>
+          <section>
+            <h4>Playtest</h4>
+            <p className={version?.playtest_status === "passed" ? "good" : ""}>{version?.playtest_status === "passed" ? "Passed every check" : version?.playtest_status === "failed" ? "Failed" : "Not playtested"}</p>
+          </section>
+          {origin && (
+            <section>
+              <h4>Remixed from</h4>
+              {parent ? <button className="mk-textbtn" onClick={() => onSelect(parent.id)}>{origin.name || origin.slug} v{origin.version}</button> : <p>{origin.name || origin.slug} v{origin.version}</p>}
+            </section>
+          )}
+          <section>
+            <h4>Remixes</h4>
+            {remixes.length ? <ul className="mk-links">{remixes.map((r) => <li key={r.id}><button className="mk-textbtn" onClick={() => onSelect(r.id)}>{r.name}</button></li>)}</ul> : <p className="mk-dim">None yet</p>}
+          </section>
         </aside>
       </div>
     </div>
   );
 }
 
-const clip = (t, n) => (t.length <= n ? t : `${t.slice(0, t.lastIndexOf(' ', n) > 0 ? t.lastIndexOf(' ', n) : n)}…`);
-
-function Listing({ listing, onChanged, onOpenMod }) {
-  const version = listing.versions?.[0];
-  const cps = version?.version_checkpoints || [];
+function PublishSheet({ mods, listings, signedIn, onClose, onPublished }) {
+  const publishable = mods.filter((m) => m.repoDir && ["passed", "failed"].includes(m.status));
+  const [summaries, setSummaries] = React.useState(false);
+  React.useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
-    <>
-      <div className="mk-head">
-        <div>
-          <h2>{listing.name}</h2>
-          <p className="mk-muted">{listing.summary}</p>
-        </div>
-        <Status status={listing.status === "live" ? "passed" : listing.status} />
-      </div>
-
-      <dl className="ent-facts">
-        <dt>Version</dt><dd>v{version?.number} · {ago(new Date(version?.created_at).getTime())} ago</dd>
-        <dt>Commit</dt><dd><code>{version?.commit_sha?.slice(0, 10)}</code></dd>
-        <dt>Playtest</dt><dd>{version?.playtest_status}{version?.playtest_summary ? ` — ${clip(version.playtest_summary, 160)}` : ""}</dd>
-        <dt>Checkpoints</dt><dd>{version?.checkpoint_count} ({version?.transcripts} with transcripts)</dd>
-        <dt>Tokens</dt><dd>{Number(version?.tokens || 0).toLocaleString()}</dd>
-        <dt>Jar SHA-256</dt><dd><code>{version?.jar_sha256?.slice(0, 16)}…</code></dd>
-        <dt>Files</dt><dd><code>{version?.localDir}</code></dd>
-      </dl>
-
-      <div className="ent-actions">
-        <button className="btn" onClick={() => call("open-path", version?.localDir)}><Icon name="folder" size={14} />Open files</button>
-        <button className="btn" onClick={() => call("open-path", `${version?.localDir}/bundle/code-map.md`)}><Icon name="file" size={14} />Code map</button>
-        <button className="btn" onClick={() => call("open-path", `${version?.localDir}/bundle/changelog.json`)}><Icon name="code" size={14} />Changelog</button>
-      </div>
-
-      <span className="ent-label">Versions ({listing.versions?.length || 0})</span>
-      <ul className="mk-versions">
-        {(listing.versions || []).map((v) => (
-          <li key={v.id}><strong>v{v.number}</strong> <code>{v.commit_sha?.slice(0, 7)}</code> <span className="mk-muted">{v.playtest_status} · {v.version_checkpoints?.length || 0} checkpoints</span></li>
-        ))}
-      </ul>
-
-      {version?.entire && <EntireSummary entire={version.entire} number={version.number} slug={listing.slug} onOpenMod={onOpenMod} />}
-
-      <span className="ent-label">Checkpoints in v{version?.number}</span>
-      {cps.length ? (
-        <ul className="mk-cps">{cps.map((c) => <li key={c.checkpoint_id}><code>{c.checkpoint_id}</code>{c.has_transcript ? <span className="ent-chip">transcript</span> : <span className="mk-muted"> metadata only</span>}</li>)}</ul>
-      ) : <p className="mk-muted">No checkpoints.</p>}
-    </>
+    <div className="mk-sheet-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <aside className="mk-sheet" role="dialog" aria-label="Publish">
+        <header>
+          <h2>Publish</h2>
+          <button className="mk-textbtn" onClick={onClose}>Close</button>
+        </header>
+        <p className="mk-sheet-intro">Each mod goes to its own public repo on Entire, with its checkpoints. Paths, names and secrets are removed first.</p>
+        {!signedIn && <p className="mk-note">Run <code>entire login</code> first.</p>}
+        <label className="mk-check"><input type="checkbox" checked={summaries} onChange={(e) => setSummaries(e.target.checked)} />Write AI summaries for checkpoints</label>
+        <ul className="mk-publist">
+          {!publishable.length && <li className="mk-dim">Build and playtest a mod first.</li>}
+          {publishable.map((m) => <PublishRow key={m.id} mod={m} published={listings.find((l) => l.slug === m.marketSlug)} disabled={!signedIn} summaries={summaries} onPublished={onPublished} />)}
+        </ul>
+      </aside>
+    </div>
   );
 }
 
-// Entire, as a checkpoint explorer: every checkpoint of the version, its detail, and "Open in Benana",
-// which makes a working copy at that checkpoint's commit and opens it in the Studio.
-function EntireSummary({ entire, number, slug, onOpenMod }) {
-  const cps = entire.checkpoints || [];
-  const cl = entire.changelog;
-  const cm = entire.codeMap;
-  const [selected, setSelected] = React.useState(cps[0]?.id || null);
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState("");
-  const cp = cps.find((c) => c.id === selected) || cps[0] || null;
-
-  const open = (c) => {
-    setBusy(true);
-    setError("");
-    call("market:open-checkpoint", { slug, number, checkpointId: c.id })
-      .then((mod) => onOpenMod(mod.id))
-      .catch((e) => setError(e.message))
-      .finally(() => setBusy(false));
-  };
-
-  return (
-    <section className="mk-entire">
-      <span className="ent-label">Built with Entire</span>
-      <div className="mk-stats">
-        <span className="ent-stat"><strong>{cps.length}</strong> checkpoints</span>
-        {cl && <span className="ent-stat"><strong>{cl.filesChanged}</strong> files changed</span>}
-        {cm && <span className="ent-stat"><strong>{cm.symbols}</strong> symbols · <strong>{cm.relations}</strong> relations</span>}
-      </div>
-
-      {cps.length > 0 && (
-        <div className="mk-explorer">
-          <ul className="mk-cp-list" role="listbox" aria-label="Checkpoints">
-            {cps.map((c) => (
-              <li key={c.id}>
-                <button role="option" aria-selected={c.id === cp?.id} className={c.id === cp?.id ? "active" : ""} onClick={() => setSelected(c.id)} title={c.summary?.intent ? `${c.summary.intent}\n\n${c.summary.outcome || ""}` : `${c.agent || "agent"}${c.model ? ` · ${c.model}` : ""}`}>
-                  <code>{c.id.slice(0, 12)}…</code>
-                  <span>{c.agent || "agent"}{c.model ? ` · ${c.model}` : ""}</span>
-                  <small>{c.createdAt ? new Date(c.createdAt).toLocaleString() : ""}</small>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {cp && (
-            <div className="mk-cp-detail">
-              {cp.summary && (
-                <div className="mk-summary">
-                  <span className="ent-label">What happened</span>
-                  <p><strong>Intent.</strong> {cp.summary.intent}</p>
-                  <p><strong>Outcome.</strong> {cp.summary.outcome}</p>
-                  {cp.summary.learnings && <p className="mk-muted">{cp.summary.learnings}</p>}
-                </div>
-              )}
-              <dl>
-                <dt>Checkpoint</dt><dd><code>{cp.id}</code></dd>
-                <dt>Commit</dt><dd><code>{cp.commit ? cp.commit.slice(0, 10) : "not linked"}</code></dd>
-                <dt>Agent</dt><dd>{cp.agent || "—"}{cp.model ? ` · ${cp.model}` : ""}</dd>
-                <dt>Sessions</dt><dd>{cp.sessions} · {cp.hasTranscript ? "transcript published" : "metadata only"}</dd>
-                <dt>Tokens</dt><dd>{Number(cp.tokens || 0).toLocaleString()}</dd>
-              </dl>
-              {cp.files?.length > 0 && <div className="mk-files">{cp.files.map((f) => <code key={f}>{f}</code>)}</div>}
-              <button className="btn solid" disabled={busy || !cp.commit} onClick={() => open(cp)}>
-                {busy ? "Opening…" : "Open in Benana"}
-              </button>
-              <p className="mk-muted">Creates a working copy of this mod at this checkpoint's commit, so you can continue from here. Nothing is published.</p>
-              {error && <p className="mk-err">{error}</p>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {cl?.files?.length > 0 && (
-        <>
-          <span className="ent-label">Changelog</span>
-          <ul className="mk-changes">
-            {cl.files.slice(0, 12).map((f) => (
-              <li key={f.path}>
-                <span className={`mk-status ${f.status}`}>{f.status === "A" ? "added" : f.status === "D" ? "deleted" : "changed"}</span>
-                <code>{f.path}</code>
-                {f.signatureChanged > 0 && <span className="mk-muted">{f.signatureChanged} signature change{f.signatureChanged === 1 ? "" : "s"}</span>}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </section>
-  );
-}
-
-function PublishCard({ mod, published, onPublished }) {
+function PublishRow({ mod, published, disabled, summaries, onPublished }) {
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState(null);
-  const [log, setLog] = React.useState([]);
-
-  const [summaries, setSummaries] = React.useState(false);
+  const [started, setStarted] = React.useState(0);
+  const [, tick] = React.useState(0);
+  React.useEffect(() => { if (!busy) return undefined; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [busy]);
   const run = (metadataOnly) => {
     setBusy(true);
+    setStarted(Date.now());
     setResult(null);
     call("market:publish", { id: mod.id, metadataOnly, withSummaries: summaries })
       .then((r) => { setResult(r); onPublished(); })
       .catch((e) => setResult({ ok: false, error: e.message }))
       .finally(() => setBusy(false));
   };
-
   const blocked = result && result.ok === false && result.blocked;
   const findings = blocked ? [...(result.gate?.findings || []), ...(result.gate?.suspicious || [])] : [];
-
+  const last = published?.versions?.[0];
+  const note = busy ? `Publishing… ${fmtDuration(Date.now() - started) || ""}`
+    : result?.ok && !result.skipped ? `Published v${result.version.number}`
+    : result?.ok ? "Already up to date"
+    : last ? `v${last.number}, ${since(last.created_at)}` : mod.origin ? `Remix of ${mod.origin.name || mod.origin.marketplace}` : "Not published";
   return (
-    <div className="mk-card">
-      <div className="mk-card-head">
-        <strong>{mod.name}</strong>
-        <Status status={mod.status} />
+    <li>
+      <div className="mk-pubrow">
+        <div><strong>{mod.name}</strong><span className={result?.ok && !result.skipped ? "good" : ""}>{note}</span></div>
+        <button className="mk-btn small" disabled={busy || disabled} onClick={() => run(false)}>{published ? "Update" : "Publish"}</button>
       </div>
-      <p className="mk-muted">{mod.spec?.summary || mod.prompt}</p>
-      <label className="mk-opt">
-        <input type="checkbox" checked={summaries} onChange={(e) => setSummaries(e.target.checked)} />
-        Write AI summaries for hover text <span className="mk-muted">(uses your summarizer credits)</span>
-      </label>
-      {published && <p className="mk-ok">Published as v{published.versions?.[0]?.number}{published.versions?.[0]?.playtest_status ? ` · playtest ${published.versions[0].playtest_status}` : ""}</p>}
-      <button className="btn solid" disabled={busy} onClick={() => run(false)}>{busy ? "Publishing…" : published ? "Publish update" : "Publish with transcripts"}</button>
-
-      {result?.ok && !result.skipped && <p className="mk-ok">Published v{result.version.number}.</p>}
-      {result?.ok && result.skipped && <p className="mk-muted">{result.skipped}</p>}
-      {result && !result.ok && !blocked && <p className="mk-err">{result.error}</p>}
-      {blocked && (
-        <div className="mk-blocked" role="alert">
-          <p>Blocked by the secret gate: {findings.length} item{findings.length === 1 ? "" : "s"} need review before transcripts can be published.</p>
-          <ul>{findings.slice(0, 6).map((f, i) => <li key={i}>{f.file || "transcript"} line {f.line} — {f.rule || "random-looking token"}</li>)}</ul>
-          {result.metadataOnlyPossible && (
-            <button className="btn" disabled={busy} onClick={() => run(true)}>Publish metadata only</button>
-          )}
+      {result && !result.ok && !blocked && <p className="mk-note bad">{result.error}</p>}
+      {blocked && (findings.length ? (
+        <div className="mk-note bad">
+          Blocked: {plural(findings.length, "possible secret")} in {[...new Set(findings.map((f) => f.file || "transcript"))].slice(0, 3).join(", ")}.
+          {result.metadataOnlyPossible && <> <button className="mk-textbtn" disabled={busy} onClick={() => run(true)}>Publish without transcripts</button></>}
         </div>
-      )}
-    </div>
+      ) : (
+        // No findings means the scan itself could not run; the gate fails closed.
+        <p className="mk-note bad">Couldn't scan for secrets, so nothing was published. {result.gate?.error || "The secret scanner failed."}</p>
+      ))}
+    </li>
   );
 }

@@ -70,6 +70,12 @@ const studio = require("../electron/lib/studio/index.cjs");
 const bench = require("../electron/lib/studio/bench.cjs");
 const rpc = studio.handlers({ emit: () => {}, log: () => {} });
 
+test('studio registers the creator finance handlers', () => {
+  for (const channel of ['cfo:books', 'cfo:quote', 'cfo:export', 'cfo:status', 'cfo:connect', 'cfo:signin', 'cfo:history', 'cfo:active', 'cfo:ask', 'cfo:stop']) {
+    assert.equal(typeof rpc[channel], 'function', channel);
+  }
+});
+
 async function settled(id) {
   for (let i = 0; i < 200; i++) {
     const mod = rpc["studio:get"]({ id });
@@ -89,6 +95,7 @@ test("bench tasks are listed without their hidden expectations", () => {
 
 test("a bench run builds the request, then grades the final build with hidden checks and records a score", async () => {
   const created = rpc["studio:bench-run"]({ taskId: "storm-golem" });
+  assert.equal(rpc['cfo:books']().mods.some((row) => row.id === created.id), false, 'active internal mods are excluded from finance books');
   const mod = await settled(created.id);
   const task = bench.task("storm-golem");
 

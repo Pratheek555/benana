@@ -46,6 +46,13 @@ async function checkpointsIn(repoDir, version, previous) {
   return [...new Set(out.split('\n').map((s) => s.trim()).filter(Boolean))];
 }
 
+async function nativeRef(repoDir, id) {
+  const name = (await git(repoDir, ['for-each-ref', '--format=%(refname)', `refs/entire/checkpoints/*/${id}`])).trim().split('\n')[0];
+  if (!name) return null;
+  const files = (await git(repoDir, ['ls-tree', '-r', '--name-only', name])).split('\n').map((s) => s.trim()).filter(Boolean);
+  return { name, files };
+}
+
 async function build({ repoDir, version, previous = null, jarPath, sessions = [], outDir, identity, execute = entire }) {
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, 'checkpoints'), { recursive: true });
@@ -77,7 +84,20 @@ async function build({ repoDir, version, previous = null, jarPath, sessions = []
       suspicious.push(...clean.suspicious.map((x) => ({ checkpointId: id, file: 'transcript.jsonl', ...x })));
     }
     suspicious.push(...metaClean.suspicious.map((x) => ({ checkpointId: id, file: 'metadata.json', ...x })));
-    checkpoints.push({ id, sessions: sessionIds, transcript: include, files: m.files_touched || [] });
+    // The checkpoint as Entire stores it (refs/entire/checkpoints/<shard>/<id>), sanitized, so a clone can run
+    // `entire checkpoint explain` on it. Without transcripts only the metadata files are kept.
+    const ref = await nativeRef(repoDir, id);
+    if (ref) {
+      for (const file of ref.files) {
+        const base = path.posix.basename(file);
+        if (!include && !['metadata.json', 'content_hash.txt'].includes(base)) continue;
+        const raw = await git(repoDir, ['show', `${ref.name}:${file}`]);
+        const clean = sanitize(base === 'full.jsonl' ? stripTranscript(raw) : raw, identity);
+        write(`checkpoints/${id}/ref/${file}`, clean.text);
+        suspicious.push(...clean.suspicious.map((x) => ({ checkpointId: id, file: `ref/${file}`, transcript: base !== 'metadata.json', ...x })));
+      }
+    }
+    checkpoints.push({ id, sessions: sessionIds, transcript: include, files: m.files_touched || [], ref: ref?.name || null });
   }
 
   // Graph: changelog against the previous version, code map of this version's tree.
@@ -96,9 +116,9 @@ async function build({ repoDir, version, previous = null, jarPath, sessions = []
     fs.rmSync(tree, { recursive: true, force: true });
   }
 
-  // Gate: secret scan over everything that will be published. Any finding blocks.
   const scan = await secrets.scanDir(outDir);
-  const blocked = !scan.clean || suspicious.length > 0;
+  const sourceScan = await secrets.scanGit(repoDir, version);
+  const blocked = !scan.clean || !sourceScan.clean || suspicious.length > 0;
 
   const files = [];
   const walk = (dir) => {
@@ -118,7 +138,7 @@ async function build({ repoDir, version, previous = null, jarPath, sessions = []
     changelog: diff.ok,
     codeMap: files.some((f) => f.path === 'code-map.md'),
     files: files.sort((a, b) => a.path.localeCompare(b.path)),
-    gate: { clean: !blocked, findings: scan.findings, error: scan.error, suspicious },
+    gate: { clean: !blocked, findings: [...scan.findings, ...sourceScan.findings.map(f => ({ ...f, scope: 'source' }))], error: scan.error || sourceScan.error, suspicious },
   };
   write('manifest.json', JSON.stringify(manifest, null, 2));
   return { ok: !blocked, manifest, outDir };
