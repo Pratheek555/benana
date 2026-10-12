@@ -1,0 +1,20 @@
+can i just connect my claude to higgsfield without having a higgsfield subscription and make videos?
+
+---
+
+https://x.com/davidmilr/status/2109357152372465823 how much credits do you want to build this but tuned to benana?
+
+---
+
+i am using the claude connector plus 50 credits would be enough for this? [File: David_Miller_-_Create_a_hit_mashup_with_just_one_prompt._Meet_Melty_MCP_QGRMTs.mp4; ref=file_06b62a13-44ed-47c0-b51c-7ea9351cd40b]
+
+<t3_context version="1">
+<context kind="file" id="file_06b62a13-44ed-47c0-b51c-7ea9351cd40b">
+name: David_Miller_-_Create_a_hit_mashup_with_just_one_prompt._Meet_Melty_MCP_QGRMTs.mp4
+mimeType: video/mp4
+sizeBytes: 18387781
+attachmentId: 7e1aa6bf-4c1c-47f9-9cc8-11a60fe7ebca-7e8cda5e-ba7e-4801-b78e-40fa464dee0b-mp4
+</context>
+</t3_context>
+
+[Attached file "David_Miller_-_Create_a_hit_mashup_with_just_one_prompt._Meet_Melty_MCP_QGRMTs.mp4" is saved at: C:\Users\prath\.t3\userdata\attachments\7e1aa6bf-4c1c-47f9-9cc8-11a60fe7ebca-7e8cda5e-ba7e-4801-b78e-40fa464dee0b-mp4.mp4]
