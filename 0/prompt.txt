@@ -1,0 +1,5 @@
+let's work on cleanly revamping the "entire" section in the application to closely resemble entire's design like we did with neatlogs
+
+---
+
+Continue where you left off.

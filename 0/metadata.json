@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4Q8R7BKHFS5M26DJK5SE6JH",
+  "session_id": "765f3e5d-7148-4397-98ca-9138a2b2c937",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-12T05:18:18.4206362Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "electron/lib/studio/index.cjs",
+    "electron/lib/studio/repo.cjs",
+    "src/components/studio/EntirePage.jsx",
+    "src/components/studio/studio.css",
+    "src/demo/studioSample.js"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5-5",
+  "turn_id": "de03e8d6377d",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 72,
+    "cache_creation_tokens": 124095,
+    "cache_read_tokens": 3571675,
+    "output_tokens": 36458,
+    "api_call_count": 38
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-12T05:18:18.3128847Z",
+    "agent_lines": 400,
+    "agent_removed": 228,
+    "human_added": 349,
+    "human_modified": 5168,
+    "human_removed": 0,
+    "total_committed": 5917,
+    "total_lines_changed": 6145,
+    "agent_percentage": 10.219690805532954,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
