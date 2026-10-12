@@ -3,10 +3,11 @@
   "checkpoint_id": "01M4QC4829V2Z6BB7GYTJC2SP7",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 4,
+  "checkpoints_count": 5,
   "files_touched": [
     ".env.example",
     "docs/hackathon/CONTRACTS.md",
+    "electron/lib/game/client.cjs",
     "electron/lib/game/host.cjs",
     "electron/lib/game/index.cjs",
     "electron/lib/neatlogs.cjs",
@@ -33,13 +34,20 @@
       "compact_transcript": "/1/transcript.jsonl",
       "content_hash": "/1/content_hash.txt",
       "prompt": "/1/prompt.txt"
+    },
+    {
+      "metadata": "/2/metadata.json",
+      "transcript": "/2/full.jsonl",
+      "compact_transcript": "/2/transcript.jsonl",
+      "content_hash": "/2/content_hash.txt",
+      "prompt": "/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 70,
-    "cache_creation_tokens": 86965,
-    "cache_read_tokens": 1764631,
-    "output_tokens": 16582,
-    "api_call_count": 35
+    "input_tokens": 172,
+    "cache_creation_tokens": 226979,
+    "cache_read_tokens": 7775035,
+    "output_tokens": 64829,
+    "api_call_count": 86
   }
 }
