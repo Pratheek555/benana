@@ -3808,3 +3808,6 @@ body.is-resizing { user-select: none; }
 .studio .mk-files { display: flex; flex-wrap: wrap; gap: 5px; }
 .studio .mk-files code { padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; font: 11px var(--mono); color: var(--text-2); }
 @media (max-width: 1250px) { .studio .mk-explorer { grid-template-columns: 1fr; } }
+.studio .mk-opt { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; font-size: 12px; color: var(--text-2); }
+.studio .mk-summary { display: grid; gap: 6px; padding: 10px; border: 1px solid color-mix(in srgb, var(--entire) 35%, transparent); border-radius: 8px; font-size: 12.5px; }
+.studio .mk-summary p { margin: 0; }

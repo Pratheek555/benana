@@ -78,7 +78,8 @@ async function detail(slug) {
       <div class="meta"><span class="pill">${esc(e.provenance?.checkpointCount ?? cps.length)} checkpoints</span><span class="pill">${e.changelog ? esc(e.changelog.filesChanged) + ' files changed' : 'no changelog'}</span>${e.codeMap ? `<span class="pill">${e.codeMap.symbols} symbols · ${e.codeMap.relations} relations</span>` : ''}</div>
       <h3>Checkpoints</h3>
       ${cps.length ? `<div class="explorer">
-        <ul class="cp-list" role="listbox" aria-label="Checkpoints">${cps.map((c, i) => `<li><button role="option" data-cp="${i}" aria-selected="${i === 0}" class="${i === 0 ? 'on' : ''}"><code>${esc(c.id.slice(0, 12))}…</code><span>${esc(c.agent || 'agent')}${c.model ? ' · ' + esc(c.model) : ''}</span><small>${c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</small></button></li>`).join('')}</ul>
+        <ul class="cp-list" role="listbox" aria-label="Checkpoints">${cps.map((c, i) => `<li><button role="option" data-cp="${i}" aria-selected="${i === 0}" class="${i === 0 ? 'on' : ''}">
+          <span class="tip" role="tooltip">${c.summary ? `<b>Intent.</b> ${esc(c.summary.intent)}<br><b>Outcome.</b> ${esc(c.summary.outcome)}` : `${esc(c.agent || 'agent')}${c.model ? ' · ' + esc(c.model) : ''} · ${Number(c.tokens || 0).toLocaleString()} tokens`}</span><code>${esc(c.id.slice(0, 12))}…</code><span>${esc(c.agent || 'agent')}${c.model ? ' · ' + esc(c.model) : ''}</span><small>${c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</small></button></li>`).join('')}</ul>
         <div class="cp-detail" id="cp-detail"></div>
       </div>` : '<p class="muted">No checkpoints recorded for this version.</p>'}
       <h3>Provenance</h3>
@@ -112,6 +113,7 @@ async function detail(slug) {
           <dt>Tokens</dt><dd>${Number(c.tokens || 0).toLocaleString()}</dd>
           <dt>When</dt><dd>${c.createdAt ? new Date(c.createdAt).toLocaleString() : '—'}</dd>
         </dl>
+        ${c.summary ? `<div class="summary"><span class="label">What happened</span><p><b>Intent.</b> ${esc(c.summary.intent)}</p><p><b>Outcome.</b> ${esc(c.summary.outcome)}</p>${c.summary.learnings ? `<p class="muted">${esc(c.summary.learnings)}</p>` : ''}</div>` : ''}
         ${c.files?.length ? `<div class="files">${c.files.map((f) => `<code>${esc(f)}</code>`).join(' ')}</div>` : ''}
         <a class="btn" href="${link}">Open in Benana</a>
         <p class="muted">Opens a working copy of this mod at this checkpoint's commit in the Benana app. Nothing is published.</p>`;
