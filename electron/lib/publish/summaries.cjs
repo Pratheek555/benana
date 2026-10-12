@@ -7,6 +7,11 @@ const secrets = require('./secrets.cjs');
 
 const SECTIONS = ['Intent', 'Outcome', 'Learnings'];
 
+// Plain text for display: headings and list markers become sentences and bullets.
+function plain(text) {
+  return String(text).replace(/^#{1,6}\s*(.+)$/gm, '$1:').replace(/^\s*[-*]\s+/gm, '• ').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // Parse "## Intent / ## Outcome / ## Learnings" into { intent, outcome, learnings }.
 function parseSummary(text) {
   const out = {};
@@ -14,14 +19,14 @@ function parseSummary(text) {
   for (const part of parts) {
     const [head, ...body] = part.split('\n');
     const key = head.trim().toLowerCase();
-    if (SECTIONS.map((s) => s.toLowerCase()).includes(key)) out[key] = body.join('\n').trim();
+    if (SECTIONS.map((s) => s.toLowerCase()).includes(key)) out[key] = plain(body.join('\n'));
   }
   return { intent: out.intent || '', outcome: out.outcome || '', learnings: out.learnings || '' };
 }
 
 function generate(repoDir, checkpointId) {
   return new Promise((resolve) => {
-    execFile(process.env.BENANA_ENTIRE || 'entire', ['checkpoint', 'explain', checkpointId, '--generate', '--short'], { cwd: repoDir, timeout: 240000, maxBuffer: 16 * 1024 * 1024 },
+    execFile(process.env.BENANA_ENTIRE || 'entire', ['checkpoint', 'explain', checkpointId, '--generate', '--force', '--short'], { cwd: repoDir, timeout: 240000, maxBuffer: 16 * 1024 * 1024 },
       (error, stdout) => resolve(error ? null : String(stdout || '')));
   });
 }
@@ -43,4 +48,4 @@ async function summariesFor(repoDir, checkpointIds, { generateFn = generate } = 
 }
 const parsed = (raw) => raw; // kept for symmetry: the summary is sanitized as text before parsing
 
-module.exports = { parseSummary, summariesFor, generate };
+module.exports = { parseSummary, plain, summariesFor, generate };
