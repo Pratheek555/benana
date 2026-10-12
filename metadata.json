@@ -3,10 +3,11 @@
   "checkpoint_id": "01M4REZ9P6YB1FGAEBBCANVAW7",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 12,
+  "checkpoints_count": 21,
   "files_touched": [
     "docs/marketplace/SPEC.md",
     "electron/lib/cfo.cjs",
+    "electron/lib/marketplace/entire-remote.cjs",
     "electron/lib/marketplace/index.cjs",
     "electron/lib/publish/bundle.cjs",
     "electron/lib/publish/secrets.cjs",
@@ -28,6 +29,7 @@
     "src/components/studio/BuildPage.jsx",
     "src/components/studio/MarketplacePage.jsx",
     "src/components/studio/ModStudio.jsx",
+    "src/components/studio/marketplace.css",
     "src/components/studio/studio.css",
     "src/demo/studioSample.js",
     "tests/publish.test.cjs",
@@ -75,13 +77,20 @@
       "compact_transcript": "/5/transcript.jsonl",
       "content_hash": "/5/content_hash.txt",
       "prompt": "/5/prompt.txt"
+    },
+    {
+      "metadata": "/6/metadata.json",
+      "transcript": "/6/full.jsonl",
+      "compact_transcript": "/6/transcript.jsonl",
+      "content_hash": "/6/content_hash.txt",
+      "prompt": "/6/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 320,
-    "cache_creation_tokens": 291902,
-    "cache_read_tokens": 20210610,
-    "output_tokens": 104567,
-    "api_call_count": 160
+    "input_tokens": 614,
+    "cache_creation_tokens": 603795,
+    "cache_read_tokens": 49210352,
+    "output_tokens": 248120,
+    "api_call_count": 305
   }
 }
