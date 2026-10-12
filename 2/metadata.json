@@ -1,0 +1,55 @@
+{
+  "cli_version": "0.11.4",
+  "checkpoint_id": "01M4R3M4H6001582AXK75XMHDP",
+  "session_id": "265ea5d4-bbe6-4adc-9493-9c836e1a9fdb",
+  "strategy": "manual-commit",
+  "created_at": "2026-10-12T13:07:57.4167118Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".env.example",
+    "README.md",
+    "docs/hackathon/CONTRACTS.md",
+    "docs/hackathon/SUBMISSION.md",
+    "electron/lib/game/client.cjs",
+    "electron/lib/game/host.cjs",
+    "electron/lib/game/index.cjs",
+    "electron/lib/neatlogs.cjs",
+    "electron/lib/studio/claude.cjs",
+    "electron/lib/studio/prompts.cjs",
+    "electron/main.cjs",
+    "electron/mcp-minecraft.cjs",
+    "src/components/game/GamePane.jsx",
+    "src/components/game/Hud.jsx",
+    "src/components/game/game.css",
+    "templates/paper-plugin/CLAUDE.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-haiku-5-5",
+  "turn_id": "10ed704b56f6",
+  "checkpoint_transcript_start": 51,
+  "transcript_lines_at_start": 51,
+  "compact_transcript_start": 7,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-10-12T13:07:57.3541988Z",
+    "agent_lines": 189,
+    "agent_removed": 126,
+    "human_added": 28,
+    "human_modified": 2993,
+    "human_removed": 0,
+    "total_committed": 3210,
+    "total_lines_changed": 3336,
+    "agent_percentage": 9.442446043165468,
+    "metric_version": 2
+  }
+}
