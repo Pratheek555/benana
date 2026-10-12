@@ -3,7 +3,7 @@
   "checkpoint_id": "01M4R3K6FGR6FT6J5QJ1Y5ETGJ",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 15,
+  "checkpoints_count": 18,
   "files_touched": [
     ".gitignore",
     "docs/marketplace/SPEC.md",
@@ -73,13 +73,20 @@
       "compact_transcript": "/4/transcript.jsonl",
       "content_hash": "/4/content_hash.txt",
       "prompt": "/4/prompt.txt"
+    },
+    {
+      "metadata": "/5/metadata.json",
+      "transcript": "/5/full.jsonl",
+      "compact_transcript": "/5/transcript.jsonl",
+      "content_hash": "/5/content_hash.txt",
+      "prompt": "/5/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 354,
-    "cache_creation_tokens": 547347,
-    "cache_read_tokens": 31103320,
-    "output_tokens": 158153,
-    "api_call_count": 175
+    "input_tokens": 378,
+    "cache_creation_tokens": 580984,
+    "cache_read_tokens": 31572436,
+    "output_tokens": 165421,
+    "api_call_count": 187
   }
 }
